@@ -350,9 +350,15 @@ class IRTPlotter:
         ax : matplotlib.axes.Axes
             The matplotlib axes object for the plot.
         """
-        start_idx = (latent_scores == latent_scores.min()).nonzero()[-1].item()
-        latent_scores = latent_scores[start_idx:]
-        prob_matrix = prob_matrix[start_idx:, :]
+        min_indices = (latent_scores == latent_scores.min()).nonzero().flatten()
+        if min_indices[-1] == len(latent_scores) - 1:  # if we have reversed z scale
+            start_idx = min_indices[0].item()  # get the first index
+            latent_scores = latent_scores[:start_idx]
+            prob_matrix = prob_matrix[:start_idx, :]
+        else:
+            start_idx = min_indices[-1].item()  # get the last index
+            latent_scores = latent_scores[start_idx:]
+            prob_matrix = prob_matrix[start_idx:, :]
 
         plot_group_fit = False
         latent_scores = latent_scores.cpu().numpy()

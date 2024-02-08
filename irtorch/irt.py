@@ -35,7 +35,7 @@ class IRT:
 
         Parameters
         ----------
-        model : BaseIRTModel, optional
+        model : str | BaseIRTModel, optional
             The IRT model to use. Available models are:
 
             - "1PL": One-parameter logistic model.

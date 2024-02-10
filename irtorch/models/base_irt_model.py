@@ -73,7 +73,7 @@ class BaseIRTModel(ABC, nn.Module):
             3D tensor with dimensions (respondents, items, item categories)
         """
 
-    def item_probabilities(self, z: torch.Tensor) -> list:
+    def item_probabilities(self, z: torch.Tensor) -> torch.Tensor:
         """
         Returns the probabilities for each possible response for all items.
 
@@ -201,7 +201,7 @@ class BaseIRTModel(ABC, nn.Module):
                         z_scores.grad.zero_()
                     expected_item_sum_scores[:, i].sum().backward(retain_graph=True)
                     mean_slopes[i, latent_variable] = z_scores.grad[:, latent_variable].mean()
-            # else:
+            # else: TODO for entropy scores
                 # item_z_directions[:, latent_variable]
                 # unique_entropy = entropy_scores[:, latent_variable].unique(sorted=True)
                 # dy_dx = (expected_item_sum_scores[1:, :] - expected_item_sum_scores[:-1, :]) / (unique_entropy[1:] - unique_entropy[:-1]).view(-1, 1)
@@ -261,3 +261,57 @@ class BaseIRTModel(ABC, nn.Module):
             dist = torch.distributions.Categorical(item_probs)
             test_data[:, item_index] = dist.sample()
         return test_data
+    
+    @torch.inference_mode(False)
+    def probability_gradients(self, z: torch.Tensor):
+        """
+        Calculate the gradients of the item response probabilities with respect to the z scores.
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the gradients for each z score. Dimensions are (z rows, items, item categories, latent variables).
+        """
+        z = z.clone().requires_grad_(True)
+        # Jacobian for each row in z
+        gradients = [torch.autograd.functional.jacobian(self.item_probabilities, z[i].view(1, -1)).squeeze((0, 3)) for i in range(z.shape[0])]
+        gradients = torch.stack(gradients)
+
+        return gradients
+    
+    def information(self, z: torch.Tensor, item: bool = True):
+        """
+        Calculate the Fisher information for the z scores (matrix for multidimensional z). If 'item' is True, the item information is computed. Otherwise, the test information is computed.
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
+        item : bool, optional
+            Whether to compute the information. If False, the test information is computed. (default is True)
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the information for each z score. Dimensions are (z, 1) if item is False and (z, items) if item is True.
+        """
+        probabilities = self.item_probabilities(z.clone())
+        gradients = self.probability_gradients(z)
+
+        squared_grad_matrices = torch.zeros(gradients.shape[0], gradients.shape[1], gradients.shape[2], gradients.shape[3], gradients.shape[3])
+        for i in range(gradients.shape[0]):
+            for j in range(gradients.shape[1]):
+                for k in range(gradients.shape[2]):
+                    squared_grad_matrices[i, j, k] = torch.outer(gradients[i, j, k], gradients[i, j, k])
+
+        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
+
+        if item:
+            return information_matrices.nansum(dim=2)
+        else:
+            return information_matrices.nansum(dim=(1, 2))

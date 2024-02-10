@@ -199,7 +199,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
             y = torch.stack((x1, x2), dim=2).view(x.shape)
         return y
 
-    def probabilities_from_output(self, output: torch.Tensor) -> list:
+    def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
         Compute item probabilities from the output tensor.
 

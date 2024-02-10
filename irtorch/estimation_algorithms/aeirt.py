@@ -158,7 +158,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # we multiply the learning rate by the factor
         # patience: We need to improvement after 5 epochs for it to trigger
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience, verbose=verbose
+            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
         )
 
         self.to(device)

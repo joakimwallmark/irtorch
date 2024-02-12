@@ -1,5 +1,5 @@
-# IRTorch
-`irtorch` is a Python package for item response theory (IRT). It utilzes [PyTorch](https://pytorch.org/). GPU is supported.
+![IRTorch](docs/source/logo.png)
+`IRTorch` is a Python package for item response theory (IRT). It utilizes [PyTorch](https://pytorch.org/) with GPU support.
 
 ## Usage
 install using

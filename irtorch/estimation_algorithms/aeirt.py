@@ -22,7 +22,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         summary_writer: SummaryWriter = None,
     ):
         """
-        Initialize the autoencoder IRT neural network.
+        Initialize the  IRT neural network.
 
         Parameters
         ----------
@@ -375,12 +375,15 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         """
         Get the latent scores from an input
 
-        Parameters:
+        Parameters
+        ----------
         data: torch.Tensor
-            A 2D tensor with test data. Columns are items and rows are respondents
+            A 2D tensor with test data. Columns are items and rows are respondents.
 
-        Returns:
-            A 2D vector of latent scores. Rows are respondents and latent variables are columns.
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent scores. Rows are respondents and latent variables are columns.
         """
         data = data.contiguous()
         return self.encoder(data)

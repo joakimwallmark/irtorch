@@ -6,25 +6,7 @@ import numpy as np
 
 class GaussianMixtureTorch:
     """
-    Gaussian mixture model for approximating a multivariate joint density function. Uses
-
-    Attributes
-    ----------
-    data : torch.Tensor
-        original data tensor used for fitting the QuantileMVNorm
-    qt_data : torch.Tensor
-        quantile transformed data
-    mvnorm : torch.distributions.MultivariateNormal
-        fitted multivariate normal distribution
-
-    Methods
-    -------
-    fit_multivariate_normal(data)
-        Fits a multivariate normal distribution to the data tensor.
-    pdf(data)
-        Computes the probability density function at the given data points.
-    cdf(data)
-        Computes the cumulative distribution function at the given data points.
+    Gaussian mixture model for approximating a multivariate joint density function.
     """
 
     def __init__(self):

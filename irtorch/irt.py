@@ -31,7 +31,7 @@ class IRT:
         summary_writer: SummaryWriter = None,
     ):
         """
-        Initialize the autoencoder IRT neural network.
+        IRT class. Consists of an IRT model and a model estimation algorithm.
 
         Parameters
         ----------
@@ -45,7 +45,8 @@ class IRT:
             - "MNN": Monotone neural network model.
             - "MMCNN": Monotone multiple choice neural network model.
             
-            Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not.
+            Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
+            An instantiated model can also be provided.
         estimation_algorithm : str, optional
             The estimation algorithm to use. Available options are
 

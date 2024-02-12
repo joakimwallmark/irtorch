@@ -327,11 +327,15 @@ class VAEIRT(AEIRT):
         """
         Get the z scores from an input
 
-        Parameters:
+        Parameters
+        ----------
         data: torch.Tensor
             A 2D tensor with test data. Columns are items and rows are respondents.
-        Returns:
-            A 2D vector of latent scores. Rows are respondents and columns are latent variables.
+        
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent scores. Rows are respondents and columns are latent variables.
         """
         data = data.contiguous()
         return self.encoder(data)[0]

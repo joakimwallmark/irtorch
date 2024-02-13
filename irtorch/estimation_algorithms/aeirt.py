@@ -2,7 +2,6 @@ import copy
 import torch
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
-from tqdm.auto import tqdm
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
@@ -192,7 +191,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         lr_update_count = 0
         best_loss = float('inf')
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
-        for epoch in tqdm(range(max_epochs)):
+        for epoch in range(max_epochs):
             if self.verbose:
                 print(f"-----------\nEpoch: {epoch}\n-----------")
             

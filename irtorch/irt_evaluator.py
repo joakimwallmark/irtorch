@@ -1,3 +1,4 @@
+import logging
 import torch
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
@@ -9,6 +10,7 @@ from irtorch.helper_functions import (
     sum_incorrect_probabilities,
 )
 
+logger = logging.getLogger(__name__)
 
 class IRTEvaluator:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm, scorer: IRTScorer):

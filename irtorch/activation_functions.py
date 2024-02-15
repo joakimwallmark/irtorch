@@ -1,5 +1,8 @@
+import logging
 import torch
 from torch.autograd import Function
+
+logger = logging.getLogger(__name__)
 
 class BoundedELU(Function):
     @staticmethod

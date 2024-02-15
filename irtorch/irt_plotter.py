@@ -1,3 +1,4 @@
+import logging
 from sklearn.neighbors import KernelDensity
 import torch
 import numpy as np
@@ -11,6 +12,7 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.helper_functions import output_to_item_entropy
 
+logger = logging.getLogger(__name__)
 
 class IRTPlotter:
     def __init__(
@@ -38,27 +40,17 @@ class IRTPlotter:
         self.markersize = 9
         self.color_map = "tab10"
 
-    def plot_training_history(self, plot_measures: list[str] = None):
+    def plot_training_history(self):
         """
-        Plots the training history of the model. Up to three subplots are created if data is available:
-        1. Training and validation loss over epochs
-        2. Training and validation accuracy over epochs
-        3. Log likelihood of the validation data over epochs
-
-        Parameters
-        ----------
-        plot_measures : list of str, optional
-            The measures to plot. If not provided, all available measures will be plotted.
-            Possible values are "Loss function".
+        Plots the training history of the model.
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple
+            A tuple with the fig and ax matplotlib subplot items.
         """
         if all(len(val) == 0 for val in self.algorithm.training_history.values()):
+            logging.error("Model has not been trained yet")
             raise AttributeError("Model has not been trained yet")
 
         measures = {
@@ -68,14 +60,6 @@ class IRTPlotter:
                 "y_label": "Loss",
             }
         }
-
-        if plot_measures is not None:
-            unrecognized = set(plot_measures) - set(measures.keys())
-            if unrecognized:
-                print(f"Unrecognized measure(s): {', '.join(unrecognized)}")
-            measures = {
-                name: m for name, m in measures.items() if name in plot_measures
-            }
 
         existing_measures = [
             m

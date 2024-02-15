@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 from irtorch.latent_variable_functions import (
@@ -5,6 +6,7 @@ from irtorch.latent_variable_functions import (
     interp,
 )
 
+logger = logging.getLogger(__name__)
 
 class QuantileMVNormal:
     """

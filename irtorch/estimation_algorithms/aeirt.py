@@ -1,3 +1,4 @@
+import logging
 import copy
 import torch
 from torch import nn
@@ -8,6 +9,7 @@ from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
 from irtorch.dataset import PytorchIRTDataset
 from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
 
+logger = logging.getLogger(__name__)
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
     def __init__(

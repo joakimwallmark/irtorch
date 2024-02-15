@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models.base_irt_model import BaseIRTModel
@@ -7,6 +8,8 @@ from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_torch import GaussianMixtureTorch
 from irtorch.helper_functions import output_to_item_entropy, random_guessing_data, linear_regression, one_hot_encode_test_data
 from irtorch.outlier_detector import OutlierDetector
+
+logger = logging.getLogger(__name__)
 
 class IRTScorer:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm):
@@ -218,71 +221,74 @@ class IRTScorer:
         torch.Tensor, torch.Tensor
             A tuple of 2D tensors, one with the z scores and one with the associated standard errors. The columns are latent variables and rows are respondents.
         """
-        if self.algorithm.training_z_scores is None:
-            raise ValueError("Please fit the model before computing latent scores.")
-            
-        if z_estimation_method == "MAP": # Approximate prior
-            train_z_scores = self.algorithm.training_z_scores
-            # Center the data and compute the covariance matrix.
-            mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
-            cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
-            # Create prior (multivariate normal distribution).
-            prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
+        try:
+            if self.algorithm.training_z_scores is None:
+                raise ValueError("Please fit the model before computing latent scores.")
+                
+            if z_estimation_method == "MAP": # Approximate prior
+                train_z_scores = self.algorithm.training_z_scores
+                # Center the data and compute the covariance matrix.
+                mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
+                cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
+                # Create prior (multivariate normal distribution).
+                prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
 
-        # Ensure decoder parameters gradients are not updated
-        self.model.requires_grad_(False)
+            # Ensure decoder parameters gradients are not updated
+            self.model.requires_grad_(False)
 
-        if encoder_z_scores is None:
-            encoder_z_scores = torch.zeros(data.shape[0], self.model.latent_variables).float()
+            if encoder_z_scores is None:
+                encoder_z_scores = torch.zeros(data.shape[0], self.model.latent_variables).float()
 
-        if device == "cuda":
-            self.model = self.model.to(device)
-            encoder_z_scores = encoder_z_scores.to(device)
-            data = data.to(device)
-            max_iter = 30
-        else:
-            max_iter = 20
+            if device == "cuda":
+                self.model = self.model.to(device)
+                encoder_z_scores = encoder_z_scores.to(device)
+                data = data.to(device)
+                max_iter = 30
+            else:
+                max_iter = 20
 
-        # Initial guess for the z_scores are the outputs from the encoder
-        optimized_z_scores = encoder_z_scores.clone().detach().requires_grad_(True)
+            # Initial guess for the z_scores are the outputs from the encoder
+            optimized_z_scores = encoder_z_scores.clone().detach().requires_grad_(True)
 
-        optimizer = torch.optim.LBFGS([optimized_z_scores], lr = learning_rate)
-        loss_history = []
-        tolerance = 1e-8
+            optimizer = torch.optim.LBFGS([optimized_z_scores], lr = learning_rate)
+            loss_history = []
+            tolerance = 1e-8
 
-        def closure():
-            optimizer.zero_grad()
-            logits = self.model(optimized_z_scores)
-            if z_estimation_method == "MAP": # maximize -log likelihood - log prior
-                loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum") - prior_density.log_prob(optimized_z_scores).sum()
-            else: # maximize -log likelihood for ML
-                loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum")
-            loss.backward()
-            return loss
-
-        for i in range(max_iter):
-            optimizer.step(closure)
-            with torch.no_grad():
+            def closure():
+                optimizer.zero_grad()
                 logits = self.model(optimized_z_scores)
                 if z_estimation_method == "MAP": # maximize -log likelihood - log prior
                     loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum") - prior_density.log_prob(optimized_z_scores).sum()
                 else: # maximize -log likelihood for ML
                     loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum")
-                loss = loss.item()
+                loss.backward()
+                return loss
 
-            denominator = data.numel()
-            print(f"{z_estimation_method} iteration {i+1}: Loss = {loss}")
-            if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
-                print(f"Converged at iteration {i+1}")
-                break
+            for i in range(max_iter):
+                optimizer.step(closure)
+                with torch.no_grad():
+                    logits = self.model(optimized_z_scores)
+                    if z_estimation_method == "MAP": # maximize -log likelihood - log prior
+                        loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum") - prior_density.log_prob(optimized_z_scores).sum()
+                    else: # maximize -log likelihood for ML
+                        loss = -self.model.log_likelihood(data, logits, loss_reduction = "sum")
+                    loss = loss.item()
 
-            loss_history.append(loss)
-            
-            
-        # Reset requires_grad for decoder parameters if we want to train decoder later
-        self.model = self.model.to("cpu")
-        optimized_z_scores = optimized_z_scores.detach().to("cpu")
-        self.model.requires_grad_(True)
+                denominator = data.numel()
+                print(f"{z_estimation_method} iteration {i+1}: Loss = {loss}")
+                if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
+                    print(f"Converged at iteration {i+1}")
+                    break
+
+                loss_history.append(loss)
+        except Exception as e:
+            logger.error("Error in %s iteration %s: %s", z_estimation_method, i+1, e)
+            raise e
+        finally:
+            # Reset requires_grad for decoder parameters if we want to train decoder later
+            self.model = self.model.to("cpu")
+            optimized_z_scores = optimized_z_scores.detach().to("cpu")
+            self.model.requires_grad_(True)
         return optimized_z_scores
     
     @torch.inference_mode()

@@ -1,5 +1,8 @@
+import logging
 import torch.nn as nn
 from irtorch.estimation_algorithms.encoders import BaseEncoder
+
+logger = logging.getLogger(__name__)
 
 class BoundedEncoder(BaseEncoder):
     def __init__(

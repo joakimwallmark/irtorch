@@ -1,6 +1,5 @@
 import torch
 
-
 class PytorchIRTDataset(torch.utils.data.Dataset):
     def __init__(self, data: torch.Tensor):
         super().__init__()

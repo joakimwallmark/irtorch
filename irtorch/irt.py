@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
@@ -9,6 +10,7 @@ from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 
+logger = logging.getLogger(__name__)
 
 class IRT:
     def __init__(
@@ -171,6 +173,7 @@ class IRT:
         lbfgs_learning_rate: float = 0.3,
         eap_z_integration_points: int = None,
         entropy_one_dimensional: bool = False,
+        entropy_population_z: torch.Tensor = None,
         entropy_grid_points: int = 300,
         entropy_z_grid_method: str = None,
         entropy_start_z: torch.tensor = None,
@@ -201,6 +204,8 @@ class IRT:
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         entropy_one_dimensional: bool, optional
             Whether to estimate one combined entropy score for a multidimensional model. (default is False)
+        entropy_population_z: torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
         entropy_grid_points : int, optional
             The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
         entropy_z_grid_method : str, optional
@@ -227,6 +232,7 @@ class IRT:
             lbfgs_learning_rate,
             eap_z_integration_points,
             entropy_one_dimensional,
+            entropy_population_z,
             entropy_grid_points,
             entropy_z_grid_method,
             entropy_start_z,
@@ -433,27 +439,16 @@ class IRT:
             z_range,
         )
 
-    def plot_training_history(self, plot_measures: list[str] = None):
+    def plot_training_history(self):
         """
-        Plots the training history of the neural network. Up to three subplots are created if data is available:
-        1. Training and validation loss over epochs
-        2. Training and validation accuracy over epochs
-        3. Log likelihood of the validation data over epochs
-
-        Parameters
-        ----------
-        plot_measures : list of str, optional
-            The measures to plot. If not provided, all available measures will be plotted.
-            Possible values are "Loss function", "Prediction accuracy", and "Validation data log likelihood".
+        Plots the training history of the model.
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple
+            A tuple with the fig and ax matplotlib subplot items.
         """
-        return self.plotter.plot_training_history(plot_measures)
+        return self.plotter.plot_training_history()
 
     def plot_item_latent_variable_relationships(
         self,
@@ -778,8 +773,9 @@ class IRT:
         path : str
             Where to save fitted model.
         """
-
+        # TODO save training history
         if self.algorithm.train_data is None:
+            logger.error("Attempted to save model before fitting.")
             raise AttributeError("Cannot save model before fitting.")
         
         to_save = {
@@ -800,6 +796,7 @@ class IRT:
         path : str
             Where to load fitted model from.
         """
+        # TODO load training history
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.algorithm.train_data = checkpoint["train_data"]

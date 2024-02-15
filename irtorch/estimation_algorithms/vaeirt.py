@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.distributions import Normal
 from torch.utils.tensorboard import SummaryWriter
@@ -6,6 +7,8 @@ from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
 from irtorch.helper_functions import decode_one_hot_test_data
+
+logger = logging.getLogger(__name__)
 
 class VAEIRT(AEIRT):
     def __init__(

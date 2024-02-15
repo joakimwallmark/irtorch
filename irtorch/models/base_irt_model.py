@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
+import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
 from irtorch.helper_functions import linear_regression
+
+logger = logging.getLogger(__name__)
 
 class BaseIRTModel(ABC, nn.Module):
     """

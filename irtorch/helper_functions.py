@@ -1,4 +1,7 @@
+import logging
 import torch, time, gc
+
+logger = logging.getLogger(__name__)
 
 # TODO: maybe remove this?
 start_time = None
@@ -20,9 +23,9 @@ def end_timer_and_print(local_msg):
     """
     end_time = time.time()
     torch.cuda.synchronize()
-    print("\n" + local_msg)
-    print(f"Total execution time = {end_time - start_time} sec".format())
-    print(f"Max memory used by tensors = {torch.cuda.max_memory_allocated()} bytes")
+    logger.info("\n%s", local_msg)
+    logger.info("Total execution time = %s sec", end_time - start_time)
+    logger.info("Max memory used by tensors = %s bytes", torch.cuda.max_memory_allocated())
 
 
 def linear_regression(x, y):

@@ -1,6 +1,9 @@
+import logging
 from abc import ABC, abstractmethod
 import torch
 from irtorch.models import BaseIRTModel
+
+logger = logging.getLogger(__name__)
 
 class BaseIRTAlgorithm(ABC):
     def __init__(

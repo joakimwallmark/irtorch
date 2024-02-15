@@ -1,8 +1,10 @@
+import logging
 import torch
 from sklearn.mixture import GaussianMixture
 from sklearn.model_selection import KFold
 import numpy as np
 
+logger = logging.getLogger(__name__)
 
 class GaussianMixtureTorch:
     """

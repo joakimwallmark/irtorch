@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class SoftplusLinear(nn.Module):
     """

@@ -10,7 +10,7 @@ from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class IRT:
     def __init__(

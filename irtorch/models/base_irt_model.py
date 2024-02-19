@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from irtorch.helper_functions import linear_regression
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class BaseIRTModel(ABC, nn.Module):
     """

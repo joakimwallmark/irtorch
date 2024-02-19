@@ -12,7 +12,7 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.helper_functions import output_to_item_entropy
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class IRTPlotter:
     def __init__(

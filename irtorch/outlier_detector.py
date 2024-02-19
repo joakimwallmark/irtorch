@@ -1,7 +1,7 @@
 import logging
 import torch
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class OutlierDetector:
     """

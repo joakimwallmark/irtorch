@@ -1,7 +1,7 @@
 import logging
 import torch, time, gc
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 # TODO: maybe remove this?
 start_time = None

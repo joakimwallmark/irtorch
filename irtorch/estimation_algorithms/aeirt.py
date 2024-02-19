@@ -9,7 +9,7 @@ from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
 from irtorch.dataset import PytorchIRTDataset
 from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
     def __init__(
@@ -195,7 +195,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
             if self.verbose:
-                print(f"-----------\nEpoch: {epoch}\n-----------")
+                logger.info("-----------\nEpoch: %s\n-----------", epoch)
             
             if hasattr(self, "anneal"):
                 if self.anneal:
@@ -221,7 +221,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             
             # Break if the learning rate has been updated 3 times
             if lr_update_count >= learning_rate_updates_before_stopping:
-                print(f"Stopping training after {learning_rate_updates_before_stopping} learning rate updates.")
+                logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                 break
 
             current_lr = [group['lr'] for group in self.optimizer.param_groups]
@@ -231,13 +231,13 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 prev_lr = current_lr
 
             if self.verbose:
-                print(f"Current learning rate: {self.optimizer.param_groups[0]['lr']}")
+                logger.info("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
 
         # Load the best model state
         if best_model_state is not None:
             self.load_state_dict(best_model_state['state_dict'])
             self.optimizer.load_state_dict(best_model_state['optimizer'])
-            print(f"Best model found at epoch {best_epoch} with loss {best_loss:.4f}.")
+            logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
         if self.summary_writer is not None:
             self.summary_writer.close()
@@ -276,7 +276,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
         if self.verbose:
-            print(f"Average training batch loss function: {loss:.4f}")
+            logger.info("Average training batch loss function: %.4f", loss)
         return loss
 
     def _impute_missing(self, batch, missing_mask):
@@ -336,15 +336,13 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         loss = 0
         for _, (batch, mask) in enumerate(self.validation_data_loader):
             batch = self._impute_missing(batch, mask)
-            batch_loss, _ = self._batch_fit_measures(
-                batch
-            )
+            batch_loss, _ = self._batch_fit_measures(batch)
 
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
         self.training_history["validation_loss"].append(loss)
         if self.verbose:
-            print(f"Average validation batch loss function: {loss:.4f}")
+            logger.info("Average validation batch loss function: %.4f", loss)
         return loss
 
     @torch.inference_mode()

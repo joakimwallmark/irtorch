@@ -10,7 +10,7 @@ from irtorch.helper_functions import (
     sum_incorrect_probabilities,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class IRTEvaluator:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm, scorer: IRTScorer):

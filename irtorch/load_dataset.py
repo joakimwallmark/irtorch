@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 import feather
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 def swedish_national_mathematics_2019():
     """

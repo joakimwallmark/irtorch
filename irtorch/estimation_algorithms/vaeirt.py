@@ -8,7 +8,7 @@ from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
 from irtorch.helper_functions import decode_one_hot_test_data
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class VAEIRT(AEIRT):
     def __init__(

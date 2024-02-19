@@ -9,7 +9,7 @@ from irtorch.gaussian_mixture_torch import GaussianMixtureTorch
 from irtorch.helper_functions import output_to_item_entropy, random_guessing_data, linear_regression, one_hot_encode_test_data
 from irtorch.outlier_detector import OutlierDetector
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class IRTScorer:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm):
@@ -275,9 +275,9 @@ class IRTScorer:
                     loss = loss.item()
 
                 denominator = data.numel()
-                print(f"{z_estimation_method} iteration {i+1}: Loss = {loss}")
+                logger.info("%s iteration %s: Loss = %s", z_estimation_method, i+1, loss)
                 if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
-                    print(f"Converged at iteration {i+1}")
+                    logger.info("Converged at iteration %s", i+1)
                     break
 
                 loss_history.append(loss)

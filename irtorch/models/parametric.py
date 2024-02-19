@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('irtorch')
 
 class Parametric(BaseIRTModel):
     """

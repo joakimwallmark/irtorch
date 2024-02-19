@@ -91,7 +91,6 @@ class VAEIRT(AEIRT):
         learning_rate_updates_before_stopping: int = 5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         imputation_method: str = "zero",
-        verbose: bool = False,
         anneal: int = True,
         annealing_epochs: int = 5,
         iw_samples: int = 1,
@@ -119,8 +118,6 @@ class VAEIRT(AEIRT):
             The device to run the model on. (default is "cuda" if available else "cpu".)
         imputation_method : str, optional
             The method to use for imputing missing data. (default is "zero")
-        verbose : bool, optional
-            Whether to print out verbose training logs. (default is False)
         """
         self.iw_samples = iw_samples
         self.annealing_epochs = annealing_epochs
@@ -135,7 +132,6 @@ class VAEIRT(AEIRT):
             learning_rate_updates_before_stopping=learning_rate_updates_before_stopping,
             device=device,
             imputation_method=imputation_method,
-            verbose=verbose
         )
 
     def forward(self, data):

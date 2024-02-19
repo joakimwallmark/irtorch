@@ -4,7 +4,7 @@ import scipy.stats as stats
 from irtorch.latent_variable_functions import (
     # rescale_latent_variable,
     # inverse_rescale_latent_variable,
-    # entropy_distance,
+    # bit_score_distance,
     # latent_score_grid,
     # tanh_latent_score_grid,
     interp,
@@ -260,12 +260,12 @@ def test_quantile_transform():
 #     assert torch.allclose(result, expected, atol=1e-4)
 
 
-# def test_entropy_distance():
+# def test_bit_score_distance():
 #     entropies = torch.tensor(
 #         [[[1.0, 2.0, 3.0], [4.0, 7.0, 11.0]], [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]]
 #     )
 
-#     output = entropy_distance(entropies)
+#     output = bit_score_distance(entropies)
 
 #     # Check the values of the output
 #     # The expected output is the sum of the absolute differences

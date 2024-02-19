@@ -63,8 +63,7 @@ def model(device, latent_variables, data, data_type, fitting_algorithm):
     else:
         model.fit(
             train_data=data,
-            device=device,
-            verbose=True
+            device=device
         )
         model.save_model(f"tests/models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
 

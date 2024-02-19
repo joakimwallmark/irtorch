@@ -41,12 +41,12 @@ def irt_plotter(latent_variables):
 
     mock_scorer = MagicMock(spec=IRTScorer)
 
-    # Mock entropy_distance method based on input
-    def entropy_distance_mock(input_tensor, steps, entropy_method):
-        entropy_distances = torch.randn(input_tensor.shape[0]).abs() * 10
-        return entropy_distances.unsqueeze(1)
+    # Mock bit_score_distance method based on input
+    def bit_score_distance_mock(input_tensor, steps, bit_score_method):
+        bit_score_distances = torch.randn(input_tensor.shape[0]).abs() * 10
+        return bit_score_distances.unsqueeze(1)
 
-    mock_scorer.entropy_distance = MagicMock(side_effect=entropy_distance_mock)
+    mock_scorer.bit_score_distance = MagicMock(side_effect=bit_score_distance_mock)
 
     mock_evaluator = MagicMock(spec=IRTEvaluator)
 

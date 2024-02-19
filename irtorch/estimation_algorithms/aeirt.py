@@ -44,7 +44,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         self.imputation_method = "zero"
         self.summary_writer = summary_writer
         self.batch_normalization = batch_normalization_encoder
-        self.verbose = False
 
         if encoder is not None and self.model is not None:
             if encoder.latent_variables != self.model.latent_variables:
@@ -94,7 +93,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         learning_rate_updates_before_stopping: int = 5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         imputation_method: str = "zero",
-        verbose: bool = False,
     ):
         """
         Train the autoencoder model.
@@ -119,11 +117,8 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             The device to run the model on. (default is "cuda" if available else "cpu".)
         imputation_method : str, optional
             The method to use for imputing missing data. (default is "zero")
-        verbose : bool, optional
-            Whether to print out verbose training logs. (default is False)
         """
         super().fit(train_data)
-        self.verbose = verbose
         self.imputation_method = imputation_method
 
         # Initialize the training history
@@ -194,8 +189,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         best_loss = float('inf')
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
-            if self.verbose:
-                logger.info("-----------\nEpoch: %s\n-----------", epoch)
+            logger.info("-----------\nEpoch: %s\n-----------", epoch)
             
             if hasattr(self, "anneal"):
                 if self.anneal:
@@ -230,8 +224,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 lr_update_count += 1
                 prev_lr = current_lr
 
-            if self.verbose:
-                logger.info("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
+            logger.info("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
 
         # Load the best model state
         if best_model_state is not None:
@@ -275,8 +268,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # Calculate averge per batch loss and accuracy per epoch and print out what's happening
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
-        if self.verbose:
-            logger.info("Average training batch loss function: %.4f", loss)
+        logger.info("Average training batch loss function: %.4f", loss)
         return loss
 
     def _impute_missing(self, batch, missing_mask):
@@ -341,8 +333,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
         self.training_history["validation_loss"].append(loss)
-        if self.verbose:
-            logger.info("Average validation batch loss function: %.4f", loss)
+        logger.info("Average validation batch loss function: %.4f", loss)
         return loss
 
     @torch.inference_mode()

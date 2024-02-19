@@ -157,7 +157,7 @@ class BaseIRTModel(ABC, nn.Module):
     def expected_item_score_slopes(
         self,
         z: torch.Tensor,
-        entropy_scores: torch.Tensor = None,
+        bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
     ):
         """
@@ -167,8 +167,8 @@ class BaseIRTModel(ABC, nn.Module):
         ----------
         z : torch.Tensor
             A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
-        entropy_scores : torch.Tensor, optional
-            A 2D tensor with entropy scores corresponding to each z score in z. If provided, slopes will be copmuted on the entropy scales. (default is None)
+        bit_scores : torch.Tensor, optional
+            A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
 
@@ -179,15 +179,15 @@ class BaseIRTModel(ABC, nn.Module):
         """
         if z.shape[0] < 2:
             raise ValueError("z must have at least 2 rows.")
-        if entropy_scores is not None and z.shape != entropy_scores.shape:
-            raise ValueError("z and entropy_scores must have the same shape.")
+        if bit_scores is not None and z.shape != bit_scores.shape:
+            raise ValueError("z and bit_scores must have the same shape.")
         if z.requires_grad:
             z.requires_grad_(False)
 
         median, _ = torch.median(z, dim=0)
         mean_slopes = torch.zeros(len(self.modeled_item_responses), z.shape[1])
-        if entropy_scores is not None:
-            raise NotImplementedError("entropy score slopes not implemented yet.")
+        if bit_scores is not None:
+            raise NotImplementedError("bit score slopes not implemented yet.")
         #     item_z_directions = self.item_z_relationship_directions()
         for latent_variable in range(z.shape[1]):
             z_scores = median.repeat(z.shape[0], 1)
@@ -197,17 +197,17 @@ class BaseIRTModel(ABC, nn.Module):
             if not self.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.modeled_item_responses) - 1)
 
-            if entropy_scores is None:
+            if bit_scores is None:
                 # sum z_scores gradients per item
                 for i in range(expected_item_sum_scores.shape[1]):
                     if z_scores.grad is not None:
                         z_scores.grad.zero_()
                     expected_item_sum_scores[:, i].sum().backward(retain_graph=True)
                     mean_slopes[i, latent_variable] = z_scores.grad[:, latent_variable].mean()
-            # else: TODO for entropy scores
+            # else: TODO for bit scores
                 # item_z_directions[:, latent_variable]
-                # unique_entropy = entropy_scores[:, latent_variable].unique(sorted=True)
-                # dy_dx = (expected_item_sum_scores[1:, :] - expected_item_sum_scores[:-1, :]) / (unique_entropy[1:] - unique_entropy[:-1]).view(-1, 1)
+                # unique_bit = bit_scores[:, latent_variable].unique(sorted=True)
+                # dy_dx = (expected_item_sum_scores[1:, :] - expected_item_sum_scores[:-1, :]) / (unique_bit[1:] - unique_bit[:-1]).view(-1, 1)
             # else:
             # unique_z = z[:, latent_variable].unique(sorted=True)
             # z_scores = median.repeat(unique_z.shape[0], 1)

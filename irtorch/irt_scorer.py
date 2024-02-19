@@ -1,3 +1,4 @@
+import sys
 import logging
 import torch
 from torch.distributions import MultivariateNormal
@@ -98,20 +99,20 @@ class IRTScorer:
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "entropy",
+        scale: str = "bit",
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.3,
         eap_z_integration_points: int = None,
-        entropy_one_dimensional: bool = False,
-        entropy_population_z: torch.Tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: str = None,
-        entropy_start_z: torch.Tensor = None,
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None
+        bit_score_one_dimensional: bool = False,
+        bit_score_population_z: torch.Tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: str = None,
+        bit_score_start_z: torch.Tensor = None,
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None
     ):
         """
         Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
@@ -123,40 +124,40 @@ class IRTScorer:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
         z : torch.Tensor, optional
-            For entropy scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            For bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
-            Method used to obtain the z scores. Also used for entropy scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+            Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
             For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
         eap_z_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-        entropy_one_dimensional: bool, optional
-            Whether to estimate one combined entropy score for a multidimensional model. (default is False)
-        entropy_population_z: torch.Tensor, optional
+        bit_score_one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is False)
+        bit_score_population_z: torch.Tensor, optional
             A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
-        entropy_start_z_guessing_probabilities: list[float], optional
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        entropy_start_z_guessing_iterations: int, optional
+        bit_score_start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        entropy_items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is 'None' and uses all items)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         Returns
         -------
         torch.Tensor
             A 2D tensor of latent scores, with latent variables as columns.
         """
-        if scale not in ["entropy", "z"]:
-            raise ValueError("Invalid scale. Choose either 'z' or 'entropy'.")
+        if scale not in ["bit", "z"]:
+            raise ValueError("Invalid scale. Choose either 'z' or 'bit'.")
         if z_estimation_method not in ["NN", "ML", "EAP", "MAP"]:
             raise ValueError("Invalid z_estimation_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
 
@@ -174,6 +175,7 @@ class IRTScorer:
             
             data = self.algorithm.fix_missing_values(data)
 
+            logger.info("%s estimation of z scores.", z_estimation_method)
             if not self.algorithm.one_hot_encoded and z_estimation_method in ["NN", "ML", "MAP"]:
                 z = self.algorithm.z_scores(data).clone()
             if z_estimation_method in ["ML", "MAP"]:
@@ -183,19 +185,19 @@ class IRTScorer:
 
         if scale == "z":
             return z
-        elif scale == "entropy":
-            if entropy_z_grid_method is None:
-                entropy_z_grid_method = z_estimation_method
-            return self._entropy_scores_from_z(
+        elif scale == "bit":
+            if bit_score_z_grid_method is None:
+                bit_score_z_grid_method = z_estimation_method
+            return self._bit_scores_from_z(
                 z=z,
-                start_z=entropy_start_z,
-                population_z=entropy_population_z,
-                one_dimensional=entropy_one_dimensional,
-                z_estimation_method=entropy_z_grid_method,
-                grid_points=entropy_grid_points,
-                items=entropy_items,
-                start_z_guessing_probabilities=entropy_start_z_guessing_probabilities,
-                start_z_guessing_iterations=entropy_start_z_guessing_iterations
+                start_z=bit_score_start_z,
+                population_z=bit_score_population_z,
+                one_dimensional=bit_score_one_dimensional,
+                z_estimation_method=bit_score_z_grid_method,
+                grid_points=bit_score_grid_points,
+                items=bit_score_items,
+                start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+                start_z_guessing_iterations=bit_score_start_z_guessing_iterations
             )[0]
 
     @torch.inference_mode(False)
@@ -275,9 +277,11 @@ class IRTScorer:
                     loss = loss.item()
 
                 denominator = data.numel()
-                logger.info("%s iteration %s: Loss = %s", z_estimation_method, i+1, loss)
+                # logger.info("%s iteration %s: Loss = %s", z_estimation_method, i+1, loss)
+                sys.stdout.write(f'\rIteration {i+1}: Current Loss = {loss}')
+                sys.stdout.flush()
                 if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
-                    logger.info("Converged at iteration %s", i+1)
+                    logger.info("Converged at iteration %s.", i+1)
                     break
 
                 loss_history.append(loss)
@@ -388,7 +392,7 @@ class IRTScorer:
         # Ensure result is always a 2D tensor even with 1 latent variable
         return result.view(-1, z_scores.shape[1])
 
-    def get_entropy_starting_z(
+    def get_bit_score_starting_z(
         self,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -400,7 +404,7 @@ class IRTScorer:
         guessing_iterations: int = 10000,
     ):
         """
-        Returns the starting z score from which to compute entropy scores.
+        Returns the starting z score from which to compute bit scores.
         
         Parameters
         ----------
@@ -411,7 +415,7 @@ class IRTScorer:
         lbfgs_learning_rate: float, optional
             For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
         items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is None and uses all items)
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
         start_all_incorrect: bool, optional
             Whether to compute the starting z scores based incorrect responses. If false, starting z is computed based on relationships between each latent variable and the item responses. (default is False)
         train_z : torch.Tensor, optional
@@ -455,6 +459,7 @@ class IRTScorer:
 
         if guessing_probabilities is None:
             if start_all_incorrect:
+                logger.info("Computing z for all incorrect responses to get minimum bit score.")
                 starting_z = self.latent_scores(torch.zeros((1, len(items))).float(), scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
                 # Get minimum score in relation to each latent variable
@@ -467,6 +472,7 @@ class IRTScorer:
                 # get the minimum z scores based on the sum scores
                 starting_z = torch.zeros((1, self.model.latent_variables)).float()
                 for z in range(self.model.latent_variables):
+                    logger.info("Computing minimum bit score z for latent variable %s.", z+1)
                     starting_z[:, z] = self.latent_scores(min_sum_score.float()[:, z], scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)[:, z]
         else:
             if mc_correct is None:
@@ -482,7 +488,8 @@ class IRTScorer:
                 )
 
             if start_all_incorrect:
-                # With one-dimensional entropy, guessing for all items makes sense
+                # With one-dimensional bit scores, guessing for all items makes sense
+                logger.info("Approximating z from random guessing data to get minimum bit score.")
                 guessing_z = self.latent_scores(random_data, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
                 # Random for positively related and set to correct for others
@@ -490,6 +497,7 @@ class IRTScorer:
                 for z in range(self.model.latent_variables):
                     random_data_z = random_data.clone()
                     random_data_z[:, ~item_z_postive[:, z]] = selected_correct[~item_z_postive[:, z]].float() - 1
+                    logger.info("Approximating minimum bit score z from random guessing data for latent variable %s.", z+1)
                     guessing_z[:, z] = self.latent_scores(random_data_z, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)[:, z]
 
             starting_z = guessing_z.detach().median(dim=0).values.reshape(1, self.model.latent_variables)
@@ -498,7 +506,7 @@ class IRTScorer:
 
 
     @torch.inference_mode()
-    def _entropy_scores_from_z(
+    def _bit_scores_from_z(
         self,
         z: torch.Tensor,
         start_z: torch.Tensor = None,
@@ -513,28 +521,28 @@ class IRTScorer:
         start_z_guessing_iterations: int = 10000,
     ):
         """
-        Computes the entropy scores from z scores.
+        Computes the bit scores from z scores.
 
         Parameters:
         ----------
         z : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
         start_z : torch.Tensor, optional
-            A one row 2D tensor with entropy starting values of each latent variable. Estimated automatically if not provided. (default is None)
+            A one row 2D tensor with bit score starting values of each latent variable. Estimated automatically if not provided. (default is None)
         population_z : torch.Tensor, optional
             A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
         one_dimensional: bool, optional
-            Whether to estimate one combined entropy score for a multidimensional model. (default is True)
+            Whether to estimate one combined bit score for a multidimensional model. (default is True)
         z_estimation_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
             For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
         grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
         items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is None and uses all items)
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
         start_z_guessing_probabilities: list[float], optional
             The guessing probability for each item if start_z is None. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
         start_z_guessing_iterations: int, optional
@@ -543,14 +551,14 @@ class IRTScorer:
         Returns:
         -------
         torch.Tensor, torch.Tensor
-            A 2D tensor with entropy distance scale scores for each respondent across the rows together with another tensor with start_z.
+            A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_z.
         """
         if grid_points <= 0:
             raise ValueError("steps must be a positive integer")
         if start_z is not None and start_z.shape != (1, self.model.latent_variables):
             raise ValueError(f"start_z must be a one row tensor with shape (1, {self.model.latent_variables}).")
         if z_estimation_method not in ["NN", "ML", "EAP", "MAP"]:
-            raise ValueError("Invalid entropy_z_grid_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
+            raise ValueError("Invalid bit_score_z_grid_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
         if items is None:
             items = list(range(len(self.model.modeled_item_responses)))
         elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
@@ -558,12 +566,14 @@ class IRTScorer:
         
         if population_z is None:
             if z_estimation_method != "NN":
+                logger.info("Estimation of population z scores needed for bit score computation.")
                 population_z = self.latent_scores(self.algorithm.train_data, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
+                logger.info("Using traning data z scores as population z scores for bit score computation.")
                 population_z = self.algorithm.training_z_scores
 
         if start_z is None:
-            start_z = self.get_entropy_starting_z(
+            start_z = self.get_bit_score_starting_z(
                 z_estimation_method=z_estimation_method,
                 items=items,
                 start_all_incorrect=one_dimensional,
@@ -578,7 +588,7 @@ class IRTScorer:
         grid_start, grid_end, _ = self._get_grid_boundaries(train_z_adjusted, start_z_adjusted)
         
         if one_dimensional:
-            entropy_scores = self._compute_1d_entropy_scores(
+            bit_scores = self._compute_1d_bit_scores(
                 z_adjusted,
                 start_z_adjusted,
                 grid_start,
@@ -587,7 +597,7 @@ class IRTScorer:
                 grid_points
             )
         else:
-            entropy_scores = self._compute_multi_dimensional_entropy_scores(
+            bit_scores = self._compute_multi_dimensional_bit_scores(
                 z_adjusted,
                 start_z_adjusted,
                 train_z_adjusted,
@@ -597,7 +607,7 @@ class IRTScorer:
                 grid_points
             )
         
-        return entropy_scores, start_z
+        return bit_scores, start_z
 
     def _inverted_scales(self, train_z):
         """
@@ -659,14 +669,14 @@ class IRTScorer:
 
     def _get_grid_boundaries(self, train_z_adjusted: torch.tensor, start_z_adjusted):
         """
-        Determines the start and end points of the grid used for computing entropy scores.
+        Determines the start and end points of the grid used for computing bit scores.
 
         Parameters
         ----------
         train_z_adjusted : torch.Tensor
             A 2D array containing the adjusted z scores of the training data. Each row represents one respondent, and each column represents a latent variable.
         start_z_adjusted : torch.Tensor
-            A 1 row tensor containing starting z scores for the entropy scores.
+            A 1 row tensor containing starting z scores for the bit scores.
 
         Returns
         -------
@@ -687,9 +697,9 @@ class IRTScorer:
         grid_end = outlier_detector.smallest_largest_non_outlier(train_z_adjusted, smallest=False)
         return grid_start, grid_end, start_is_outlier
 
-    def _compute_1d_entropy_scores(self, z_adjusted, start_z_adjusted, grid_start, grid_end, inverted_scale, grid_points):
+    def _compute_1d_bit_scores(self, z_adjusted, start_z_adjusted, grid_start, grid_end, inverted_scale, grid_points):
         """
-        Computes the 1D entropy scores for the given input z scores.
+        Computes the 1D bit scores for the given input z scores.
 
         Parameters
         ----------
@@ -709,7 +719,7 @@ class IRTScorer:
         Returns
         -------
         torch.Tensor
-            The computed 1D entropy scores.
+            The computed 1D bit scores.
         """
         # Limit all z_scores to be within the grid range
         z_adjusted_capped = torch.clamp(z_adjusted, grid_start, grid_end)
@@ -734,7 +744,7 @@ class IRTScorer:
         grid = grid.view(-1, grid.shape[2]) * inverted_scale
         output = self.model(grid)
         entropies = output_to_item_entropy(output, self.model.modeled_item_responses)
-        # the goal is to get the entropies to the dimensions required for entropy_distance
+        # the goal is to get the entropies to the dimensions required for bit_score_distance
         # we need to transpose for view to order them correctly
         # and change positioning of each dimension in the end using permute
         entropies = (
@@ -751,9 +761,9 @@ class IRTScorer:
         diff[:, :, 0] = 0
         return diff.sum(dim=(1, 2)).unsqueeze(1)
 
-    def _compute_multi_dimensional_entropy_scores(self, z_adjusted, start_z_adjusted, train_z_adjusted, grid_start, grid_end, inverted_scale, grid_points):
+    def _compute_multi_dimensional_bit_scores(self, z_adjusted, start_z_adjusted, train_z_adjusted, grid_start, grid_end, inverted_scale, grid_points):
         """
-        Computes the multi-dimensional entropy scores for the given input z scores.
+        Computes the multi-dimensional bit scores for the given input z scores.
 
         Parameters:
         -----------
@@ -774,8 +784,8 @@ class IRTScorer:
 
         Returns:
         --------
-        entropy_scores : torch.Tensor
-            The multi-dimensional entropy scores for the input z scores.
+        bit_scores : torch.Tensor
+            The multi-dimensional bit scores for the input z scores.
         """
         # Construct grid
         ratio = torch.linspace(0, 1, steps=grid_points).view(-1, 1)
@@ -789,9 +799,9 @@ class IRTScorer:
         grid[0, :] = start_z_adjusted
 
         grid, sorted_indices = torch.sort(grid, dim=0)
-        # Fill each column in grid we are not not computing entropy scores for with the median
+        # Fill each column in grid we are not not computing bit scores for with the median
         median, _ = torch.median(train_z_adjusted, dim=0)
-        entropy_scores = torch.zeros_like(z_adjusted)
+        bit_scores = torch.zeros_like(z_adjusted)
         for z_var in range(grid.shape[1]):
             # Only compute once per unique value
             unique_grid, inverse_indices = grid[:, z_var].unique(return_inverse=True)
@@ -807,9 +817,9 @@ class IRTScorer:
             diff[1:,:] = torch.abs(entropies[:-1, :] - entropies[1:, :])
 
             # cummulative sum over grid points and then sum the item scores
-            entropy_score_grid = diff.sum(dim=1).cumsum(dim=0)
+            bit_score_grid = diff.sum(dim=1).cumsum(dim=0)
 
-            # add duplicates, unsort and take only the entropy scores for the input z scores
-            entropy_scores[:, z_var] = entropy_score_grid[inverse_indices][torch.sort(sorted_indices[:, z_var])[1]][-z_adjusted.shape[0]:]
+            # add duplicates, unsort and take only the bit scores for the input z scores
+            bit_scores[:, z_var] = bit_score_grid[inverse_indices][torch.sort(sorted_indices[:, z_var])[1]][-z_adjusted.shape[0]:]
             
-        return entropy_scores
+        return bit_scores

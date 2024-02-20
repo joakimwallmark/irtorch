@@ -16,7 +16,6 @@ setup(
         "torch",
         "factor_analyzer",
         "tensorboard",
-        "feather-format",
         "numpy",
         "pandas",
         "matplotlib",

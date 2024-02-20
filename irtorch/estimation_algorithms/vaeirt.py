@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.distributions import Normal
 from torch.utils.tensorboard import SummaryWriter
@@ -6,6 +7,8 @@ from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
 from irtorch.helper_functions import decode_one_hot_test_data
+
+logger = logging.getLogger('irtorch')
 
 class VAEIRT(AEIRT):
     def __init__(
@@ -88,7 +91,6 @@ class VAEIRT(AEIRT):
         learning_rate_updates_before_stopping: int = 5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         imputation_method: str = "zero",
-        verbose: bool = False,
         anneal: int = True,
         annealing_epochs: int = 5,
         iw_samples: int = 1,
@@ -116,8 +118,6 @@ class VAEIRT(AEIRT):
             The device to run the model on. (default is "cuda" if available else "cpu".)
         imputation_method : str, optional
             The method to use for imputing missing data. (default is "zero")
-        verbose : bool, optional
-            Whether to print out verbose training logs. (default is False)
         """
         self.iw_samples = iw_samples
         self.annealing_epochs = annealing_epochs
@@ -132,7 +132,6 @@ class VAEIRT(AEIRT):
             learning_rate_updates_before_stopping=learning_rate_updates_before_stopping,
             device=device,
             imputation_method=imputation_method,
-            verbose=verbose
         )
 
     def forward(self, data):
@@ -327,11 +326,15 @@ class VAEIRT(AEIRT):
         """
         Get the z scores from an input
 
-        Parameters:
+        Parameters
+        ----------
         data: torch.Tensor
             A 2D tensor with test data. Columns are items and rows are respondents.
-        Returns:
-            A 2D vector of latent scores. Rows are respondents and columns are latent variables.
+        
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent scores. Rows are respondents and columns are latent variables.
         """
         data = data.contiguous()
         return self.encoder(data)[0]

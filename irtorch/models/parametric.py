@@ -1,11 +1,31 @@
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
 
+logger = logging.getLogger('irtorch')
+
 class Parametric(BaseIRTModel):
     """
-    Parametric IRT model.
+    Parametric IRT model. Currently supports 1PL, 2PL, 3PL, Generalized partial credit and nominal models.
+
+    Parameters
+    ----------
+    latent_variables : int
+        Number of latent variables.
+    item_categories : list[int]
+        Number of categories for each item. One integer for each item. Missing responses exluded.
+    model : str
+        Type of parametric model. Can be "1PL", "2PL", "3PL", "GPC" or "nominal".
+    model_missing : bool, optional
+        Whether to model missing item responses as separate item response categories. (Default: False)
+    mc_correct : list[int], optional
+        The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
+    item_z_relationships : torch.Tensor, optional
+        A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+    reference_category : bool, optional
+        Only for the nomimal model. Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by Bock(1972))
     """
     def __init__(
         self,
@@ -17,24 +37,6 @@ class Parametric(BaseIRTModel):
         item_z_relationships: torch.Tensor = None,
         reference_category: bool = False
     ):
-        """
-        Parameters
-        ----------
-        latent_variables : int
-            Number of latent variables.
-        item_categories : list[int]
-            Number of categories for each item. One integer for each item. Missing responses exluded.
-        model : str
-            Type of parametric model. Can be "1PL", "2PL", "3PL", "GPC" or "nominal".
-        model_missing : bool, optional
-            Whether to model missing item responses as separate item response categories. (Default: False)
-        mc_correct : list[int], optional
-            The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
-        item_z_relationships : torch.Tensor, optional
-            A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
-        reference_category : bool, optional
-            Only for the nomimal model. Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by Bock(1972))
-        """
         super().__init__(latent_variables=latent_variables, item_categories=item_categories, model_missing=model_missing, mc_correct=mc_correct)
         if item_z_relationships is not None:
             if item_z_relationships.shape != (len(item_categories), latent_variables):

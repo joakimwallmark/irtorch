@@ -1,14 +1,16 @@
+import logging
 import copy
 import torch
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
-from tqdm.auto import tqdm
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
 from irtorch.dataset import PytorchIRTDataset
 from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
+from irtorch.utils import dynamic_print, is_jupyter
 
+logger = logging.getLogger('irtorch')
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
     def __init__(
@@ -22,7 +24,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         summary_writer: SummaryWriter = None,
     ):
         """
-        Initialize the autoencoder IRT neural network.
+        Initialize the  IRT neural network.
 
         Parameters
         ----------
@@ -43,7 +45,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         self.imputation_method = "zero"
         self.summary_writer = summary_writer
         self.batch_normalization = batch_normalization_encoder
-        self.verbose = False
 
         if encoder is not None and self.model is not None:
             if encoder.latent_variables != self.model.latent_variables:
@@ -93,7 +94,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         learning_rate_updates_before_stopping: int = 5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         imputation_method: str = "zero",
-        verbose: bool = False,
     ):
         """
         Train the autoencoder model.
@@ -118,11 +118,8 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             The device to run the model on. (default is "cuda" if available else "cpu".)
         imputation_method : str, optional
             The method to use for imputing missing data. (default is "zero")
-        verbose : bool, optional
-            Whether to print out verbose training logs. (default is False)
         """
         super().fit(train_data)
-        self.verbose = verbose
         self.imputation_method = imputation_method
 
         # Initialize the training history
@@ -158,7 +155,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # we multiply the learning rate by the factor
         # patience: We need to improvement after 5 epochs for it to trigger
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience, verbose=verbose
+            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
         )
 
         self.to(device)
@@ -176,7 +173,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         self,
         max_epochs: int,
         scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
-        validation_data: torch.Tensor = None, 
+        validation_data: torch.Tensor = None,
         learning_rate_updates_before_stopping: int = 5,
     ):
         """
@@ -192,9 +189,8 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         lr_update_count = 0
         best_loss = float('inf')
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
-        for epoch in tqdm(range(max_epochs)):
-            if self.verbose:
-                print(f"-----------\nEpoch: {epoch}\n-----------")
+        for epoch in range(max_epochs):
+            # logger.info("-----------\nEpoch: %s\n-----------", epoch)
             
             if hasattr(self, "anneal"):
                 if self.anneal:
@@ -220,7 +216,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             
             # Break if the learning rate has been updated 3 times
             if lr_update_count >= learning_rate_updates_before_stopping:
-                print(f"Stopping training after {learning_rate_updates_before_stopping} learning rate updates.")
+                logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                 break
 
             current_lr = [group['lr'] for group in self.optimizer.param_groups]
@@ -229,14 +225,13 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 lr_update_count += 1
                 prev_lr = current_lr
 
-            if self.verbose:
-                print(f"Current learning rate: {self.optimizer.param_groups[0]['lr']}")
+            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
 
         # Load the best model state
         if best_model_state is not None:
             self.load_state_dict(best_model_state['state_dict'])
             self.optimizer.load_state_dict(best_model_state['optimizer'])
-            print(f"Best model found at epoch {best_epoch} with loss {best_loss:.4f}.")
+            logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
         if self.summary_writer is not None:
             self.summary_writer.close()
@@ -274,8 +269,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # Calculate averge per batch loss and accuracy per epoch and print out what's happening
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
-        if self.verbose:
-            print(f"Average training batch loss function: {loss:.4f}")
+        dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {loss:.4f}")
         return loss
 
     def _impute_missing(self, batch, missing_mask):
@@ -335,15 +329,12 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         loss = 0
         for _, (batch, mask) in enumerate(self.validation_data_loader):
             batch = self._impute_missing(batch, mask)
-            batch_loss, _ = self._batch_fit_measures(
-                batch
-            )
+            batch_loss, _ = self._batch_fit_measures(batch)
 
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
         self.training_history["validation_loss"].append(loss)
-        if self.verbose:
-            print(f"Average validation batch loss function: {loss:.4f}")
+        logger.info("Average validation batch loss function: %.4f", loss)
         return loss
 
     @torch.inference_mode()
@@ -375,12 +366,15 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         """
         Get the latent scores from an input
 
-        Parameters:
+        Parameters
+        ----------
         data: torch.Tensor
-            A 2D tensor with test data. Columns are items and rows are respondents
+            A 2D tensor with test data. Columns are items and rows are respondents.
 
-        Returns:
-            A 2D vector of latent scores. Rows are respondents and latent variables are columns.
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent scores. Rows are respondents and latent variables are columns.
         """
         data = data.contiguous()
         return self.encoder(data)

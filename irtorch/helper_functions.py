@@ -1,9 +1,15 @@
+import logging
 import torch, time, gc
+
+logger = logging.getLogger('irtorch')
 
 # TODO: maybe remove this?
 start_time = None
 
 def start_timer():
+    """
+    Start the timer for measuring execution time and memory usage.
+    """
     global start_time
     gc.collect()
     torch.cuda.empty_cache()
@@ -12,23 +18,31 @@ def start_timer():
     start_time = time.time()
 
 def end_timer_and_print(local_msg):
+    """
+    End the timer and print the execution time and memory usage.
+    """
     end_time = time.time()
     torch.cuda.synchronize()
-    print("\n" + local_msg)
-    print(f"Total execution time = {end_time - start_time} sec".format())
-    print(f"Max memory used by tensors = {torch.cuda.max_memory_allocated()} bytes")
+    logger.info("\n%s", local_msg)
+    logger.info("Total execution time = %s sec", end_time - start_time)
+    logger.info("Max memory used by tensors = %s bytes", torch.cuda.max_memory_allocated())
 
 
 def linear_regression(x, y):
     """
     Performs linear regression.
 
-    Parameters:
-    - x (torch.Tensor): Design matrix of shape (m, n), where m is the number of samples and n is the number of features.
-    - y (torch.Tensor): Target vector of shape (m, 1).
+    Parameters
+    -----------
+    x : torch.Tensor
+        Design matrix of shape (m, n), where m is the number of samples and n is the number of features.
+    y : torch.Tensor
+        Target vector of shape (m, 1).
 
-    Returns:
-    - w (torch.Tensor): A tensor vector with the bias and the weights of shape (n+1, 1).
+    Returns
+    -----------
+    w : torch.Tensor
+        A tensor vector with the bias and the weights of shape (n+1, 1).
     """
     # Add a bias term (1) to each sample in x
     bias = torch.cat([torch.ones(x.size(0), 1), x], dim=1)
@@ -44,14 +58,14 @@ def get_item_categories(data: torch.Tensor):
     Get the number of possible responses for each item in the data.
 
     Parameters
-    ----------
+    -----------
     data : torch.Tensor
         A 2D tensor where each row represents one respondent and each column represents an item.
         The values should be the scores/possible responses on the items, starting from 0.
         Missing item responses need to be coded as -1 or 'nan'.
 
     Returns
-    -------
+    ----------
     list
         A list of integers where each integer is the number of possible responses for the corresponding item.
     """
@@ -63,7 +77,7 @@ def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_catego
     Impute missing values in the data. For multiple choice data for which missing is not modeled, imputes randomly from incorrect responses.
 
     Parameters
-    ----------
+    -----------
     data : torch.Tensor
         A 2D tensor where each row represents one respondent and each column represents an item.
         The values should be the scores/possible responses on the items, starting from 0.
@@ -74,7 +88,7 @@ def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_catego
         A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
 
     Returns
-    -------
+    ----------
     torch.Tensor
         A 2D tensor with missing values imputed. Rows are respondents and columns are items.
     """
@@ -91,7 +105,7 @@ def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_catego
             # Get the incorrect non-missing responses from the column
             incorrect_responses = torch.arange(0, item_categories[col])
             incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]-1]
-        
+
             # Find the indices of -1 values in the column
             missing_indices = (data[:, col] == -1).squeeze()
 
@@ -370,14 +384,14 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
     The entropy is a measure of the uncertainty or randomness of a set of probabilities. It is calculated as the sum of the product of each probability and its surprisal (negative log probability).
 
     Parameters:
-    ----------
+    -------------
     probabilities: torch.Tensor
         A tensor of probabilities. The last tensor dimension should represent a discrete probability distribution and should sum to 1.
     log_base: int, optional
         The base of the logarithm used in the calculation. (default is 2, which gives entropy in bits)
 
     Returns:
-    ----------
+    -------------
     entropy: torch.Tensor
         The entropy of each row of probabilities.
     """

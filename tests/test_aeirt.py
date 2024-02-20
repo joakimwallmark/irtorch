@@ -97,8 +97,7 @@ class TestAEIRT:
             algorithm.fit(
                 train_data=test_data[0:100],
                 validation_data=test_data[100:120],
-                max_epochs=5,
-                verbose=False,
+                max_epochs=5
             )
 
             # Check if inner functions are called

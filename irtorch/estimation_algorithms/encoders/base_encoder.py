@@ -1,7 +1,8 @@
+import logging
 from abc import ABC, abstractmethod
-import torch
 from torch import nn
-import torch.nn.functional as F
+
+logger = logging.getLogger('irtorch')
 
 class BaseEncoder(ABC, nn.Module):
     """

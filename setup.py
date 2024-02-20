@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="irtorch",
-    version="0.0.3",
+    version="0.0.4",
     description="A python package for item response theory.",
     long_description="README.md",
     long_description_content_type="text/markdown",
@@ -16,7 +16,6 @@ setup(
         "torch",
         "factor_analyzer",
         "tensorboard",
-        "tqdm",
         "feather-format",
         "numpy",
         "pandas",

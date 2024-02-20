@@ -16,5 +16,4 @@ def initialize_fit(model):
         "validation_ll": [],
         "validation_accuracy": [],
     }
-    model.verbose = False
     model.annealing_factor = 1.0

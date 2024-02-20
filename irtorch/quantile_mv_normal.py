@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.distributions.multivariate_normal import MultivariateNormal
 from irtorch.latent_variable_functions import (
@@ -5,28 +6,11 @@ from irtorch.latent_variable_functions import (
     interp,
 )
 
+logger = logging.getLogger('irtorch')
 
 class QuantileMVNormal:
     """
     Quantile multivariate normal approximation of a multivariate joint density function.
-
-    Attributes
-    ----------
-    data : torch.Tensor
-        original data tensor used for fitting the QuantileMVNorm
-    qt_data : torch.Tensor
-        quantile transformed data
-    mvnorm : torch.distributions.MultivariateNormal
-        fitted multivariate normal distribution
-
-    Methods
-    -------
-    fit_multivariate_normal(data)
-        Fits a multivariate normal distribution to the data tensor.
-    pdf(data)
-        Computes the probability density function at the given data points.
-    cdf(data)
-        Computes the cumulative distribution function at the given data points.
     """
 
     def __init__(self):

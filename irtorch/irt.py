@@ -1,3 +1,4 @@
+import logging
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
@@ -9,8 +10,60 @@ from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 
+logger = logging.getLogger('irtorch')
 
 class IRT:
+    """
+    Main item response theory (IRT) class. 
+    Consists of an IRT model instance (inheriting BaseIRTModel) which is fitted using the specified estimation algorithm.
+
+    Parameters
+    ----------
+    model : str | BaseIRTModel, optional
+        The IRT model to use. Available models are:
+
+        - "1PL": One-parameter logistic model.
+        - "2PL": Two-parameter logistic model.
+        - "GPC": Generalized partial credit model.
+        - "nominal": Nominal response model.
+        - "MNN": Monotone neural network model.
+        - "MMCNN": Monotone multiple choice neural network model.
+        
+        Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
+        An instantiated model can also be provided.
+    estimation_algorithm : str, optional
+        The estimation algorithm to use. Available options are
+
+        - "AE" for autoencoder. This is the default.
+        - "VAE" for variational autoencoder.
+
+    latent_variables : int, optional
+        The number of latent variables to use for the model. (default is 1)
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    item_categories : list[int], optional
+        A list of integers where each integer is the number of possible responses for the corresponding item, exluding missing values. Overrides the data argument. (default is None)
+    item_z_relationships: torch.Tensor, optional
+        A tensor of shape (latent_variables, items) that defines the relationship between latent variables and item categories. If not provided, assumes relationships between all items and latent variables. (default is None)
+    model_missing : bool, optional
+        Whether missing values should be modeled as their own category. Ignored if an instantiated model is supplied. (default is False)
+    mc_correct : list[int], optional
+        List of correct answers for multiple choice questions. If provided also sets one_hot_encoded to True. (default is None)
+    nominal_reference_category : bool, optional
+        Whether to use a reference category for nominal models. If True, removes the model parameters for one response category per item. (default is False)
+
+    encoder : BaseEncoder, optional
+        The encoder to use for the AE or VAE. Overrides the one_hot_encoded, hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder arguments.
+        If not provided, creates an instance of class StandardEncoder or VariationalEncoder for AE and VAE respectively. (default is None)
+    one_hot_encoded : bool, optional
+        Whether the model fitting algorithm uses one-hot encoded data. (default is False for all models except for MMC)
+    hidden_layers_encoder : list[int], optional
+        List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
+    nonlinear_encoder : torch.nn.Module, optional
+        The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
+    batch_normalization_encoder : bool, optional
+        Whether to use batch normalization for the encoder. (default is True)
+    """
     def __init__(
         self,
         model: str | BaseIRTModel = None,
@@ -30,55 +83,6 @@ class IRT:
         batch_normalization_encoder: bool = True,
         summary_writer: SummaryWriter = None,
     ):
-        """
-        Initialize the autoencoder IRT neural network.
-
-        Parameters
-        ----------
-        model : str | BaseIRTModel, optional
-            The IRT model to use. Available models are:
-
-            - "1PL": One-parameter logistic model.
-            - "2PL": Two-parameter logistic model.
-            - "GPC": Generalized partial credit model.
-            - "nominal": Nominal response model.
-            - "MNN": Monotone neural network model.
-            - "MMCNN": Monotone multiple choice neural network model.
-            
-            Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not.
-        estimation_algorithm : str, optional
-            The estimation algorithm to use. Available options are
-
-            - "AE" for autoencoder. This is the default.
-            - "VAE" for variational autoencoder.
-
-        latent_variables : int, optional
-            The number of latent variables to use for the model. (default is 1)
-        data: torch.Tensor, optional
-            A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
-        item_categories : list[int], optional
-            A list of integers where each integer is the number of possible responses for the corresponding item, exluding missing values. Overrides the data argument. (default is None)
-        item_z_relationships: torch.Tensor, optional
-            A tensor of shape (latent_variables, items) that defines the relationship between latent variables and item categories. If not provided, assumes relationships between all items and latent variables. (default is None)
-        model_missing : bool, optional
-            Whether missing values should be modeled as their own category. Ignored if an instantiated model is supplied. (default is False)
-        mc_correct : list[int], optional
-            List of correct answers for multiple choice questions. If provided also sets one_hot_encoded to True. (default is None)
-        nominal_reference_category : bool, optional
-            Whether to use a reference category for nominal models. If True, removes the model parameters for one response category per item. (default is False)
-
-        encoder : BaseEncoder, optional
-            The encoder to use for the AE or VAE. Overrides the one_hot_encoded, hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder arguments.
-            If not provided, creates an instance of class StandardEncoder or VariationalEncoder for AE and VAE respectively. (default is None)
-        one_hot_encoded : bool, optional
-            Whether the model fitting algorithm uses one-hot encoded data. (default is False for all models except for MMC)
-        hidden_layers_encoder : list[int], optional
-            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-        nonlinear_encoder : torch.nn.Module, optional
-            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-        batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
-        """
         if isinstance(model, BaseIRTModel):
             self.latent_variables = model.latent_variables
             self.model = model
@@ -163,19 +167,20 @@ class IRT:
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "entropy",
+        scale: str = "bit",
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.3,
         eap_z_integration_points: int = None,
-        entropy_one_dimensional: bool = False,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: str = None,
-        entropy_start_z: torch.tensor = None,
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None
+        bit_score_one_dimensional: bool = False,
+        bit_score_population_z: torch.Tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: str = None,
+        bit_score_start_z: torch.tensor = None,
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None
     ):
         """
         Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
@@ -187,31 +192,33 @@ class IRT:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
         z : torch.Tensor, optional
-            For computing entropy scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
-            Method used to obtain the z scores. Also used for entropy scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+            Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device : str, optional
             For ML and MAP. The device to use for the LBFGS optimizer. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
             For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
         eap_z_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-        entropy_one_dimensional: bool, optional
-            Whether to estimate one combined entropy score for a multidimensional model. (default is False)
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
-        entropy_start_z_guessing_probabilities: list[float], optional
+        bit_score_one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is False)
+        bit_score_population_z: torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        entropy_start_z_guessing_iterations: int, optional
+        bit_score_start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        entropy_items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is 'None' and uses all items)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         Returns
         -------
         torch.Tensor
@@ -225,24 +232,25 @@ class IRT:
             ml_map_device,
             lbfgs_learning_rate,
             eap_z_integration_points,
-            entropy_one_dimensional,
-            entropy_grid_points,
-            entropy_z_grid_method,
-            entropy_start_z,
-            entropy_start_z_guessing_probabilities,
-            entropy_start_z_guessing_iterations,
-            entropy_items,
+            bit_score_one_dimensional,
+            bit_score_population_z,
+            bit_score_grid_points,
+            bit_score_z_grid_method,
+            bit_score_start_z,
+            bit_score_start_z_guessing_probabilities,
+            bit_score_start_z_guessing_iterations,
+            bit_score_items,
         )
 
     def plot_latent_score_distribution(
         self,
         scores_to_plot: torch.Tensor = None,
-        scale: str = "entropy",
+        scale: str = "bit",
         population_data: torch.Tensor = None,
         latent_variables_to_plot: tuple[int] = (1,),
         steps: int = 200,
         z_estimation_method: str = "NN",
-        entropy_grid_steps: int = 300,
+        bit_score_grid_steps: int = 300,
         kernel_bandwidth = 'scott',
     ):
         """
@@ -253,7 +261,7 @@ class IRT:
         scores_to_plot : torch.Tensor, optional
             If provided, plotted directly. If None, scores are computed from the population data. (default is None)
         scale : str, optional
-            The scale to use for the plot. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scale to use for the plot. Can be 'bit' or 'z'. (default is 'bit')
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         latent_variables_to_plot : tuple[int], optional
@@ -264,8 +272,8 @@ class IRT:
             If provided, these scores are used directly for the plot. If None, scores are computed from the population data. (default is None)
         z_estimation_method : str, optional
             The method used for computing z-scores. Only used if z_scores is None. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'NN')
-        entropy_grid_steps : int, optional
-            The number of steps to use when computing the entropy scale. Only used if scale is 'entropy'. (default is 300)
+        bit_score_grid_steps : int, optional
+            The number of steps to use when computing bit scores. Only used if scale is 'bit'. (default is 300)
         kernel_bandwidth : float or str, optional
             The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
 
@@ -283,7 +291,7 @@ class IRT:
             latent_variables_to_plot=latent_variables_to_plot,
             steps=steps,
             z_estimation_method=z_estimation_method,
-            entropy_grid_steps=entropy_grid_steps,
+            bit_score_grid_steps=bit_score_grid_steps,
             kernel_bandwidth=kernel_bandwidth,
         )
 
@@ -291,16 +299,16 @@ class IRT:
     def plot_item_probabilities(
         self,
         item: int,
-        scale: str = "entropy",
+        scale: str = "bit",
         latent_variables: tuple = (1, ),
         fixed_zs: torch.Tensor = None,
         steps: int = 1000,
-        entropy_start_z: torch.tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: int = "ML",
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None,
+        bit_score_start_z: torch.tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None,
         z_range: tuple[float, float] = None,
         second_z_range: tuple[float, float] = None,
         plot_group_fit: bool = False,
@@ -319,25 +327,25 @@ class IRT:
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
             The latent space variables to plot. (default is (1,))
         fixed_zs: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         steps : int, optional
             The number of steps along each z axis used for probability evaluation. (default is 1000)
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        entropy_start_z_guessing_probabilities: list[float], optional
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        entropy_start_z_guessing_iterations: int, optional
+        bit_score_start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        entropy_items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is 'None' and uses all items)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         z_range : tuple, optional
             Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
         second_z_range : tuple, optional
@@ -368,12 +376,12 @@ class IRT:
             latent_variables=latent_variables,
             fixed_zs=fixed_zs,
             steps=steps,
-            entropy_start_z=entropy_start_z,
-            entropy_grid_points=entropy_grid_points,
-            entropy_z_grid_method=entropy_z_grid_method,
-            entropy_start_z_guessing_probabilities=entropy_start_z_guessing_probabilities,
-            entropy_start_z_guessing_iterations=entropy_start_z_guessing_iterations,
-            entropy_items=entropy_items,
+            bit_score_start_z=bit_score_start_z,
+            bit_score_grid_points=bit_score_grid_points,
+            bit_score_z_grid_method=bit_score_z_grid_method,
+            bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+            bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
+            bit_score_items=bit_score_items,
             z_range=z_range,
             second_z_range=second_z_range,
             plot_group_fit=plot_group_fit,
@@ -388,32 +396,33 @@ class IRT:
     def plot_item_entropy(
         self,
         item: int,
-        scale="entropy",
-        latent_variable: int = 1,
+        scale="bit",
+        latent_variables: int = 1,
         steps: int = 1000,
-        entropy_method: str = "tanh",
-        entropy_grid_steps: int = 300,
         z_range: tuple[float, float] = (-4, 4),
+        **kwargs,
     ):
         """
-        Plots the entropy of item responses against the latent variables.
-        TODO rewrite for new entropy method
+        Plot the entropy of item responses against latent variables.
+
         Parameters
         ----------
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'entropy' or 'z'. (default is 'entropy')
-        latent_variable : int, optional
-            The latent variable to plot. (default is 1)
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : int, optional
+            The latent variable dimension to plot. (default is 1)
         steps : int, optional
-            The number of steps along the latent variable used for entropy evaluation. (default is 1000)
-        entropy_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'entropy'. (default is 'tanh')
-        entropy_grid_steps : int, optional
-            The number of steps used to calculate entropy scale values. Only used if scale is 'entropy'. (default is 300)
+            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
+        bit_score_method : str, optional
+            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
+        bit_score_grid_steps : int, optional
+            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
         z_range : tuple[float, float], optional
             The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
+        **kwargs
+            Additional keyword arguments to pass to the bit score computation.
 
         Returns
         -------
@@ -423,36 +432,24 @@ class IRT:
             The matplotlib axes object for the plot.
         """
         return self.plotter.plot_item_entropy(
-            item,
-            scale,
-            latent_variable,
-            steps,
-            entropy_method,
-            entropy_grid_steps,
-            z_range,
+            item=item,
+            scale=scale,
+            latent_variables=latent_variables,
+            steps=steps,
+            z_range=z_range,
+            **kwargs,
         )
 
-    def plot_training_history(self, plot_measures: list[str] = None):
+    def plot_training_history(self):
         """
-        Plots the training history of the neural network. Up to three subplots are created if data is available:
-        1. Training and validation loss over epochs
-        2. Training and validation accuracy over epochs
-        3. Log likelihood of the validation data over epochs
-
-        Parameters
-        ----------
-        plot_measures : list of str, optional
-            The measures to plot. If not provided, all available measures will be plotted.
-            Possible values are "Loss function", "Prediction accuracy", and "Validation data log likelihood".
+        Plots the training history of the model.
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple
+            A tuple with the fig and ax matplotlib subplot items.
         """
-        return self.plotter.plot_training_history(plot_measures)
+        return self.plotter.plot_training_history()
 
     def plot_item_latent_variable_relationships(
         self,
@@ -546,7 +543,7 @@ class IRT:
     def expected_item_score_slopes(
         self,
         z: torch.Tensor = None,
-        entropy_scores: torch.Tensor = None,
+        bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
     ):
         """
@@ -556,8 +553,8 @@ class IRT:
         ----------
         z : torch.Tensor, optional
             A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
-        entropy_scores : torch.Tensor, optional
-            A 2D tensor with entropy scores corresponding to each z score in z. If provided, slopes will be copmuted on the entropy scales. (default is None)
+        bit_scores : torch.Tensor, optional
+            A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
 
@@ -568,7 +565,7 @@ class IRT:
         """
         if z is None:
             z = self.algorithm.training_z_scores
-        return self.model.expected_item_score_slopes(z, entropy_scores, rescale_by_item_score)
+        return self.model.expected_item_score_slopes(z, bit_scores, rescale_by_item_score)
         
 
     def accuracy(
@@ -703,13 +700,13 @@ class IRT:
         groups: int = 10,
         latent_variable: int = 1,
         scale: str = "z",
-        entropy_start_z: torch.tensor = None,
+        bit_score_start_z: torch.tensor = None,
         population_z: torch.Tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: int = "ML",
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None,
     ):
         """
         Group the respondents based on their ordered latent variable scores.
@@ -733,17 +730,17 @@ class IRT:
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         scale : str, optional
-            The grouping method scale, which can either be 'entropy' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'entropy' are equivalent. (default is 'z')
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
+            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
+            models, 'z' and 'bit' are equivalent. (default is 'z')
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
         population_z : torch.Tensor, optional
-            Only for entropy scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        entropy_start_z_guessing_probabilities: list[float], optional
+            Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
 
         Returns
@@ -759,13 +756,13 @@ class IRT:
             groups = groups,
             latent_variable = latent_variable,
             scale = scale,
-            entropy_start_z = entropy_start_z,
+            bit_score_start_z = bit_score_start_z,
             population_z = population_z,
-            entropy_grid_points = entropy_grid_points,
-            entropy_z_grid_method = entropy_z_grid_method,
-            entropy_start_z_guessing_probabilities = entropy_start_z_guessing_probabilities,
-            entropy_start_z_guessing_iterations = entropy_start_z_guessing_iterations,
-            entropy_items = entropy_items,
+            bit_score_grid_points = bit_score_grid_points,
+            bit_score_z_grid_method = bit_score_z_grid_method,
+            bit_score_start_z_guessing_probabilities = bit_score_start_z_guessing_probabilities,
+            bit_score_start_z_guessing_iterations = bit_score_start_z_guessing_iterations,
+            bit_score_items = bit_score_items,
         )
 
     def save_model(self, path: str):
@@ -777,8 +774,9 @@ class IRT:
         path : str
             Where to save fitted model.
         """
-
+        # TODO save training history
         if self.algorithm.train_data is None:
+            logger.error("Attempted to save model before fitting.")
             raise AttributeError("Cannot save model before fitting.")
         
         to_save = {
@@ -799,6 +797,7 @@ class IRT:
         path : str
             Where to load fitted model from.
         """
+        # TODO load training history
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.algorithm.train_data = checkpoint["train_data"]

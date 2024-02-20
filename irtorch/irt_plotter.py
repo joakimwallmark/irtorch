@@ -1,3 +1,4 @@
+import logging
 from sklearn.neighbors import KernelDensity
 import torch
 import numpy as np
@@ -11,6 +12,7 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.helper_functions import output_to_item_entropy
 
+logger = logging.getLogger('irtorch')
 
 class IRTPlotter:
     def __init__(
@@ -38,27 +40,17 @@ class IRTPlotter:
         self.markersize = 9
         self.color_map = "tab10"
 
-    def plot_training_history(self, plot_measures: list[str] = None):
+    def plot_training_history(self):
         """
-        Plots the training history of the model. Up to three subplots are created if data is available:
-        1. Training and validation loss over epochs
-        2. Training and validation accuracy over epochs
-        3. Log likelihood of the validation data over epochs
-
-        Parameters
-        ----------
-        plot_measures : list of str, optional
-            The measures to plot. If not provided, all available measures will be plotted.
-            Possible values are "Loss function".
+        Plots the training history of the model.
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple
+            A tuple with the fig and ax matplotlib subplot items.
         """
         if all(len(val) == 0 for val in self.algorithm.training_history.values()):
+            logging.error("Model has not been trained yet")
             raise AttributeError("Model has not been trained yet")
 
         measures = {
@@ -68,14 +60,6 @@ class IRTPlotter:
                 "y_label": "Loss",
             }
         }
-
-        if plot_measures is not None:
-            unrecognized = set(plot_measures) - set(measures.keys())
-            if unrecognized:
-                print(f"Unrecognized measure(s): {', '.join(unrecognized)}")
-            measures = {
-                name: m for name, m in measures.items() if name in plot_measures
-            }
 
         existing_measures = [
             m
@@ -131,16 +115,16 @@ class IRTPlotter:
     def plot_item_probabilities(
         self,
         item: int,
-        scale: str = "entropy",
+        scale: str = "bit",
         latent_variables: tuple = (1, ),
         fixed_zs: torch.Tensor = None,
         steps: int = 1000,
-        entropy_start_z: torch.tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: int = "ML",
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None,
+        bit_score_start_z: torch.tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None,
         z_range: tuple[float, float] = None,
         second_z_range: tuple[float, float] = None,
         plot_group_fit: bool = False,
@@ -159,25 +143,25 @@ class IRTPlotter:
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
             The latent space variables to plot. (default is (1,))
         fixed_zs: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         steps : int, optional
             The number of steps along each z axis used for probability evaluation. (default is 1000)
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        entropy_start_z_guessing_probabilities: list[float], optional
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        entropy_start_z_guessing_iterations: int, optional
+        bit_score_start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        entropy_items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is 'None' and uses all items)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         z_range : tuple, optional
             Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
         second_z_range : tuple, optional
@@ -248,14 +232,17 @@ class IRTPlotter:
             
         prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
 
-        if scale == "entropy":
-            scores_to_plot, entropy_start_z = self.scorer._entropy_scores_from_z(
+        if scale == "bit":
+            scores_to_plot, bit_score_start_z = self.scorer._bit_scores_from_z(
                 z=z_grid,
+                start_z=bit_score_start_z,
                 one_dimensional=False,
-                start_z=entropy_start_z,
-                z_estimation_method=entropy_z_grid_method,
-                grid_points=entropy_grid_points,
-                items=entropy_items,
+                z_estimation_method=bit_score_z_grid_method,
+                ml_map_device=ml_map_device,
+                grid_points=bit_score_grid_points,
+                items=bit_score_items,
+                start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+                start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
             )
         else:
             scores_to_plot = z_grid
@@ -272,12 +259,12 @@ class IRTPlotter:
                     scale=scale,
                     z=group_fit_population_z,
                     z_estimation_method=group_z_estimation_method,
-                    entropy_start_z=entropy_start_z,
-                    entropy_grid_points=entropy_grid_points,
-                    entropy_z_grid_method=entropy_z_grid_method,
-                    entropy_start_z_guessing_probabilities=entropy_start_z_guessing_probabilities,
-                    entropy_start_z_guessing_iterations=entropy_start_z_guessing_iterations,
-                    entropy_items=entropy_items,
+                    bit_score_start_z=bit_score_start_z,
+                    bit_score_grid_points=bit_score_grid_points,
+                    bit_score_z_grid_method=bit_score_z_grid_method,
+                    bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+                    bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
+                    bit_score_items=bit_score_items,
                     latent_variable=latent_variables[0],
                 )
                 group_probs_data = group_probs_data[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
@@ -545,14 +532,14 @@ class IRTPlotter:
     def plot_latent_score_distribution(
         self,
         scores_to_plot: torch.Tensor = None,
-        scale: str = "entropy",
+        scale: str = "bit",
         population_data: torch.Tensor = None,
         latent_variables_to_plot: tuple[int] = (1,),
         steps: int = 200,
         z_estimation_method: str = "NN",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.3,
-        entropy_grid_steps: int = 300,
+        bit_score_grid_steps: int = 300,
         kernel_bandwidth = 'scott',
     ):
         """
@@ -563,7 +550,7 @@ class IRTPlotter:
         scores_to_plot : torch.Tensor, optional
             If provided, the requested latent variable distributions are plotted directly. If None, scores are computed from the population data. (default is None)
         scale : str, optional
-            The scale to use for the plot. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scale to use for the plot. Can be 'bit' or 'z'. (default is 'bit')
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         latent_variables_to_plot : tuple[int], optional
@@ -576,8 +563,8 @@ class IRTPlotter:
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
             For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
-        entropy_grid_steps : int, optional
-            The number of steps to use when computing the entropy scale. Only used if scale is 'entropy'. (default is 300)
+        bit_score_grid_steps : int, optional
+            The number of steps to use when computing bit scores. Only used if scale is 'bit'. (default is 300)
         kernel_bandwidth : float or str, optional
             The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
 
@@ -613,15 +600,15 @@ class IRTPlotter:
                     ml_map_device=ml_map_device,
                     lbfgs_learning_rate=lbfgs_learning_rate
                 )
-            elif scale == "entropy":
+            elif scale == "bit":
                 scores = self.scorer.latent_scores(
                     data=population_data,
                     scale=scale,
                     z_estimation_method=z_estimation_method,
                     ml_map_device=ml_map_device,
                     lbfgs_learning_rate=lbfgs_learning_rate,
-                    entropy_grid_points=entropy_grid_steps,
-                    entropy_one_dimensional=False
+                    bit_score_grid_points=bit_score_grid_steps,
+                    bit_score_one_dimensional=False
                 )
         else:
             scores = scores_to_plot
@@ -716,32 +703,33 @@ class IRTPlotter:
     def plot_item_entropy(
         self,
         item: int,
-        scale="entropy",
+        scale="bit",
         latent_variables: int = 1,
         steps: int = 1000,
-        entropy_method: str = "tanh",
-        entropy_grid_steps: int = 300,
         z_range: tuple[float, float] = (-4, 4),
+        **kwargs,
     ):
         """
-        Plots the entropy of item responses over latent variables.
+        Plot the entropy of item responses against latent variables.
 
         Parameters
         ----------
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'entropy' or 'z'. (default is 'entropy')
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : int, optional
             The latent variable dimension to plot. (default is 1)
         steps : int, optional
             The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
-        entropy_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'entropy'. (default is 'tanh')
-        entropy_grid_steps : int, optional
-            The number of steps used to calculate entropy scale values. Only used if scale is 'entropy'. (default is 300)
+        bit_score_method : str, optional
+            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
+        bit_score_grid_steps : int, optional
+            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
         z_range : tuple[float, float], optional
             The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
+        **kwargs
+            Additional keyword arguments to pass to the bit score computation.
 
         Returns
         -------
@@ -750,36 +738,28 @@ class IRTPlotter:
         ax : matplotlib.axes.Axes
             The matplotlib axes object for the plot.
         """
-        if scale == "entropy":
-            min_z, max_z = self.scorer.get_entropy_scale_min_max(entropy_method)
-            z_grid = torch.stack(
-                [
-                    torch.linspace(min_z[i], max_z[i], steps=steps)
-                    for i in range(max_z.shape[0])
-                ],
-                dim=1,
-            )
-        else:
-            z_grid = (
-                torch.linspace(z_range[0], z_range[1], steps=steps)
-                .repeat(self.model.latent_variables, 1)
-                .T
-            )
+        z_grid = (
+            torch.linspace(z_range[0], z_range[1], steps=steps)
+            .repeat(self.model.latent_variables, 1)
+            .T
+        )
 
         mean_output = self.model(z_grid)
         item_entropies = output_to_item_entropy(
             mean_output, self.model.modeled_item_responses
         )[:, item - 1]
 
-        if scale == "entropy":
-            scores, _ = self.scorer._entropy_scores_from_z(
-                z_grid, grid_points=entropy_grid_steps, entropy_method=entropy_method
+        if scale == "bit":
+            scores_to_plot, _ = self.scorer._bit_scores_from_z(
+                z=z_grid,
+                **kwargs,
             )
-            return self._item_entropy_plot(scores, item_entropies)
+        else:
+            scores_to_plot = z_grid[:, latent_variables - 1]
 
-        return self._item_entropy_plot(z_grid[:, latent_variables - 1], item_entropies)
+        return self._item_bit_score_plot(scores_to_plot, item_entropies)
 
-    def _item_entropy_plot(
+    def _item_bit_score_plot(
         self,
         latent_scores: torch.Tensor,
         entropies: torch.Tensor,

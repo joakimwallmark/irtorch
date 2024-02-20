@@ -1,0 +1,38 @@
+.. IRTorch documentation master file, created by
+   sphinx-quickstart on Mon Feb 12 17:34:38 2024.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to IRTorch's documentation!
+===================================
+
+**IRTorch** is a python package for fitting item response theory models using auto-encoders.
+The package utilizes **PyTorch** for parameter optimization and GPU support.
+
+.. note::
+
+   The package source code available at the `GitHub repository <https://github.com/joakimwallmark/irtorch>`_. This project is under active development.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Installation 💻
+
+   installation
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Examples 🚀
+
+   examples/swesat
+   examples/natmat
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference 📖
+
+   irt
+   irt_models
+
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`

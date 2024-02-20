@@ -69,8 +69,8 @@ def irt_scorer(z_scores, latent_variables):
 
 
 @pytest.mark.parametrize("one_dimensional", [True, False])
-@pytest.mark.parametrize("entropy_z_grid_method", ["NN", "ML"])
-def test_entropy_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables, entropy_z_grid_method):
+@pytest.mark.parametrize("bit_score_z_grid_method", ["NN", "ML"])
+def test_bit_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables, bit_score_z_grid_method):
     z = torch.tensor([[0.8], [2.1], [-0.7], [-0.5]]).repeat(1, latent_variables)
     z = z[1::2] * -1 # invert every other scale
     start_z = torch.full((1, latent_variables), -0.2)
@@ -85,19 +85,19 @@ def test_entropy_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables
             grid_end = torch.full((latent_variables,), 2.0)
             with patch.object(IRTScorer, '_get_grid_boundaries', return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
                 if one_dimensional:
-                    with patch.object(IRTScorer, '_compute_1d_entropy_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
-                        entropy_scores, _ = irt_scorer._entropy_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=entropy_z_grid_method)
+                    with patch.object(IRTScorer, '_compute_1d_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
+                        bit_scores, _ = irt_scorer._bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
                 else:
-                    with patch.object(IRTScorer, '_compute_multi_dimensional_entropy_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
-                        entropy_scores, _ = irt_scorer._entropy_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=entropy_z_grid_method)
+                    with patch.object(IRTScorer, '_compute_multi_dimensional_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
+                        bit_scores, _ = irt_scorer._bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
 
     # Assert the result
     if one_dimensional:
-        assert entropy_scores.shape == (4, 1)
+        assert bit_scores.shape == (4, 1)
     else:
-        assert entropy_scores.shape == (4, latent_variables)
+        assert bit_scores.shape == (4, latent_variables)
 
-    if entropy_z_grid_method == "ML":
+    if bit_score_z_grid_method == "ML":
         mock_latent_scores.assert_called_once_with(irt_scorer.algorithm.train_data, scale='z', z_estimation_method='ML', ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.3)
 
 @pytest.mark.parametrize("z_estimation_method", ["NN", "EAP"])
@@ -149,7 +149,7 @@ def test_z_grid(irt_scorer: IRTScorer, grid_size):
     unique_rows = torch.unique(grid_combinations, dim=0)
     assert unique_rows.shape[0] == grid_combinations.shape[0], "Detected repeated combinations in the grid"
 
-def test_compute_1d_entropy_scores(irt_scorer: IRTScorer, latent_variables):
+def test_compute_1d_bit_scores(irt_scorer: IRTScorer, latent_variables):
     torch.manual_seed(4)
     start_z_adjusted = torch.full((1, latent_variables), -1.5)
     grid_start = torch.tensor([[-1.2] * latent_variables])
@@ -159,7 +159,7 @@ def test_compute_1d_entropy_scores(irt_scorer: IRTScorer, latent_variables):
     inverted_scale[0, 1::2] = -1 # invert every other latent scale
     grid_points = 10
 
-    entropy_scores = irt_scorer._compute_1d_entropy_scores(
+    bit_scores = irt_scorer._compute_1d_bit_scores(
         z_adjusted,
         start_z_adjusted,
         grid_start,
@@ -168,12 +168,12 @@ def test_compute_1d_entropy_scores(irt_scorer: IRTScorer, latent_variables):
         grid_points
     )
 
-    assert entropy_scores.ndim == 2, "Entropy scores should have 2 dimensions"
-    assert entropy_scores.size(1) == 1, "Entropy scores should have size 1 in the second dimension"
-    assert entropy_scores.size(0) == 5, "Entropy scores should have size 1 in the second dimension"
-    assert torch.all(entropy_scores[(z_adjusted < start_z_adjusted).all(dim=1)] == 0), "Smaller than start should be set to start"
+    assert bit_scores.ndim == 2, "bit scores should have 2 dimensions"
+    assert bit_scores.size(1) == 1, "bit scores should have size 1 in the second dimension"
+    assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
+    assert torch.all(bit_scores[(z_adjusted < start_z_adjusted).all(dim=1)] == 0), "Smaller than start should be set to start"
 
-def test_compute_multi_dimensional_entropy_scores(irt_scorer: IRTScorer, latent_variables):
+def test_compute_multi_dimensional_bit_scores(irt_scorer: IRTScorer, latent_variables):
     torch.manual_seed(51)
     start_z_adjusted = torch.full((1, latent_variables), -1.2)
     train_z_adjusted = torch.randn(5, latent_variables)
@@ -184,7 +184,7 @@ def test_compute_multi_dimensional_entropy_scores(irt_scorer: IRTScorer, latent_
     inverted_scale[0, 1::2] = -1 # invert every other latent scale
     grid_points = 10
     
-    entropy_scores = irt_scorer._compute_multi_dimensional_entropy_scores(
+    bit_scores = irt_scorer._compute_multi_dimensional_bit_scores(
         z_adjusted,
         start_z_adjusted,
         train_z_adjusted,
@@ -194,7 +194,7 @@ def test_compute_multi_dimensional_entropy_scores(irt_scorer: IRTScorer, latent_
         grid_points
     )
 
-    assert entropy_scores.ndim == 2, "Entropy scores should have 2 dimensions"
-    assert entropy_scores.size(1) == latent_variables, "Entropy scores should have size 1 in the second dimension"
-    assert entropy_scores.size(0) == 5, "Entropy scores should have size 1 in the second dimension"
-    assert torch.all(entropy_scores[z_adjusted < start_z_adjusted] == 0), "Smaller than start should be set to start"
+    assert bit_scores.ndim == 2, "bit scores should have 2 dimensions"
+    assert bit_scores.size(1) == latent_variables, "bit scores should have size 1 in the second dimension"
+    assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
+    assert torch.all(bit_scores[z_adjusted < start_z_adjusted] == 0), "Smaller than start should be set to start"

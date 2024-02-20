@@ -1,27 +1,36 @@
+import logging
 import torch
 from torch.autograd import Function
 
-# TODO REMOVE IF NOT NEEDED (use -elu(-x) directly)
-class ConvexELU(Function):
-    @staticmethod
-    def forward(ctx, input, alpha):
-        ctx.save_for_backward(input)
-        ctx.alpha = alpha
-        return torch.where(input < 0, input, - alpha * (torch.exp(-input) - 1))
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, = ctx.saved_tensors
-        alpha = ctx.alpha
-        grad_input = grad_output.clone()
-        # We multiply the upstream gradient with the gradient of out activation function (chain rule)
-        grad_input[input >= 0] *= alpha * torch.exp(-input[input >= 0])
-        # For input < 0, the gradient is already correctly set to grad_output, so no change needed
-        return grad_input, None
+logger = logging.getLogger('irtorch')
 
 class BoundedELU(Function):
     @staticmethod
     def forward(ctx, input, alpha=1.0):
+        """
+        Applies the bounded ELU function element-wise to the input tensor.
+
+        The bounded ELU function is defined as:
+
+        .. math::
+            f(x) = \\begin{cases}
+            \\alpha (e^x - 1) & \\text{if } x \\leq 0 \\\\
+            x & \\text{if } 0 < x < 1 \\\\
+            -\\alpha (e^{-x} - 1) & \\text{if } x \\geq 1
+            \\end{cases}
+
+        Parameters
+        ----------
+        input : torch.Tensor
+            The input tensor.
+        alpha : float, optional
+            The alpha parameter. Default is 1.0.
+
+        Returns
+        -------
+        torch.Tensor
+            The output tensor.
+        """
         ctx.save_for_backward(input)
         ctx.alpha = alpha
 
@@ -37,6 +46,19 @@ class BoundedELU(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        """
+        Computes the gradient of the bounded ELU function.
+
+        Parameters
+        ----------
+        grad_output : torch.Tensor
+            The gradient of the loss with respect to the output of the bounded ELU function.
+
+        Returns
+        -------
+        torch.Tensor
+            The gradient of the loss with respect to the input of the bounded ELU function.
+        """
         input, = ctx.saved_tensors
         alpha = ctx.alpha
 

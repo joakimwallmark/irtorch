@@ -63,8 +63,8 @@ def irt_evaluator(latent_variables):
         z_scores = torch.randn(data.shape[0], latent_variables)
         return z_scores
 
-    # Mock entropy_distance method based on input
-    def entropy_scores_from_z_mock(z, **kwargs):
+    # Mock bit_score_distance method based on input
+    def bit_scores_from_z_mock(z, **kwargs):
         return torch.randn(z.shape[0], z.shape[1]).abs() * 10, torch.randn(1, z.shape[1])
 
     # Mock min_max_z_for_integration_mock
@@ -78,7 +78,7 @@ def irt_evaluator(latent_variables):
     def pdf_mock(z):
         return torch.rand(z.shape[0])
     mock_scorer.latent_scores = MagicMock(side_effect=latent_scores)
-    mock_scorer._entropy_scores_from_z = MagicMock(side_effect=entropy_scores_from_z_mock)
+    mock_scorer._bit_scores_from_z = MagicMock(side_effect=bit_scores_from_z_mock)
     mock_scorer.min_max_z_for_integration = MagicMock(
         side_effect=min_max_z_for_integration_mock
     )
@@ -157,7 +157,7 @@ def test_probabilities_from_grouped_data(irt_evaluator: IRTEvaluator):
     assert probabilities.shape == torch.Size([3, 2, 3])
     assert torch.allclose(probabilities.sum(dim=2), torch.ones_like(probabilities[:, :, 0]), atol=1e-7)
 
-@pytest.mark.parametrize("scale", ["entropy", "z"])
+@pytest.mark.parametrize("scale", ["bit", "z"])
 def test_latent_group_probabilities(irt_evaluator: IRTEvaluator, scale):
     # Create some synthetic test data
     data = torch.cat(
@@ -184,9 +184,9 @@ def test_latent_group_probabilities(irt_evaluator: IRTEvaluator, scale):
     assert torch.allclose(grouped_model_probabilities.sum(dim=2), torch.ones_like(grouped_model_probabilities[:, :, 0]), atol=1e-7)
     assert group_averages.shape == (groups,)
 
-    if scale == "entropy":
-        # check if entropy distance was called
-        irt_evaluator.scorer._entropy_scores_from_z.assert_called_once()
+    if scale == "bit":
+        # check if bit score was called
+        irt_evaluator.scorer._bit_scores_from_z.assert_called_once()
 
 def test_group_fit_residuals(irt_evaluator: IRTEvaluator):
     data = torch.cat(

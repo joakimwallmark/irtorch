@@ -1,3 +1,4 @@
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,7 +6,37 @@ from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.layers import SoftplusLinear, NegationLayer
 from irtorch.activation_functions import BoundedELU
 
+logger = logging.getLogger('irtorch')
+
 class NonparametricMonotoneNN(BaseIRTModel):
+    """
+    Nonparametric Monotone Neural Network IRT model.
+    The model is a feedforward neural network with a separate monotone nonparametric latent variable weight function for each item or item categories. 
+    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity.
+    If mc_correct is not specified, the item response categories are treated as ordered, and the latent variable effect for an item response category is the cumulative sum of the effects for the lower categories.
+
+    Parameters
+    ----------
+    latent_variables : int
+        Number of latent variables.
+    item_categories : list[int]
+        Number of categories for each item. One integer for each item. Missing responses exluded.
+    hidden_dim : list[int]
+        Number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
+    model_missing : bool, optional
+        Whether to model missing item responses as separate item response categories. (Default: False)
+    mc_correct : list[int], optional
+        The correct response category for each item. (Default: None)
+    separate : str, optional
+        Whether to fit separate latent trait weight functions for items or items categories. Can be 'items' or 'categories'. 
+        Note that 'categories' results in a more flexible model with more parameters. (Default: 'categories')
+    item_z_relationships : torch.Tensor, optional
+        A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+    negative_latent_variable_item_relationships : bool, optional
+        Whether to allow for negative latent variable item relationships. (Default: True)
+    use_bounded_activation : bool, optional
+        Whether to use bounded activation functions. (Default: True)
+    """
     def __init__(
         self,
         latent_variables: int,
@@ -18,28 +49,6 @@ class NonparametricMonotoneNN(BaseIRTModel):
         negative_latent_variable_item_relationships: bool = True,
         use_bounded_activation: bool = True
     ):
-        """
-        Parameters
-        ----------
-        latent_variables : int
-            Number of latent variables.
-        item_categories : list[int]
-            Number of categories for each item. One integer for each item. Missing responses exluded.
-        hidden_dim : list[int]
-            Number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
-        model_missing : bool, optional
-            Whether to model missing item responses as separate item response categories. (Default: False)
-        mc_correct : list[int], optional
-            The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
-        separate : str, optional
-            Whether to fit separate latent trait weight function for item or items categories. Can be 'items' or 'categories'. (Default: 'categories')
-        item_z_relationships : torch.Tensor, optional
-            A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
-        negative_latent_variable_item_relationships : bool, optional
-            Whether to allow for negative latent variable item relationships. (Default: True)
-        use_bounded_activation : bool, optional
-            Whether to use bounded activation functions. (Default: True)
-        """
         super().__init__(latent_variables, item_categories, mc_correct, model_missing)
         if item_z_relationships is not None:
             if item_z_relationships.shape != (len(item_categories), latent_variables):
@@ -199,7 +208,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
             y = torch.stack((x1, x2), dim=2).view(x.shape)
         return y
 
-    def probabilities_from_output(self, output: torch.Tensor) -> list:
+    def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
         Compute item probabilities from the output tensor.
 

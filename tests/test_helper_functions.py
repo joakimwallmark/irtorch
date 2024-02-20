@@ -248,7 +248,7 @@ def test_entropy():
     # Also test that if one probability is 0, we get correct response
     probabilities = torch.tensor([[0.5, 0.5, 0.0], [0.1, 0.8, 0.1]])
 
-    entropy_values = entropy(probabilities)
+    bit_score_values = entropy(probabilities)
     expected_values = torch.tensor(
         [
             -0.5 * np.log2(0.5) - 0.5 * np.log2(0.5),
@@ -257,7 +257,7 @@ def test_entropy():
         dtype=torch.float,
     )
 
-    assert torch.allclose(entropy_values, expected_values)
+    assert torch.allclose(bit_score_values, expected_values)
 
     with pytest.raises(RuntimeError):
         invalid_probabilities = torch.tensor(

@@ -1,3 +1,4 @@
+import logging
 import torch
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
@@ -9,6 +10,7 @@ from irtorch.helper_functions import (
     sum_incorrect_probabilities,
 )
 
+logger = logging.getLogger('irtorch')
 
 class IRTEvaluator:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm, scorer: IRTScorer):
@@ -127,13 +129,13 @@ class IRTEvaluator:
         groups: int = 10,
         latent_variable: int = 1,
         scale: str = "z",
-        entropy_start_z: torch.tensor = None,
+        bit_score_start_z: torch.tensor = None,
         population_z: torch.Tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: int = "ML",
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None,
     ):
         """
         Group the respondents based on their ordered latent variable scores.
@@ -157,17 +159,17 @@ class IRTEvaluator:
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         scale : str, optional
-            The grouping method scale, which can either be 'entropy' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'entropy' are equivalent. (default is 'z')
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
+            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
+            models, 'z' and 'bit' are equivalent. (default is 'z')
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
         population_z : torch.Tensor, optional
-            Only for entropy scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        entropy_start_z_guessing_probabilities: list[float], optional
+            Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit scores. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
 
         Returns
@@ -182,13 +184,13 @@ class IRTEvaluator:
                 z=z,
                 z_estimation_method=z_estimation_method,
                 scale=scale,
-                entropy_start_z=entropy_start_z,
+                bit_score_start_z=bit_score_start_z,
                 population_z=population_z,
-                entropy_grid_points=entropy_grid_points,
-                entropy_z_grid_method=entropy_z_grid_method,
-                entropy_start_z_guessing_probabilities=entropy_start_z_guessing_probabilities,
-                entropy_start_z_guessing_iterations=entropy_start_z_guessing_iterations,
-                entropy_items=entropy_items,
+                bit_score_grid_points=bit_score_grid_points,
+                bit_score_z_grid_method=bit_score_z_grid_method,
+                bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+                bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
+                bit_score_items=bit_score_items,
                 latent_variable=latent_variable
             )
 
@@ -368,13 +370,13 @@ class IRTEvaluator:
         groups: int = 10,
         latent_variable: int = 1,
         scale: str = "z",
-        entropy_start_z: torch.tensor = None,
+        bit_score_start_z: torch.tensor = None,
         population_z: torch.Tensor = None,
-        entropy_grid_points: int = 300,
-        entropy_z_grid_method: int = "ML",
-        entropy_start_z_guessing_probabilities: list[float] = None,
-        entropy_start_z_guessing_iterations: int = 10000,
-        entropy_items: list[int] = None
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None
     ):
         """
         Group the respondents based on their ordered latent variable scores.
@@ -393,24 +395,24 @@ class IRTEvaluator:
         groups: int
             The number of groups. (default is 10)
         scale : str, optional
-            The grouping method scale, which can either be 'entropy' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'entropy' are equivalent. (default is 'z')
+            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
+            models, 'z' and 'bit' are equivalent. (default is 'z')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
-        entropy_start_z : int, optional
-            The z score used as the starting point for entropy score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
         population_z : torch.Tensor, optional
-            Only for entropy scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        entropy_grid_points : int, optional
-            The number of points to use for computing entropy distance. More steps lead to more accurate results. (default is 300)
-        entropy_z_grid_method : str, optional
-            Method used to obtain the z score grid for entropy computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        entropy_start_z_guessing_probabilities: list[float], optional
+            Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit scores. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
             Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        entropy_start_z_guessing_iterations: int, optional
+        bit_score_start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        entropy_items: list[int], optional
-            The item indices for the items to use to compute the entropy scores. (default is 'None' and uses all items)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
 
         Returns
         -------
@@ -422,42 +424,42 @@ class IRTEvaluator:
             The third tensor contains the average latent variable values within each group along the specified latent_variable.
         """
 
-        if scale not in ["entropy", "z"]:
-            raise ValueError("Invalid scale. Choose either 'z' or 'entropy'.")
+        if scale not in ["bit", "z"]:
+            raise ValueError("Invalid scale. Choose either 'z' or 'bit'.")
 
         data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
 
-        if scale == "entropy":
+        if scale == "bit":
             if population_z is None and data is self.algorithm.train_data:
                 population_z = z
             
-            entropy_scores, _ = self.scorer._entropy_scores_from_z(
+            bit_scores, _ = self.scorer._bit_scores_from_z(
                 z=z,
                 one_dimensional=False,
-                start_z=entropy_start_z,
+                start_z=bit_score_start_z,
                 population_z=population_z,
-                z_estimation_method=entropy_z_grid_method,
-                grid_points=entropy_grid_points,
-                items=entropy_items,
-                start_z_guessing_probabilities=entropy_start_z_guessing_probabilities,
-                start_z_guessing_iterations=entropy_start_z_guessing_iterations
+                z_estimation_method=bit_score_z_grid_method,
+                grid_points=bit_score_grid_points,
+                items=bit_score_items,
+                start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+                start_z_guessing_iterations=bit_score_start_z_guessing_iterations
             )
 
             # Sort based on correct column and get the sorted indices
             _, indices = torch.sort(
-                entropy_scores[:, latent_variable - 1], dim=0
+                bit_scores[:, latent_variable - 1], dim=0
             )
             # Use the indices to sort
-            entropy_scores = entropy_scores[indices]
+            bit_scores = bit_scores[indices]
             z = z[indices]
 
-            grouped_entropy = torch.chunk(entropy_scores, groups)
+            grouped_bit = torch.chunk(bit_scores, groups)
             grouped_z = torch.chunk(z, groups)
 
             group_mid_points = torch.tensor(
                 [
                     group[:, latent_variable - 1].mean()
-                    for group in grouped_entropy
+                    for group in grouped_bit
                 ]
             )
         elif scale == "z":

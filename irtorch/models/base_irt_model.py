@@ -10,6 +10,17 @@ logger = logging.getLogger('irtorch')
 class BaseIRTModel(ABC, nn.Module):
     """
     Abstract base class for Item Response Theory models.
+    
+    Parameters
+    ----------
+    latent_variables : int
+        The number of latent variables.
+    item_categories : list[int]
+        A list of the number of categories for each item.
+    mc_correct : list[int], optional
+        A list of the correct response category for each multiple choice item. (default is None)
+    model_missing : bool, optional
+        Whether to model missing data. (default is False)
     """
 
     def __init__(
@@ -19,18 +30,6 @@ class BaseIRTModel(ABC, nn.Module):
         mc_correct: list[int] = None,
         model_missing: bool = False
     ):
-        """
-        Parameters
-        ----------
-        latent_variables : int
-            The number of latent variables.
-        item_categories : list[int]
-            A list of the number of categories for each item.
-        mc_correct : list[int], optional
-            A list of the correct response category for each multiple choice item. (default is None)
-        model_missing : bool, optional
-            Whether to model missing data. (default is False)
-        """
         super().__init__()
         if mc_correct is not None:
             if not all(item >= mc for item, mc in zip(item_categories, mc_correct)):

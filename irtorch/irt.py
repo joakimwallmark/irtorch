@@ -13,6 +13,57 @@ from irtorch.estimation_algorithms.encoders import BaseEncoder
 logger = logging.getLogger('irtorch')
 
 class IRT:
+    """
+    Main item response theory (IRT) class. 
+    Consists of an IRT model instance (inheriting BaseIRTModel) which is fitted using the specified estimation algorithm.
+
+    Parameters
+    ----------
+    model : str | BaseIRTModel, optional
+        The IRT model to use. Available models are:
+
+        - "1PL": One-parameter logistic model.
+        - "2PL": Two-parameter logistic model.
+        - "GPC": Generalized partial credit model.
+        - "nominal": Nominal response model.
+        - "MNN": Monotone neural network model.
+        - "MMCNN": Monotone multiple choice neural network model.
+        
+        Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
+        An instantiated model can also be provided.
+    estimation_algorithm : str, optional
+        The estimation algorithm to use. Available options are
+
+        - "AE" for autoencoder. This is the default.
+        - "VAE" for variational autoencoder.
+
+    latent_variables : int, optional
+        The number of latent variables to use for the model. (default is 1)
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    item_categories : list[int], optional
+        A list of integers where each integer is the number of possible responses for the corresponding item, exluding missing values. Overrides the data argument. (default is None)
+    item_z_relationships: torch.Tensor, optional
+        A tensor of shape (latent_variables, items) that defines the relationship between latent variables and item categories. If not provided, assumes relationships between all items and latent variables. (default is None)
+    model_missing : bool, optional
+        Whether missing values should be modeled as their own category. Ignored if an instantiated model is supplied. (default is False)
+    mc_correct : list[int], optional
+        List of correct answers for multiple choice questions. If provided also sets one_hot_encoded to True. (default is None)
+    nominal_reference_category : bool, optional
+        Whether to use a reference category for nominal models. If True, removes the model parameters for one response category per item. (default is False)
+
+    encoder : BaseEncoder, optional
+        The encoder to use for the AE or VAE. Overrides the one_hot_encoded, hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder arguments.
+        If not provided, creates an instance of class StandardEncoder or VariationalEncoder for AE and VAE respectively. (default is None)
+    one_hot_encoded : bool, optional
+        Whether the model fitting algorithm uses one-hot encoded data. (default is False for all models except for MMC)
+    hidden_layers_encoder : list[int], optional
+        List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
+    nonlinear_encoder : torch.nn.Module, optional
+        The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
+    batch_normalization_encoder : bool, optional
+        Whether to use batch normalization for the encoder. (default is True)
+    """
     def __init__(
         self,
         model: str | BaseIRTModel = None,
@@ -32,56 +83,6 @@ class IRT:
         batch_normalization_encoder: bool = True,
         summary_writer: SummaryWriter = None,
     ):
-        """
-        IRT class. Consists of an IRT model and a model estimation algorithm.
-
-        Parameters
-        ----------
-        model : str | BaseIRTModel, optional
-            The IRT model to use. Available models are:
-
-            - "1PL": One-parameter logistic model.
-            - "2PL": Two-parameter logistic model.
-            - "GPC": Generalized partial credit model.
-            - "nominal": Nominal response model.
-            - "MNN": Monotone neural network model.
-            - "MMCNN": Monotone multiple choice neural network model.
-            
-            Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
-            An instantiated model can also be provided.
-        estimation_algorithm : str, optional
-            The estimation algorithm to use. Available options are
-
-            - "AE" for autoencoder. This is the default.
-            - "VAE" for variational autoencoder.
-
-        latent_variables : int, optional
-            The number of latent variables to use for the model. (default is 1)
-        data: torch.Tensor, optional
-            A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
-        item_categories : list[int], optional
-            A list of integers where each integer is the number of possible responses for the corresponding item, exluding missing values. Overrides the data argument. (default is None)
-        item_z_relationships: torch.Tensor, optional
-            A tensor of shape (latent_variables, items) that defines the relationship between latent variables and item categories. If not provided, assumes relationships between all items and latent variables. (default is None)
-        model_missing : bool, optional
-            Whether missing values should be modeled as their own category. Ignored if an instantiated model is supplied. (default is False)
-        mc_correct : list[int], optional
-            List of correct answers for multiple choice questions. If provided also sets one_hot_encoded to True. (default is None)
-        nominal_reference_category : bool, optional
-            Whether to use a reference category for nominal models. If True, removes the model parameters for one response category per item. (default is False)
-
-        encoder : BaseEncoder, optional
-            The encoder to use for the AE or VAE. Overrides the one_hot_encoded, hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder arguments.
-            If not provided, creates an instance of class StandardEncoder or VariationalEncoder for AE and VAE respectively. (default is None)
-        one_hot_encoded : bool, optional
-            Whether the model fitting algorithm uses one-hot encoded data. (default is False for all models except for MMC)
-        hidden_layers_encoder : list[int], optional
-            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-        nonlinear_encoder : torch.nn.Module, optional
-            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-        batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
-        """
         if isinstance(model, BaseIRTModel):
             self.latent_variables = model.latent_variables
             self.model = model

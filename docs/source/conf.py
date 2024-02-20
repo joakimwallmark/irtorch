@@ -31,9 +31,8 @@ exclude_patterns = []
 # html_theme = 'alabaster'
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
-html_logo = 'logo.png'
+html_logo = '_static/logo.png'
 html_theme_options = {
     'logo_only': True,
     'display_version': False,
 }
-html_static_path = ['_static']

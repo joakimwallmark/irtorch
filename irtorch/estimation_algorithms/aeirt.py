@@ -8,6 +8,7 @@ from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
 from irtorch.dataset import PytorchIRTDataset
 from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
+from irtorch.utils import dynamic_print, is_jupyter
 
 logger = logging.getLogger('irtorch')
 
@@ -172,7 +173,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         self,
         max_epochs: int,
         scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
-        validation_data: torch.Tensor = None, 
+        validation_data: torch.Tensor = None,
         learning_rate_updates_before_stopping: int = 5,
     ):
         """
@@ -189,7 +190,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         best_loss = float('inf')
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
-            logger.info("-----------\nEpoch: %s\n-----------", epoch)
+            # logger.info("-----------\nEpoch: %s\n-----------", epoch)
             
             if hasattr(self, "anneal"):
                 if self.anneal:
@@ -224,7 +225,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 lr_update_count += 1
                 prev_lr = current_lr
 
-            logger.info("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
+            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
 
         # Load the best model state
         if best_model_state is not None:
@@ -268,7 +269,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # Calculate averge per batch loss and accuracy per epoch and print out what's happening
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
-        logger.info("Average training batch loss function: %.4f", loss)
+        dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {loss:.4f}")
         return loss
 
     def _impute_missing(self, batch, missing_mask):

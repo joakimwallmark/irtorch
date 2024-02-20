@@ -9,6 +9,7 @@ from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_torch import GaussianMixtureTorch
 from irtorch.helper_functions import output_to_item_entropy, random_guessing_data, linear_regression, one_hot_encode_test_data
 from irtorch.outlier_detector import OutlierDetector
+from irtorch.utils import dynamic_print, is_jupyter
 
 logger = logging.getLogger('irtorch')
 
@@ -277,9 +278,7 @@ class IRTScorer:
                     loss = loss.item()
 
                 denominator = data.numel()
-                # logger.info("%s iteration %s: Loss = %s", z_estimation_method, i+1, loss)
-                sys.stdout.write(f'\rIteration {i+1}: Current Loss = {loss}')
-                sys.stdout.flush()
+                dynamic_print(f'Iteration {i+1}: Current Loss = {loss}')
                 if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
                     logger.info("Converged at iteration %s.", i+1)
                     break

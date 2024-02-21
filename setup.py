@@ -1,17 +1,20 @@
 from setuptools import setup, find_packages
 
+with open('README.md', 'r', encoding='utf-8') as f:
+    long_description = f.read()
+
 setup(
     name="irtorch",
-    version="0.0.4",
-    description="A python package for item response theory.",
-    long_description="README.md",
+    version="0.0.7",
+    description="IRTorch: An item response theory package for python.",
+    long_description=long_description,
     long_description_content_type="text/markdown",
-    python_requires=">=3.9",
-    url="",
+    python_requires=">=3.10",
+    url="https://github.com/joakimwallmark/irtorch",
     author="Joakim Wallmark",
     author_email="wallmark.joakim@gmail.com",
     license="MIT",
-    packages=find_packages(),
+    packages=find_packages(), #  finds all packages in the directory where the setup.py file is located
     install_requires=[
         "torch",
         "factor_analyzer",

@@ -1,4 +1,4 @@
-# PyTorch model and training necessities
+# TODO remove this file
 import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter

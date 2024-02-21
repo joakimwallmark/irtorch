@@ -1,11 +1,16 @@
-<img src="https://raw.githubusercontent.com/joakimwallmark/irtorch/main/docs/source/_static/logo.png" alt="IRTorch" style="width: 50%;">
+<img src="https://raw.githubusercontent.com/joakimwallmark/irtorch/main/docs/source/_static/logo_readme.png" alt="IRTorch" style="width: 50%;">
 
 `IRTorch` is a Python package for item response theory (IRT). It utilizes [PyTorch](https://pytorch.org/) with GPU support.
 
-## Usage
-install using
+## Installation
+Install from Python Package Index (PyPI)
 ```bash
 pip install -i https://test.pypi.org/simple/ irtorch
+```
+
+Install from GitHub
+```bash
+pip install git+https://github.com/joakimwallmark/irtorch.git
 ```
 
 ## Citation

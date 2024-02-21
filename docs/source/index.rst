@@ -33,6 +33,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    irt
    irt_models
    config
+   datasets
 
 .. * :ref:`genindex`
 .. * :ref:`modindex`

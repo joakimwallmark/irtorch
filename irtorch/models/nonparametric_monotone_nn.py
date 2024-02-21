@@ -152,7 +152,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
                     )
                 )
 
-    def forward(self, z: torch.Tensor):
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
         out = torch.zeros(z.shape[0], self.separations, device=z.device)
             
         for latent_variable in range(self.latent_variables):
@@ -184,7 +184,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
         out[:, self.missing_categories] = -torch.inf
         return out
 
-    def split_activation(self, x: torch.Tensor):
+    def split_activation(self, x: torch.Tensor) -> torch.Tensor:
         """
         Runs various activation functions on every second/third item in the input tensor.
 

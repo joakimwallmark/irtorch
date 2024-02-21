@@ -15,23 +15,23 @@ from irtorch.helper_functions import output_to_item_entropy
 logger = logging.getLogger('irtorch')
 
 class IRTPlotter:
+    """
+    Initializes the IRTPlotter class with a given model, fitting algorithm, scorer and evaluator.
+
+    Parameters
+    ----------
+    model : BaseIRTModel
+        BaseIRTModel object.
+    algorithm : BaseIRTAlgorithm
+        BaseIRTAlgorithm object.
+    scorer : IRTScorer
+        IRTScorer object used to obtain latent variable scores.
+    evaluator : IRTEvaluator
+        IRTEvaluator object used to obtain evaluation measures.
+    """
     def __init__(
         self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm, scorer: IRTScorer, evaluator: IRTEvaluator
-    ) -> None:
-        """
-        Initializes the IRTPlotter class with a given model, fitting algorithm, scorer and evaluator.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            BaseIRTModel object.
-        algorithm : BaseIRTAlgorithm
-            BaseIRTAlgorithm object.
-        scorer : IRTScorer
-            IRTScorer object used to obtain latent variable scores.
-        evaluator : IRTEvaluator
-            IRTEvaluator object used to obtain evaluation measures.
-        """
+    ):
         self.model = model
         self.algorithm = algorithm
         self.scorer = scorer
@@ -40,14 +40,14 @@ class IRTPlotter:
         self.markersize = 9
         self.color_map = "tab10"
 
-    def plot_training_history(self):
+    def plot_training_history(self) -> tuple[plt.Figure, plt.Axes]:
         """
         Plots the training history of the model.
 
         Returns
         -------
-        tuple
-            A tuple with the fig and ax matplotlib subplot items.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         if all(len(val) == 0 for val in self.algorithm.training_history.values()):
             logging.error("Model has not been trained yet")
@@ -112,6 +112,175 @@ class IRTPlotter:
         return fig, axs
 
     @torch.inference_mode()
+    def plot_latent_score_distribution(
+        self,
+        scores_to_plot: torch.Tensor = None,
+        population_data: torch.Tensor = None,
+        latent_variables_to_plot: tuple[int] = (1,),
+        kernel_bandwidth = 'scott',
+        steps: int = 200,
+        **kwargs
+    ) -> tuple[plt.Figure, plt.Axes]:
+        """
+        Plots the distribution of latent scores.
+
+        Parameters
+        ----------
+        scores_to_plot : torch.Tensor, optional
+            If provided, the requested latent variable distributions are plotted directly.
+            If None, scores are computed from the population data. (default is None)
+        population_data : torch.Tensor, optional
+            The data used to compute the latent scores. If None, uses the training data. (default is None)
+        latent_variables_to_plot : tuple[int], optional
+            The latent dimensions to include in the plot. (default is (1,))
+        kernel_bandwidth : float | str, optional
+            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
+        steps : int, optional
+            The number of steps to use for computing the kernel density estimate. (default is 200)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        if len(latent_variables_to_plot) > 2:
+            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables_to_plot argument.")
+        if len(latent_variables_to_plot) > self.model.latent_variables:
+            raise ValueError(
+                f"Cannot plot {len(latent_variables_to_plot)} dimensions. "
+                f"Fitted model is a {self.model.latent_variables} dimensional model."
+            )
+        if len(latent_variables_to_plot) > self.model.latent_variables:
+            raise ValueError(
+                f"Cannot plot latent variable {latent_variables_to_plot}. "
+                f"Fitted model is a {self.model.latent_variables} dimensional model."
+            )
+
+        if scores_to_plot is None:
+            if population_data is None:
+                population_data = self.algorithm.train_data
+            else:
+                population_data = population_data.contiguous()
+
+            scores = self.scorer.latent_scores(
+                data=population_data,
+                **kwargs
+            )
+        else:
+            scores = scores_to_plot
+
+        return self._kernel_score_distribution_plot(
+            scores[:, [i - 1 for i in latent_variables_to_plot]],
+            steps,
+            kernel_bandwidth
+        )
+
+    @torch.inference_mode()
+    def plot_item_entropy(
+        self,
+        item: int,
+        scale="bit",
+        latent_variables: int = 1,
+        steps: int = 1000,
+        z_range: tuple[float, float] = (-4, 4),
+        **kwargs,
+    ) -> tuple[plt.Figure, plt.Axes]:
+        """
+        Plot the entropy of item responses against latent variables.
+
+        Parameters
+        ----------
+        item : int
+            The item to plot.
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : int, optional
+            The latent variable dimension to plot. (default is 1)
+        steps : int, optional
+            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
+        bit_score_method : str, optional
+            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
+        bit_score_grid_steps : int, optional
+            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
+        z_range : tuple[float, float], optional
+            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
+        **kwargs
+            Additional keyword arguments to pass to the bit score computation.
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        z_grid = (
+            torch.linspace(z_range[0], z_range[1], steps=steps)
+            .repeat(self.model.latent_variables, 1)
+            .T
+        )
+
+        mean_output = self.model(z_grid)
+        item_entropies = output_to_item_entropy(
+            mean_output, self.model.modeled_item_responses
+        )[:, item - 1]
+
+        if scale == "bit":
+            scores_to_plot, _ = self.scorer._bit_scores_from_z(
+                z=z_grid,
+                **kwargs,
+            )
+        else:
+            scores_to_plot = z_grid[:, latent_variables - 1]
+
+        return self._item_bit_score_plot(scores_to_plot, item_entropies)
+
+    @torch.inference_mode()
+    def plot_item_latent_variable_relationships(
+        self,
+        relationships: torch.Tensor,
+        title: str = "Relationships: Items vs. latent variables",
+        x_label: str = "Latent variables",
+        y_label: str = "Items",
+        cmap: str = "inferno",
+    ) -> tuple[plt.Figure, plt.Axes]:
+        """
+        Create a heatmap of item-latent variable relationships.
+
+        Parameters
+        ----------
+        relationships : torch.Tensor
+            A tensor of item-latent variable relationships. Typically the returned tensor from expected_item_score_slopes() where each row represents an item and each column represents a latent variable.
+        title : str, optional
+            The title for the plot. (default is "Relationships: Items vs. latent variables")
+        x_label : str, optional
+            The label for the X-axis. (default is "Latent variables")
+        y_label : str, optional
+            The label for the Y-axis. (default is "Items")
+        cmap : str, optional
+            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        relationships = relationships.numpy()
+
+        fig, ax = plt.subplots()
+        cax = ax.imshow(relationships, cmap=cmap, aspect='auto')
+        fig.colorbar(cax)  # Adds a color bar to the side
+        ax.set_xticks(range(relationships.shape[1]))
+        ax.set_xticklabels([str(i+1) for i in range(relationships.shape[1])])
+        ax.set_yticks(range(relationships.shape[0]))
+        ax.set_yticklabels([str(i+1) for i in range(relationships.shape[0])])
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_title(title)
+
+        return fig, ax
+
+    @torch.inference_mode()
     def plot_item_probabilities(
         self,
         item: int,
@@ -134,7 +303,7 @@ class IRTPlotter:
         group_z_estimation_method: str = "ML",
         plot_derivative: bool = False,
         grayscale: bool = False,
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Plots the item probability curves for a given item. Supports 2D and 3D plots.
 
@@ -183,8 +352,8 @@ class IRTPlotter:
 
         Returns
         -------
-        tuple
-            A tuple with the fig and ax matplotlib subplot items.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         # TODO: Integrate over non-plotted dimensions for multidimensional models...
         if plot_derivative:
@@ -238,7 +407,7 @@ class IRTPlotter:
                 start_z=bit_score_start_z,
                 one_dimensional=False,
                 z_estimation_method=bit_score_z_grid_method,
-                ml_map_device=ml_map_device,
+                # ml_map_device=ml_map_device,
                 grid_points=bit_score_grid_points,
                 items=bit_score_items,
                 start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
@@ -273,7 +442,7 @@ class IRTPlotter:
             else:
                 group_probs_data = group_probs_model = latent_group_means = None
 
-            return self.item_probabilities_plot(
+            return self._item_probabilities_plot(
                 scores_to_plot[:, latent_indices[0]],
                 prob_matrix,
                 latent_group_means,
@@ -284,7 +453,7 @@ class IRTPlotter:
             )
         
         if len(latent_variables) == 2:
-            return self.item_probabilities_3dplot(
+            return self._item_probabilities_3dplot(
                 scores_to_plot[:, latent_indices[0]],
                 scores_to_plot[:, latent_indices[1]],
                 prob_matrix,
@@ -294,7 +463,7 @@ class IRTPlotter:
                 grayscale=grayscale,
             )
 
-    def item_probabilities_plot(
+    def _item_probabilities_plot(
         self,
         latent_scores: torch.Tensor,
         prob_matrix: torch.Tensor,
@@ -305,7 +474,7 @@ class IRTPlotter:
         y_label: str = "Probability",
         title: str = "IRF",
         grayscale: bool = False,
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Creates a plot of item probabilities against latent variable.
 
@@ -332,10 +501,8 @@ class IRTPlotter:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         min_indices = (latent_scores == latent_scores.min()).nonzero().flatten()
         if min_indices[-1] == len(latent_scores) - 1:  # if we have reversed z scale
@@ -444,7 +611,7 @@ class IRTPlotter:
 
         return fig, ax
 
-    def item_probabilities_3dplot(
+    def _item_probabilities_3dplot(
         self,
         latent_variable_x: torch.Tensor,
         latent_variable_y: torch.Tensor,
@@ -454,7 +621,7 @@ class IRTPlotter:
         z_label: str = "Probability",
         title: str = "IRF",
         grayscale: bool = False,
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Creates a 3D plot of item probabilities against two latent variables.
 
@@ -479,10 +646,8 @@ class IRTPlotter:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         latent_variable_x = latent_variable_x.cpu().numpy()
         latent_variable_y = latent_variable_y.cpu().numpy()
@@ -528,103 +693,12 @@ class IRTPlotter:
 
         return fig, ax
 
-    @torch.inference_mode()
-    def plot_latent_score_distribution(
-        self,
-        scores_to_plot: torch.Tensor = None,
-        scale: str = "bit",
-        population_data: torch.Tensor = None,
-        latent_variables_to_plot: tuple[int] = (1,),
-        steps: int = 200,
-        z_estimation_method: str = "NN",
-        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
-        bit_score_grid_steps: int = 300,
-        kernel_bandwidth = 'scott',
-    ):
-        """
-        Plots the distribution of latent scores.
-
-        Parameters
-        ----------
-        scores_to_plot : torch.Tensor, optional
-            If provided, the requested latent variable distributions are plotted directly. If None, scores are computed from the population data. (default is None)
-        scale : str, optional
-            The scale to use for the plot. Can be 'bit' or 'z'. (default is 'bit')
-        population_data : torch.Tensor, optional
-            The data used to compute the latent scores. If None, uses the training data. (default is None)
-        latent_variables_to_plot : tuple[int], optional
-            The latent dimensions to include in the plot. (default is (1,))
-        steps : int, optional
-            The number of steps to use for computing the kernel density estimate. (default is 200)
-        z_estimation_method : str, optional
-            The method used for computing z-scores. Only used if z_scores is None. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'NN')
-        ml_map_device: str, optional
-            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
-        lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
-        bit_score_grid_steps : int, optional
-            The number of steps to use when computing bit scores. Only used if scale is 'bit'. (default is 300)
-        kernel_bandwidth : float or str, optional
-            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
-        """
-        if len(latent_variables_to_plot) > 2:
-            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset")
-        if len(latent_variables_to_plot) > self.model.latent_variables:
-            raise ValueError(
-                f"Cannot plot {len(latent_variables_to_plot)} dimensions. Fitted model is a {self.model.latent_variables} dimensional model."
-            )
-        if len(latent_variables_to_plot) > self.model.latent_variables:
-            raise ValueError(
-                f"Cannot plot latent variable {latent_variables_to_plot}. Fitted model is a {self.model.latent_variables} dimensional model."
-            )
-
-        if scores_to_plot is None:
-            if population_data is None:
-                population_data = self.algorithm.train_data
-            else:
-                population_data = population_data.contiguous()
-
-            if scale == "z":
-                scores = self.scorer.latent_scores(
-                    data=population_data,
-                    scale=scale,
-                    z_estimation_method=z_estimation_method,
-                    ml_map_device=ml_map_device,
-                    lbfgs_learning_rate=lbfgs_learning_rate
-                )
-            elif scale == "bit":
-                scores = self.scorer.latent_scores(
-                    data=population_data,
-                    scale=scale,
-                    z_estimation_method=z_estimation_method,
-                    ml_map_device=ml_map_device,
-                    lbfgs_learning_rate=lbfgs_learning_rate,
-                    bit_score_grid_points=bit_score_grid_steps,
-                    bit_score_one_dimensional=False
-                )
-        else:
-            scores = scores_to_plot
-
-        return self.kernel_score_distribution_plot(
-            scores[:, [i - 1 for i in latent_variables_to_plot]],
-            steps,
-            kernel_bandwidth,
-        )
-
-    def kernel_score_distribution_plot(
+    def _kernel_score_distribution_plot(
         self,
         latent_scores: torch.Tensor,
         steps: int = 200,
         kernel_bandwidth = 'scott',
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Plots the kernel density estimate of latent scores.
 
@@ -639,10 +713,8 @@ class IRTPlotter:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         kernel_density = KernelDensity(
             kernel="gaussian", bandwidth=kernel_bandwidth
@@ -699,72 +771,12 @@ class IRTPlotter:
             ax.set_title("Latent variable density plot")
         return fig, ax
 
-    @torch.inference_mode()
-    def plot_item_entropy(
-        self,
-        item: int,
-        scale="bit",
-        latent_variables: int = 1,
-        steps: int = 1000,
-        z_range: tuple[float, float] = (-4, 4),
-        **kwargs,
-    ):
-        """
-        Plot the entropy of item responses against latent variables.
-
-        Parameters
-        ----------
-        item : int
-            The item to plot.
-        scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
-        latent_variables : int, optional
-            The latent variable dimension to plot. (default is 1)
-        steps : int, optional
-            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
-        bit_score_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
-        bit_score_grid_steps : int, optional
-            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
-        z_range : tuple[float, float], optional
-            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
-        **kwargs
-            Additional keyword arguments to pass to the bit score computation.
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
-        """
-        z_grid = (
-            torch.linspace(z_range[0], z_range[1], steps=steps)
-            .repeat(self.model.latent_variables, 1)
-            .T
-        )
-
-        mean_output = self.model(z_grid)
-        item_entropies = output_to_item_entropy(
-            mean_output, self.model.modeled_item_responses
-        )[:, item - 1]
-
-        if scale == "bit":
-            scores_to_plot, _ = self.scorer._bit_scores_from_z(
-                z=z_grid,
-                **kwargs,
-            )
-        else:
-            scores_to_plot = z_grid[:, latent_variables - 1]
-
-        return self._item_bit_score_plot(scores_to_plot, item_entropies)
-
     def _item_bit_score_plot(
         self,
         latent_scores: torch.Tensor,
         entropies: torch.Tensor,
         x_label: str = "Latent variable",
-    ):
+    ) -> tuple[plt.Figure, plt.Axes]:
         """
         Creates a plot of item entropies against latent scores.
 
@@ -779,10 +791,8 @@ class IRTPlotter:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         entropies = entropies.cpu().numpy()
         latent_scores = latent_scores.cpu().numpy()
@@ -798,50 +808,4 @@ class IRTPlotter:
         ax.set_ylabel("Entropy")
         ax.set_title("Item entropy")
         ax.legend()
-        return fig, ax
-
-    def plot_item_latent_variable_relationships(
-        self,
-        relationships: torch.Tensor,
-        title: str = "Relationships: Items vs. latent variables",
-        x_label: str = "Latent variables",
-        y_label: str = "Items",
-        cmap: str = "inferno",
-    ):
-        """
-        Creates a plot of item entropies against latent scores.
-
-        Parameters
-        ----------
-        relationships : torch.Tensor
-            A tensor of item-latent variable relationships. Typically the returned tensor from expected_item_score_slopes() where each row represents an item and each column represents a latent variable.
-        title : str, optional
-            The title for the plot. (default is "Relationships: Items vs. latent variables")
-        x_label : str, optional
-            The label for the X-axis. (default is "Latent variables")
-        y_label : str, optional
-            The label for the Y-axis. (default is "Items")
-        cmap : str, optional
-            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
-
-        Returns
-        -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
-        """
-        relationships = relationships.numpy()
-
-        fig, ax = plt.subplots()
-        cax = ax.imshow(relationships, cmap=cmap, aspect='auto')
-        fig.colorbar(cax)  # Adds a color bar to the side
-        ax.set_xticks(range(relationships.shape[1]))
-        ax.set_xticklabels([str(i+1) for i in range(relationships.shape[1])])
-        ax.set_yticks(range(relationships.shape[0]))
-        ax.set_yticklabels([str(i+1) for i in range(relationships.shape[0])])
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-
         return fig, ax

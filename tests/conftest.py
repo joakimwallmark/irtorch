@@ -3,8 +3,8 @@ import random
 import pytest
 import torch
 import numpy as np
-from irtorch.dataset import PytorchIRTDataset
 from irtorch.irt import IRT
+from irtorch.utils import PytorchIRTDataset
 from irtorch.helper_functions import get_item_categories
 
 @pytest.fixture(

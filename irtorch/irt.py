@@ -9,6 +9,8 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.estimation_algorithms.encoders import BaseEncoder
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 logger = logging.getLogger('irtorch')
 
@@ -147,7 +149,7 @@ class IRT:
         self,
         train_data: torch.Tensor,
         **kwargs
-    ):
+    ) -> None:
         """
         Train the autoencoder model.
 
@@ -181,7 +183,7 @@ class IRT:
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None
-    ):
+    ) -> torch.Tensor:
         """
         Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
         ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
@@ -242,57 +244,57 @@ class IRT:
             bit_score_items,
         )
 
+    def plot_training_history(self) -> tuple[Figure, Axes]:
+        """
+        Plots the training history of the model.
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        return self.plotter.plot_training_history()
+
     def plot_latent_score_distribution(
         self,
         scores_to_plot: torch.Tensor = None,
-        scale: str = "bit",
         population_data: torch.Tensor = None,
         latent_variables_to_plot: tuple[int] = (1,),
-        steps: int = 200,
-        z_estimation_method: str = "NN",
-        bit_score_grid_steps: int = 300,
         kernel_bandwidth = 'scott',
-    ):
+        steps: int = 200,
+        **kwargs
+    ) -> tuple[Figure, Axes]:
         """
         Plots the distribution of latent scores.
 
         Parameters
         ----------
         scores_to_plot : torch.Tensor, optional
-            If provided, plotted directly. If None, scores are computed from the population data. (default is None)
-        scale : str, optional
-            The scale to use for the plot. Can be 'bit' or 'z'. (default is 'bit')
+            If provided, the requested latent variable distributions are plotted directly.
+            If None, scores are computed from the population data. (default is None)
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
+        kernel_bandwidth : float | str, optional
+            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
         steps : int, optional
             The number of steps to use for computing the kernel density estimate. (default is 200)
-        z_scores : torch.Tensor, optional
-            If provided, these scores are used directly for the plot. If None, scores are computed from the population data. (default is None)
-        z_estimation_method : str, optional
-            The method used for computing z-scores. Only used if z_scores is None. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'NN')
-        bit_score_grid_steps : int, optional
-            The number of steps to use when computing bit scores. Only used if scale is 'bit'. (default is 300)
-        kernel_bandwidth : float or str, optional
-            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         return self.plotter.plot_latent_score_distribution(
             scores_to_plot=scores_to_plot,
-            scale=scale,
             population_data=population_data,
             latent_variables_to_plot=latent_variables_to_plot,
-            steps=steps,
-            z_estimation_method=z_estimation_method,
-            bit_score_grid_steps=bit_score_grid_steps,
             kernel_bandwidth=kernel_bandwidth,
+            steps=steps,
+            **kwargs
         )
 
     @torch.inference_mode()
@@ -318,7 +320,7 @@ class IRT:
         group_z_estimation_method: str = "ML",
         plot_derivative: bool = False,
         grayscale: bool = False,
-    ):
+    ) -> tuple[Figure, Axes]:
         """
         Plots the item probability curves for a given item. Supports 2D and 3D plots.
 
@@ -367,8 +369,8 @@ class IRT:
 
         Returns
         -------
-        tuple
-            A tuple with the fig and ax matplotlib subplot items.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         return self.plotter.plot_item_probabilities(
             item=item,
@@ -401,7 +403,7 @@ class IRT:
         steps: int = 1000,
         z_range: tuple[float, float] = (-4, 4),
         **kwargs,
-    ):
+    ) -> tuple[Figure, Axes]:
         """
         Plot the entropy of item responses against latent variables.
 
@@ -426,10 +428,8 @@ class IRT:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         return self.plotter.plot_item_entropy(
             item=item,
@@ -440,17 +440,6 @@ class IRT:
             **kwargs,
         )
 
-    def plot_training_history(self):
-        """
-        Plots the training history of the model.
-
-        Returns
-        -------
-        tuple
-            A tuple with the fig and ax matplotlib subplot items.
-        """
-        return self.plotter.plot_training_history()
-
     def plot_item_latent_variable_relationships(
         self,
         relationships: torch.Tensor,
@@ -458,9 +447,9 @@ class IRT:
         x_label: str = "Latent variables",
         y_label: str = "Items",
         cmap: str = "inferno",
-    ):
+    ) -> tuple[Figure, Axes]:
         """
-        Creates a plot of item entropies against latent scores.
+        Create a heatmap of item-latent variable relationships.
 
         Parameters
         ----------
@@ -477,10 +466,8 @@ class IRT:
 
         Returns
         -------
-        fig : matplotlib.figure.Figure
-            The matplotlib figure object for the plot.
-        ax : matplotlib.axes.Axes
-            The matplotlib axes object for the plot.
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
         """
         return self.plotter.plot_item_latent_variable_relationships(
             relationships, title, x_label, y_label, cmap
@@ -492,7 +479,7 @@ class IRT:
         population_data: torch.Tensor = None,
         trapezoidal_segments: int = 1000,
         sample_size: int = 100000,
-    ):
+    ) -> torch.Tensor:
         """
         Computes the marginal probabilities for each sum score, averged over the latent space density. For 'qmvn' and 'gmm' densities, the trapezoidal rule is used for integral approximation.
 
@@ -522,7 +509,7 @@ class IRT:
             latent_density_method, population_data, trapezoidal_segments, sample_size
         )
 
-    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True):
+    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
         Computes the model expected item scores/sum scores for each respondent.
 
@@ -574,7 +561,7 @@ class IRT:
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         level: str = "all",
-    ):
+    ) -> torch.Tensor:
         """
         Calculate the prediction accuracy of the model for the supplied data.
 
@@ -602,7 +589,7 @@ class IRT:
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         average_per: str = "none",
-    ):
+    ) -> torch.Tensor:
         """
         Calculate the residuals of the model for the supplied data.
 
@@ -631,7 +618,7 @@ class IRT:
         z_estimation_method: str = "ML",
         reduction: str = "sum",
         level: str = "all",
-    ):
+    ) -> torch.Tensor:
         """
         Calculate the log-likelihood for the provided data.
 
@@ -765,7 +752,7 @@ class IRT:
             bit_score_items = bit_score_items,
         )
 
-    def save_model(self, path: str):
+    def save_model(self, path: str) -> None:
         """
         Save the fitted model.
 
@@ -788,7 +775,7 @@ class IRT:
             to_save["encoder_state_dict"] = self.algorithm.encoder.state_dict()
         torch.save(to_save, path)
 
-    def load_model(self, path: str):
+    def load_model(self, path: str) -> None:
         """
         Loads the model from a file. The initialized model should have the same structure and hyperparameter settings as the fitted model that is being loaded (e.g., the same number of latent variables).
 

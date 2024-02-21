@@ -103,13 +103,13 @@ class Parametric(BaseIRTModel):
         self.register_buffer("first_category", first_category.bool())
         self.reset_parameters()
 
-    def reset_parameters(self):
+    def reset_parameters(self) -> None:
         nn.init.normal_(self.weight_param, mean=1., std=0.01)
         nn.init.zeros_(self.bias_param)
         if self.model == "3PL":
             self.guessing_param.data.fill_(0.25)
     
-    def forward(self, z: torch.Tensor):
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
 
@@ -153,7 +153,7 @@ class Parametric(BaseIRTModel):
         data: torch.Tensor,
         output: torch.Tensor,
         loss_reduction: str = "sum",
-    ):
+    ) -> torch.Tensor:
         """
         Compute the log likelihood of the data given the model. This is equivalent to the negative cross entropy loss.
 

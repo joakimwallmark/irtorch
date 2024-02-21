@@ -22,7 +22,6 @@ class BaseIRTModel(ABC, nn.Module):
     model_missing : bool, optional
         Whether to model missing data. (default is False)
     """
-
     def __init__(
         self,
         latent_variables: int,
@@ -44,7 +43,7 @@ class BaseIRTModel(ABC, nn.Module):
 
 
     @abstractmethod
-    def forward(self, z):
+    def forward(self, z) -> torch.Tensor:
         """
         Forward pass of the model.
 
@@ -60,7 +59,7 @@ class BaseIRTModel(ABC, nn.Module):
         """
 
     @abstractmethod
-    def probabilities_from_output(self, output: torch.Tensor):
+    def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
         Compute probabilities from the output tensor.
 
@@ -98,7 +97,7 @@ class BaseIRTModel(ABC, nn.Module):
         data: torch.Tensor,
         output: torch.Tensor,
         loss_reduction: str = "sum",
-    ):
+    ) -> torch.Tensor:
         """
         Compute the log likelihood of the data given the model. This is equivalent to the negative cross entropy loss.
 
@@ -121,7 +120,7 @@ class BaseIRTModel(ABC, nn.Module):
         reshaped_output = output.reshape(-1, self.max_item_responses)
         return -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
 
-    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True):
+    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
         Computes the model expected item scores/sum scores for each respondent.
 
@@ -158,7 +157,7 @@ class BaseIRTModel(ABC, nn.Module):
         z: torch.Tensor,
         bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
-    ):
+    ) -> torch.Tensor:
         """
         Computes the slope of the expected item scores, averaged over the sample in z. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median z scores for the other latent variables.
 
@@ -218,7 +217,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         return mean_slopes
 
-    def item_z_relationship_directions(self, z: torch.Tensor):
+    def item_z_relationship_directions(self, z: torch.Tensor) -> torch.Tensor:
         """
         Get the relationships between each item and latent variable for a fitted model.
 
@@ -241,7 +240,7 @@ class BaseIRTModel(ABC, nn.Module):
         return item_z_mask.int()
 
     @torch.inference_mode()
-    def sample_test_data(self, z: torch.Tensor):
+    def sample_test_data(self, z: torch.Tensor) -> torch.Tensor:
         """
         Sample test data given latent z scores.
 
@@ -265,7 +264,7 @@ class BaseIRTModel(ABC, nn.Module):
         return test_data
     
     @torch.inference_mode(False)
-    def probability_gradients(self, z: torch.Tensor):
+    def probability_gradients(self, z: torch.Tensor) -> torch.Tensor:
         """
         Calculate the gradients of the item response probabilities with respect to the z scores.
 
@@ -286,7 +285,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         return gradients
     
-    def information(self, z: torch.Tensor, item: bool = True):
+    def information(self, z: torch.Tensor, item: bool = True) -> torch.Tensor:
         """
         Calculate the Fisher information for the z scores (matrix for multidimensional z). If 'item' is True, the item information is computed. Otherwise, the test information is computed.
 

@@ -12,7 +12,7 @@ class BaseIRTAlgorithm(ABC):
         one_hot_encoded: bool = False,
     ):
         """
-        Initialize the autoencoder IRT neural network.
+        Initialize the IRT fitting algorithm.
 
         Parameters
         ----------
@@ -47,9 +47,25 @@ class BaseIRTAlgorithm(ABC):
         else:
             self.train_data = train_data.contiguous()
 
+    @abstractmethod
     def _impute_missing_with_prior(self, batch, missing_mask):
+        """
+        Impute missing values with the prior.
+
+        Parameters
+        ----------
+        batch : torch.Tensor
+            The batch of data.
+        missing_mask : torch.Tensor
+            The mask of missing values.
+
+        Returns
+        -------
+        torch.Tensor
+            The imputed data.
+        """
         raise NotImplementedError(
-            "There is no prior for non-variational autoencoder models"
+            "Prior imputation not implemented for this algorithm."
         )
 
     def fix_missing_values(self, data: torch.Tensor):

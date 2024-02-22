@@ -141,3 +141,7 @@ dmypy.json
 .conda/
 
 data.csv
+
+irtorch/datasets/swedish_sat
+irtorch/datasets/national_mathematics
+runs/

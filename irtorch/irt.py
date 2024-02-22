@@ -640,6 +640,7 @@ class IRT:
         self,
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
+        scale: str = "bit",
         latent_variables_to_plot: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
@@ -659,6 +660,8 @@ class IRT:
             If None, scores are computed from the population data or the model training data. (default is None)
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
                 title : str, optional
@@ -674,7 +677,7 @@ class IRT:
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
+            Additional keyword arguments to be passed to the latent_scores method if scores_to_plot is not provided.
 
         Returns
         -------
@@ -684,6 +687,7 @@ class IRT:
         return self.plotter.plot_latent_score_distribution(
             scores_to_plot=scores_to_plot,
             population_data=population_data,
+            scale=scale,
             latent_variables_to_plot=latent_variables_to_plot,
             title=title,
             x_label=x_label,

@@ -120,6 +120,7 @@ class IRTPlotter:
         self,
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
+        scale: str = "bit",
         latent_variables_to_plot: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
@@ -139,6 +140,8 @@ class IRTPlotter:
             If None, scores are computed from the population data or the model training data. (default is None)
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
                 title : str, optional
@@ -154,7 +157,7 @@ class IRTPlotter:
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
+            Additional keyword arguments to be passed to the latent_scores method if scores_to_plot is not provided.
 
         Returns
         -------
@@ -182,6 +185,7 @@ class IRTPlotter:
 
             scores = self.scorer.latent_scores(
                 data=population_data,
+                scale=scale,
                 **kwargs
             )
         else:
@@ -413,7 +417,7 @@ class IRTPlotter:
             z_grid[:, mask] = fixed_zs
         else:
             latent_z_2 = torch.linspace(second_z_range[0], second_z_range[1], steps=steps)
-            latent_z_1, latent_z_2 = torch.meshgrid(latent_z_1, latent_z_2)
+            latent_z_1, latent_z_2 = torch.meshgrid(latent_z_1, latent_z_2, indexing="ij")
             z_grid = torch.zeros(latent_z_1.numel(), model_dim)
             z_grid[:, latent_indices[0]] = latent_z_1.flatten()
             z_grid[:, latent_indices[1]] = latent_z_2.flatten()
@@ -482,6 +486,181 @@ class IRTPlotter:
                 title=f"IRF - Item {item}",
                 grayscale=grayscale,
             )
+
+    def plot_information(
+        self,
+        items: list[int] = None,
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        degrees: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = 150,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the information function for the model.
+        Supports both item and test information.
+
+        Parameters
+        ----------
+        items : list[int], optional
+            The items to plot. If None, the full test information is plotted. (default is None)
+        degrees : list[int], optional
+            A list of angles in degrees between 0 and 90. One degree for each latent variable.
+            Only applicable when the model is multidimensional.
+            If provided, the information will be computed in the direction of the angles. 
+            If not provided, the information matrices are returned. (default is None)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        """
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if z_range is not None and len(z_range) != 2:
+            raise TypeError("z_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
+            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if degrees is None and model_dim > 1:
+            raise ValueError("Degrees must be provided for multidimensional models.")
+
+        latent_indices = [z - 1 for z in latent_variables]
+
+        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+
+        if items is not None:
+            item_mask = torch.zeros(self.model.items, dtype=bool)
+            item_mask[[item - 1 for item in items]] = 1
+            information = self.model.information(z_grid, item=True, degrees=degrees)[:, item_mask].sum(dim=1)
+        else:
+            information = self.model.information(z_grid, item=False, degrees=degrees)
+
+        if scale == "bit":
+            scores_to_plot = self.scorer.bit_scores_from_z(
+                z=z_grid,
+                **kwargs
+            )[0][:, latent_indices]
+        else:
+            scores_to_plot = z_grid
+
+        if len(latent_variables) == 1:
+            scores_to_plot.squeeze_()
+            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+                start_idx = min_indices[0].item()  # get the first index
+                scores_to_plot = scores_to_plot[:start_idx]
+                information = information[:start_idx]
+            else:
+                start_idx = min_indices[-1].item()  # get the last index
+                scores_to_plot = scores_to_plot[start_idx:]
+                information = information[start_idx:]
+                
+            return self._2d_line_plot(
+                x = scores_to_plot,
+                y = information,
+                title = title or "Information",
+                x_label = x_label or "Latent variable",
+                y_label = y_label or "Information",
+                color = color or None
+            )
+        if len(latent_variables) == 2:
+            grid_size = int(np.sqrt(information.size()))
+            return self._3d_surface_plot(
+                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
+                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
+                z = information.reshape((grid_size, grid_size)),
+                title = title or "Information",
+                x_label = x_label or "Latent variable 1",
+                y_label = y_label or "Latent variable 2",
+                z_label = "Information",
+                colorscale = colorscale
+            )
+
+    def _get_z_grid_for_plotting(self, latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices):
+        mask = torch.ones(self.model.latent_variables, dtype=bool)
+        mask[latent_indices] = 0
+        if fixed_zs is None:
+            fixed_zs = self.algorithm.training_z_scores[:, mask].median(dim=0).values
+        
+        if z_range is None:
+            z_range = (
+                self.algorithm.training_z_scores[:, latent_variables[0] - 1].min().item(),
+                self.algorithm.training_z_scores[:, latent_variables[0] - 1].max().item()
+            )
+        if second_z_range is None and len(latent_indices) > 1:
+            second_z_range = (
+                self.algorithm.training_z_scores[:, latent_variables[1] - 1].min().item(),
+                self.algorithm.training_z_scores[:, latent_variables[1] - 1].max().item()
+            )
+
+        latent_z_1 = torch.linspace(z_range[0], z_range[1], steps=steps)
+        if len(latent_indices) == 1:
+            z_grid = latent_z_1.unsqueeze(1).repeat(1, self.model.latent_variables)
+            z_grid[:, mask] = fixed_zs
+        else:
+            latent_z_2 = torch.linspace(second_z_range[0], second_z_range[1], steps=steps)
+            latent_z_1, latent_z_2 = torch.meshgrid(latent_z_1, latent_z_2, indexing="ij")
+            z_grid = torch.zeros(latent_z_1.numel(), self.model.latent_variables)
+            z_grid[:, latent_indices[0]] = latent_z_1.flatten()
+            z_grid[:, latent_indices[1]] = latent_z_2.flatten()
+            z_grid[:, mask] = fixed_zs
+        
+        return z_grid
+
+    def _2d_line_plot(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        title: str,
+        x_label: str,
+        y_label: str,
+        color: str
+    ) -> go.Figure:
+        df = pd.DataFrame({
+            'x': x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
+            'y': y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
+        })
+        fig = px.line(df, x='x', y='y', title=title, color_discrete_sequence=[color])
+        fig.update_layout(xaxis_title=x_label, yaxis_title=y_label)
+        return fig
+
+    def _3d_surface_plot(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        z: torch.Tensor,
+        title: str,
+        x_label: str,
+        y_label: str,
+        z_label: str,
+        colorscale: str
+    ) -> go.Figure:
+        x = x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy()
+        y = y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
+        z = z.cpu().detach().numpy() if z.is_cuda else z.detach().numpy()
+        fig = go.Figure(data=[
+            go.Surface(z=z, x=x, y=y, colorscale=colorscale)
+        ])
+        fig.update_layout(
+            title=title,
+            scene = {
+                "xaxis": {"title": x_label},
+                "yaxis": {"title": y_label},
+                "zaxis": {"title": z_label}
+            }
+        )
+
+        return fig
 
     def _item_probabilities_plot(
         self,
@@ -766,7 +945,14 @@ class IRTPlotter:
                 y_label = "Latent variable 2"
             return self._two_latent_variables_distribution_plot(latent_scores, title, x_label, y_label, contour_colorscale, contour_plot_bins)
 
-    def _single_latent_variable_distribution_plot(self, scores, title, x_label, y_label, color) -> go.Figure:
+    def _single_latent_variable_distribution_plot(
+        self,
+        scores: np.ndarray,
+        title: str,
+        x_label: str,
+        y_label: str,
+        color: str
+    ) -> go.Figure:
         df = pd.DataFrame(scores, columns=['values'])
         histogram_kwargs = {
             'x': "values",
@@ -778,7 +964,15 @@ class IRTPlotter:
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
         return fig
 
-    def _two_latent_variables_distribution_plot(self, scores, title, x_label, y_label, contour_colorscale, contour_plot_bins) -> go.Figure:
+    def _two_latent_variables_distribution_plot(
+        self, 
+        scores: np.ndarray,
+        title: str,
+        x_label: str,
+        y_label: str,
+        contour_colorscale: str,
+        contour_plot_bins: int
+    ) -> go.Figure:
         if contour_plot_bins is None:
             contour_plot_bins = int(np.log2(scores.shape[0])) + 1 # Sturges’ Rule
         histogram2d, x_edges, y_edges = np.histogram2d(scores[:, 0], scores[:, 1], bins=contour_plot_bins, density=True)

@@ -279,15 +279,16 @@ class BaseIRTModel(ABC, nn.Module):
             A torch tensor with the gradients for each z score. Dimensions are (z rows, items, item categories, latent variables).
         """
         z = z.clone().requires_grad_(True)
+        logger.info("Computing Jacobian for all items and item categories...")
         # Jacobian for each row in z
         gradients = [torch.autograd.functional.jacobian(self.item_probabilities, z[i].view(1, -1)).squeeze((0, 3)) for i in range(z.shape[0])]
         gradients = torch.stack(gradients)
 
         return gradients
     
-    def information(self, z: torch.Tensor, item: bool = True) -> torch.Tensor:
+    def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """
-        Calculate the Fisher information for the z scores (matrix for multidimensional z). If 'item' is True, the item information is computed. Otherwise, the test information is computed.
+        Calculate the Fisher information for the z scores. If 'item' is True, the item information is computed. Otherwise, the test information is computed.
 
         Parameters
         ----------
@@ -295,24 +296,39 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
         item : bool, optional
             Whether to compute the information. If False, the test information is computed. (default is True)
-
+        degrees : list[int], optional
+            A list of angles in degrees between 0 and 90. One degree for each latent variable.
+            Only applicable when the model is multidimensional.
+            If provided, the information will be computed in the direction of the angles. 
+            If not provided, the information matrices are returned. (default is None)
+            
         Returns
         -------
         torch.Tensor
-            A torch tensor with the information for each z score. Dimensions are (z, 1) if item is False and (z, items) if item is True.
+            A torch tensor with the information for each z score. The last two dimensions are the information matrices for each item or for the test as a whole.
+
+            - For test information, dimensions are (z, lv, lv) where lv is the number of latent variables in the model.
+            - For item information, dimensions are (z, items, lv, lv) where lv is the number of latent variables in the model.
         """
+        if degrees is not None and len(degrees) != self.latent_variables:
+            raise ValueError("There must be one degree for each latent variable.")
+        
         probabilities = self.item_probabilities(z.clone())
         gradients = self.probability_gradients(z)
-
-        squared_grad_matrices = torch.zeros(gradients.shape[0], gradients.shape[1], gradients.shape[2], gradients.shape[3], gradients.shape[3])
-        for i in range(gradients.shape[0]):
-            for j in range(gradients.shape[1]):
-                for k in range(gradients.shape[2]):
-                    squared_grad_matrices[i, j, k] = torch.outer(gradients[i, j, k], gradients[i, j, k])
-
+        # squared gradient matrices for each latent variable
+        # Uses einstein summation with batch permutation ...
+        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
         information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
+        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
+
+        if degrees is not None:
+            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
+            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
+            information = torch.einsum('i,...ij,j->...', [cos_degrees, information_matrices, cos_degrees])
+        else:
+            information = information_matrices
 
         if item:
-            return information_matrices.nansum(dim=2)
+            return information
         else:
-            return information_matrices.nansum(dim=(1, 2))
+            return information.nansum(dim=1) # sum over items

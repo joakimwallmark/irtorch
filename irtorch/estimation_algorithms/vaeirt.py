@@ -134,7 +134,7 @@ class VAEIRT(AEIRT):
             imputation_method=imputation_method,
         )
 
-    def forward(self, data):
+    def forward(self, data) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Samples self.iw_samples logit outputs for each respondent in the input.
 
@@ -145,7 +145,7 @@ class VAEIRT(AEIRT):
 
         Returns
         -------
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
             Four 2D tensors with rows corresponding respondent samples.
             -   Output logits tensor
             -   z samples tensor

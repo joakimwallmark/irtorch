@@ -201,13 +201,13 @@ class Parametric(BaseIRTModel):
         reshaped_output = output.reshape(-1, self.max_item_responses)
         return F.softmax(reshaped_output, dim=1).reshape(output.shape[0], self.items, self.max_item_responses)
 
-    def item_parameters(self) -> torch.Tensor:
+    def item_parameters(self) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get the item parameters for a fitted model.
 
         Returns
         -------
-        torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
             A tuple of 2D tensor with the item parameters. Items are rows and parameters are columns. Weights are in the first tensor, ordered by latent variable. The second tensor holds the biases, ordered by item category.
         """
         biases = torch.zeros(self.output_size)

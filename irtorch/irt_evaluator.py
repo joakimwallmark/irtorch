@@ -136,7 +136,7 @@ class IRTEvaluator:
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate the residuals between the model estimated and observed data within each group.
@@ -174,7 +174,7 @@ class IRTEvaluator:
 
         Returns
         -------
-        torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
             A tuple with torch tensors. The first one holds the residuals for each group and has dimensions (groups, items, item categories). The second one is a 1D tensor and holds the mid points of the groups.
         """
         grouped_data_probabilties, grouped_model_probabilties, group_mid_points = \
@@ -377,7 +377,7 @@ class IRTEvaluator:
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate both the observed and IRT model probabilities for each possible item response, within each group.
@@ -416,7 +416,7 @@ class IRTEvaluator:
 
         Returns
         -------
-        torch.Tensor, torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
             A 3D torch tensor with data group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
 
             A 3D torch tensor with model group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
@@ -433,7 +433,7 @@ class IRTEvaluator:
             if population_z is None and data is self.algorithm.train_data:
                 population_z = z
             
-            bit_scores, _ = self.scorer._bit_scores_from_z(
+            bit_scores, _ = self.scorer.bit_scores_from_z(
                 z=z,
                 one_dimensional=False,
                 start_z=bit_score_start_z,

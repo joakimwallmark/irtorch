@@ -1,7 +1,10 @@
 import logging
-from sklearn.neighbors import KernelDensity
 import torch
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import plotly.io as pio
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.legend import Legend
@@ -12,6 +15,7 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.helper_functions import output_to_item_entropy
 
+pio.templates.default = "plotly_white"
 logger = logging.getLogger('irtorch')
 
 class IRTPlotter:
@@ -117,10 +121,14 @@ class IRTPlotter:
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
         latent_variables_to_plot: tuple[int] = (1,),
-        kernel_bandwidth = 'scott',
-        steps: int = 200,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        contour_colorscale: str = "Plasma",
+        contour_plot_bins: int = None,
         **kwargs
-    ) -> tuple[plt.Figure, plt.Axes]:
+    ) -> go.Figure:
         """
         Plots the distribution of latent scores.
 
@@ -128,22 +136,30 @@ class IRTPlotter:
         ----------
         scores_to_plot : torch.Tensor, optional
             If provided, the requested latent variable distributions are plotted directly.
-            If None, scores are computed from the population data. (default is None)
+            If None, scores are computed from the population data or the model training data. (default is None)
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
-        kernel_bandwidth : float | str, optional
-            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
-        steps : int, optional
-            The number of steps to use for computing the kernel density estimate. (default is 200)
+                title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Density" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        contour_colorscale : str, optional
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        countor_plot_bins : int, optional
+            The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         **kwargs : dict, optional
             Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         if len(latent_variables_to_plot) > 2:
             raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables_to_plot argument.")
@@ -171,10 +187,14 @@ class IRTPlotter:
         else:
             scores = scores_to_plot
 
-        return self._kernel_score_distribution_plot(
-            scores[:, [i - 1 for i in latent_variables_to_plot]],
-            steps,
-            kernel_bandwidth
+        return self._distribution_plot(
+            latent_scores=scores[:, [i - 1 for i in latent_variables_to_plot]],
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            color=color,
+            contour_colorscale=contour_colorscale,
+            contour_plot_bins=contour_plot_bins,
         )
 
     @torch.inference_mode()
@@ -226,7 +246,7 @@ class IRTPlotter:
         )[:, item - 1]
 
         if scale == "bit":
-            scores_to_plot, _ = self.scorer._bit_scores_from_z(
+            scores_to_plot, _ = self.scorer.bit_scores_from_z(
                 z=z_grid,
                 **kwargs,
             )
@@ -402,7 +422,7 @@ class IRTPlotter:
         prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
 
         if scale == "bit":
-            scores_to_plot, bit_score_start_z = self.scorer._bit_scores_from_z(
+            scores_to_plot, bit_score_start_z = self.scorer.bit_scores_from_z(
                 z=z_grid,
                 start_z=bit_score_start_z,
                 one_dimensional=False,
@@ -693,83 +713,87 @@ class IRTPlotter:
 
         return fig, ax
 
-    def _kernel_score_distribution_plot(
+    def _distribution_plot(
         self,
         latent_scores: torch.Tensor,
-        steps: int = 200,
-        kernel_bandwidth = 'scott',
-    ) -> tuple[plt.Figure, plt.Axes]:
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        contour_colorscale: str = "Plasma",
+        contour_plot_bins = None,
+    ) -> go.Figure:
         """
-        Plots the kernel density estimate of latent scores.
+        Plots the latent score distribution.
 
         Parameters
         ----------
         latent_scores : torch.Tensor
             A tensor of latent scores for which to plot the kernel density estimate.
-        steps : int, optional
-            The number of steps to use for computing the kernel density estimate. (default is 200)
-        kernel_bandwidth : float or {"scott", "silverman"}
-            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
-
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Density" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        contour_colorscale : str, optional
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        countor_plot_bins : int, optional
+            The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
-        kernel_density = KernelDensity(
-            kernel="gaussian", bandwidth=kernel_bandwidth
-        ).fit(latent_scores.cpu().numpy())
+        latent_scores = latent_scores.cpu().numpy()
+        latent_variables = latent_scores.shape[1]
 
-        # Compute density for mesh of latent variable values
-        latent_variables = latent_scores.shape[1]  # number of latent variables
         if latent_variables > 2:
-            raise TypeError("Can not plot for more than two latent score dimensions")
+            raise ValueError("Can not plot for more than two latent score dimensions.")
 
-        # Create the grid for each variable
-        grids = [
-            torch.linspace(
-                latent_scores[:, i].min(), latent_scores[:, i].max(), steps=steps
+        if latent_variables == 1:
+            if x_label is None:
+                x_label = "Latent variable"
+            if y_label is None:
+                y_label = "Density"
+            return self._single_latent_variable_distribution_plot(latent_scores.squeeze(), title, x_label, y_label, color)
+        else:
+            if x_label is None:
+                x_label = "Latent variable 1"
+            if y_label is None:
+                y_label = "Latent variable 2"
+            return self._two_latent_variables_distribution_plot(latent_scores, title, x_label, y_label, contour_colorscale, contour_plot_bins)
+
+    def _single_latent_variable_distribution_plot(self, scores, title, x_label, y_label, color) -> go.Figure:
+        df = pd.DataFrame(scores, columns=['values'])
+        histogram_kwargs = {
+            'x': "values",
+            'marginal': "box"
+        }
+        if color:
+            histogram_kwargs['color_discrete_sequence'] = [color]
+        fig = px.histogram(df, **histogram_kwargs)
+        fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
+        return fig
+
+    def _two_latent_variables_distribution_plot(self, scores, title, x_label, y_label, contour_colorscale, contour_plot_bins) -> go.Figure:
+        if contour_plot_bins is None:
+            contour_plot_bins = int(np.log2(scores.shape[0])) + 1 # Sturges’ Rule
+        histogram2d, x_edges, y_edges = np.histogram2d(scores[:, 0], scores[:, 1], bins=contour_plot_bins, density=True)
+        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        fig = go.Figure(data =
+            go.Contour(
+                z=histogram2d,
+                x=x_centers, # Centers of bins (x-axis)
+                y=y_centers, # Centers of bins (y-axis)
+                colorscale=contour_colorscale
             )
-            for i in range(latent_variables)
-        ]
-        # Creating the grid combinations
-        mesh = torch.meshgrid(*grids, indexing="ij")
-        grid_combinations = torch.stack([t.flatten() for t in mesh]).t()
-        # Apply KDE and reshape result
-        log_density = torch.from_numpy(
-            kernel_density.score_samples(grid_combinations.cpu().numpy())
         )
-        density_values = log_density.exp().reshape([steps] * latent_variables)
-        latent_scores = latent_scores.cpu()
-
-        fig, ax = plt.subplots()
-        ax.grid(True)
-        ax.set_xlim(min(latent_scores), max(latent_scores))
-        if latent_scores.shape[1] == 1:
-            ax.hist(latent_scores.squeeze(), density=True, alpha=0.6, zorder=3)
-            ax.plot(grids[0], density_values, linewidth=self.linewidth, zorder=4)
-            ax.set_xlabel("Latent variable")
-            ax.set_ylabel("Density")
-            ax.set_title("Latent variable density plot")
-            ax.legend()
-        else:  # plot for two latent variables
-            contour = ax.contourf(
-                mesh[0], mesh[1], density_values, levels=100, cmap="RdPu"
-            )
-            num_dots = min(500, latent_scores.shape[0])
-            ax.scatter(
-                latent_scores[:num_dots, 0],
-                latent_scores[:num_dots, 1],
-                color="white",
-                s=30,
-                edgecolor="black",
-                alpha=0.5,
-            )
-            fig.colorbar(contour, ax=ax)
-            ax.set_xlabel("Latent variable 1")
-            ax.set_ylabel("Latent variable 2")
-            ax.set_title("Latent variable density plot")
-        return fig, ax
+        fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
+        return fig
 
     def _item_bit_score_plot(
         self,

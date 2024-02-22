@@ -1,6 +1,9 @@
 import logging
 import torch
 from torch.utils.tensorboard import SummaryWriter
+from plotly import graph_objects as go
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 from irtorch.models import BaseIRTModel
 from irtorch.models import Parametric
 from irtorch.models import NonparametricMonotoneNN
@@ -9,8 +12,6 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch.estimation_algorithms.encoders import BaseEncoder
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
 
 logger = logging.getLogger('irtorch')
 
@@ -244,233 +245,65 @@ class IRT:
             bit_score_items,
         )
 
-    def plot_training_history(self) -> tuple[Figure, Axes]:
-        """
-        Plots the training history of the model.
-
-        Returns
-        -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
-        """
-        return self.plotter.plot_training_history()
-
-    def plot_latent_score_distribution(
+    def bit_scores_from_z(
         self,
-        scores_to_plot: torch.Tensor = None,
-        population_data: torch.Tensor = None,
-        latent_variables_to_plot: tuple[int] = (1,),
-        kernel_bandwidth = 'scott',
-        steps: int = 200,
-        **kwargs
-    ) -> tuple[Figure, Axes]:
+        z: torch.Tensor,
+        start_z: torch.Tensor = None,
+        population_z: torch.Tensor = None,
+        one_dimensional: bool = False,
+        z_estimation_method: str = "ML",
+        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        lbfgs_learning_rate: float = 0.3,
+        grid_points: int = 300,
+        items: list[int] = None,
+        start_z_guessing_probabilities: list[float] = None,
+        start_z_guessing_iterations: int = 10000,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Plots the distribution of latent scores.
+        Computes the bit scores from z scores.
 
-        Parameters
+        Parameters:
         ----------
-        scores_to_plot : torch.Tensor, optional
-            If provided, the requested latent variable distributions are plotted directly.
-            If None, scores are computed from the population data. (default is None)
-        population_data : torch.Tensor, optional
-            The data used to compute the latent scores. If None, uses the training data. (default is None)
-        latent_variables_to_plot : tuple[int], optional
-            The latent dimensions to include in the plot. (default is (1,))
-        kernel_bandwidth : float | str, optional
-            The bandwidth to use for the kernel density estimate. (default is 'scott' and uses Scott's rule)
-        steps : int, optional
-            The number of steps to use for computing the kernel density estimate. (default is 200)
-        **kwargs : dict, optional
-            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
-
-        Returns
-        -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
-        """
-        return self.plotter.plot_latent_score_distribution(
-            scores_to_plot=scores_to_plot,
-            population_data=population_data,
-            latent_variables_to_plot=latent_variables_to_plot,
-            kernel_bandwidth=kernel_bandwidth,
-            steps=steps,
-            **kwargs
-        )
-
-    @torch.inference_mode()
-    def plot_item_probabilities(
-        self,
-        item: int,
-        scale: str = "bit",
-        latent_variables: tuple = (1, ),
-        fixed_zs: torch.Tensor = None,
-        steps: int = 1000,
-        bit_score_start_z: torch.tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None,
-        z_range: tuple[float, float] = None,
-        second_z_range: tuple[float, float] = None,
-        plot_group_fit: bool = False,
-        group_fit_groups: int = 10,
-        group_fit_data: int = None,
-        group_fit_population_z: torch.Tensor = None,
-        group_z_estimation_method: str = "ML",
-        plot_derivative: bool = False,
-        grayscale: bool = False,
-    ) -> tuple[Figure, Axes]:
-        """
-        Plots the item probability curves for a given item. Supports 2D and 3D plots.
-
-        Parameters
-        ----------
-        item : int
-            The item to plot.
-        scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
-        latent_variables : tuple, optional
-            The latent space variables to plot. (default is (1,))
-        fixed_zs: torch.Tensor, optional
-            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
-        steps : int, optional
-            The number of steps along each z axis used for probability evaluation. (default is 1000)
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
+        z : torch.Tensor
+            A 2D tensor. Columns are latent variables and rows are respondents.
+        start_z : torch.Tensor, optional
+            A one row 2D tensor with bit score starting values of each latent variable. Estimated automatically if not provided. (default is None)
+        population_z : torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
+        one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is True)
+        z_estimation_method : str, optional
             Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        bit_score_start_z_guessing_iterations: int, optional
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        lbfgs_learning_rate: float, optional
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+        grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
+        start_z_guessing_probabilities: list[float], optional
+            The guessing probability for each item if start_z is None. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        bit_score_items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
-        z_range : tuple, optional
-            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
-        second_z_range : tuple, optional
-            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
-        plot_group_fit : bool, optional
-            Plot group average probabilities to assess fit. (default is False)
-        group_fit_groups : int, optional
-            Only for plot_group_fit = True. The number of groups. (default is 10)
-        group_fit_data: torch.tensor, optional
-            Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
-        group_fit_population_z : torch.tensor, optional
-            Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
-        group_z_estimation_method : str, optional
-            The method used for computing z-scores for the groups. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'ML')
-        plot_derivative : bool, optional
-            If true, plots the derivative of the item probabilitiy curves. Note that this feature is not yet implemented and will raise a TypeError if set to true. (default is False)
-        grayscale : bool, optional
-            Grayscale plot. (default is False)
-
-        Returns
+        
+        Returns:
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        tuple[torch.Tensor, torch.Tensor]
+            A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_z.
         """
-        return self.plotter.plot_item_probabilities(
-            item=item,
-            scale=scale,
-            latent_variables=latent_variables,
-            fixed_zs=fixed_zs,
-            steps=steps,
-            bit_score_start_z=bit_score_start_z,
-            bit_score_grid_points=bit_score_grid_points,
-            bit_score_z_grid_method=bit_score_z_grid_method,
-            bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-            bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
-            bit_score_items=bit_score_items,
-            z_range=z_range,
-            second_z_range=second_z_range,
-            plot_group_fit=plot_group_fit,
-            group_fit_groups=group_fit_groups,
-            group_fit_data=group_fit_data,
-            group_fit_population_z=group_fit_population_z,
-            group_z_estimation_method=group_z_estimation_method,
-            plot_derivative=plot_derivative,
-            grayscale=grayscale,
-        )
-
-    def plot_item_entropy(
-        self,
-        item: int,
-        scale="bit",
-        latent_variables: int = 1,
-        steps: int = 1000,
-        z_range: tuple[float, float] = (-4, 4),
-        **kwargs,
-    ) -> tuple[Figure, Axes]:
-        """
-        Plot the entropy of item responses against latent variables.
-
-        Parameters
-        ----------
-        item : int
-            The item to plot.
-        scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
-        latent_variables : int, optional
-            The latent variable dimension to plot. (default is 1)
-        steps : int, optional
-            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
-        bit_score_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
-        bit_score_grid_steps : int, optional
-            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
-        z_range : tuple[float, float], optional
-            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
-        **kwargs
-            Additional keyword arguments to pass to the bit score computation.
-
-        Returns
-        -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
-        """
-        return self.plotter.plot_item_entropy(
-            item=item,
-            scale=scale,
-            latent_variables=latent_variables,
-            steps=steps,
-            z_range=z_range,
-            **kwargs,
-        )
-
-    def plot_item_latent_variable_relationships(
-        self,
-        relationships: torch.Tensor,
-        title: str = "Relationships: Items vs. latent variables",
-        x_label: str = "Latent variables",
-        y_label: str = "Items",
-        cmap: str = "inferno",
-    ) -> tuple[Figure, Axes]:
-        """
-        Create a heatmap of item-latent variable relationships.
-
-        Parameters
-        ----------
-        relationships : torch.Tensor
-            A tensor of item-latent variable relationships. Typically the returned tensor from expected_item_score_slopes() where each row represents an item and each column represents a latent variable.
-        title : str, optional
-            The title for the plot. (default is "Relationships: Items vs. latent variables")
-        x_label : str, optional
-            The label for the X-axis. (default is "Latent variables")
-        y_label : str, optional
-            The label for the Y-axis. (default is "Items")
-        cmap : str, optional
-            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
-
-        Returns
-        -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
-        """
-        return self.plotter.plot_item_latent_variable_relationships(
-            relationships, title, x_label, y_label, cmap
+        return self.scorer.bit_scores_from_z(
+            z=z,
+            start_z=start_z,
+            population_z=population_z,
+            one_dimensional=one_dimensional,
+            z_estimation_method=z_estimation_method,
+            ml_map_device=ml_map_device,
+            lbfgs_learning_rate=lbfgs_learning_rate,
+            grid_points=grid_points,
+            items=items,
+            start_z_guessing_probabilities=start_z_guessing_probabilities,
+            start_z_guessing_iterations=start_z_guessing_iterations,
         )
 
     def sum_score_probabilities(
@@ -694,7 +527,7 @@ class IRT:
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate the residuals between the model estimated and observed data within each group.
@@ -732,7 +565,7 @@ class IRT:
 
         Returns
         -------
-        torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
             A tuple with torch tensors. The first one holds the residuals for each group and has dimensions (groups, items, item categories). The second one is a 1D tensor and holds the mid points of the groups.
         """
         return self.evaluator.group_fit_residuals(
@@ -791,3 +624,248 @@ class IRT:
         self.algorithm.training_z_scores = checkpoint["training_z_scores"]
         if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
             self.algorithm.encoder.load_state_dict(checkpoint["encoder_state_dict"])
+
+    def plot_training_history(self) -> tuple[Figure, Axes]:
+        """
+        Plots the training history of the model.
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        return self.plotter.plot_training_history()
+
+    def plot_latent_score_distribution(
+        self,
+        scores_to_plot: torch.Tensor = None,
+        population_data: torch.Tensor = None,
+        latent_variables_to_plot: tuple[int] = (1,),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        contour_colorscale: str = "Plasma",
+        contour_plot_bins: int = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the distribution of latent scores.
+
+        Parameters
+        ----------
+        scores_to_plot : torch.Tensor, optional
+            If provided, the requested latent variable distributions are plotted directly.
+            If None, scores are computed from the population data or the model training data. (default is None)
+        population_data : torch.Tensor, optional
+            The data used to compute the latent scores. If None, uses the training data. (default is None)
+        latent_variables_to_plot : tuple[int], optional
+            The latent dimensions to include in the plot. (default is (1,))
+                title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Density" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        contour_colorscale : str, optional
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        countor_plot_bins : int, optional
+            The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the latent_scores method it scores_to_plot is not provided.
+
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
+        """
+        return self.plotter.plot_latent_score_distribution(
+            scores_to_plot=scores_to_plot,
+            population_data=population_data,
+            latent_variables_to_plot=latent_variables_to_plot,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            color=color,
+            contour_colorscale=contour_colorscale,
+            contour_plot_bins=contour_plot_bins,
+            **kwargs
+        )
+
+    @torch.inference_mode()
+    def plot_item_probabilities(
+        self,
+        item: int,
+        scale: str = "bit",
+        latent_variables: tuple = (1, ),
+        fixed_zs: torch.Tensor = None,
+        steps: int = 1000,
+        bit_score_start_z: torch.tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: int = "ML",
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None,
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        plot_group_fit: bool = False,
+        group_fit_groups: int = 10,
+        group_fit_data: int = None,
+        group_fit_population_z: torch.Tensor = None,
+        group_z_estimation_method: str = "ML",
+        plot_derivative: bool = False,
+        grayscale: bool = False,
+    ) -> tuple[Figure, Axes]:
+        """
+        Plots the item probability curves for a given item. Supports 2D and 3D plots.
+
+        Parameters
+        ----------
+        item : int
+            The item to plot.
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : tuple, optional
+            The latent space variables to plot. (default is (1,))
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        steps : int, optional
+            The number of steps along each z axis used for probability evaluation. (default is 1000)
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        bit_score_start_z_guessing_probabilities: list[float], optional
+            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        bit_score_start_z_guessing_iterations: int, optional
+            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+        z_range : tuple, optional
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple, optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        plot_group_fit : bool, optional
+            Plot group average probabilities to assess fit. (default is False)
+        group_fit_groups : int, optional
+            Only for plot_group_fit = True. The number of groups. (default is 10)
+        group_fit_data: torch.tensor, optional
+            Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
+        group_fit_population_z : torch.tensor, optional
+            Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
+        group_z_estimation_method : str, optional
+            The method used for computing z-scores for the groups. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'ML')
+        plot_derivative : bool, optional
+            If true, plots the derivative of the item probabilitiy curves. Note that this feature is not yet implemented and will raise a TypeError if set to true. (default is False)
+        grayscale : bool, optional
+            Grayscale plot. (default is False)
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        return self.plotter.plot_item_probabilities(
+            item=item,
+            scale=scale,
+            latent_variables=latent_variables,
+            fixed_zs=fixed_zs,
+            steps=steps,
+            bit_score_start_z=bit_score_start_z,
+            bit_score_grid_points=bit_score_grid_points,
+            bit_score_z_grid_method=bit_score_z_grid_method,
+            bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
+            bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
+            bit_score_items=bit_score_items,
+            z_range=z_range,
+            second_z_range=second_z_range,
+            plot_group_fit=plot_group_fit,
+            group_fit_groups=group_fit_groups,
+            group_fit_data=group_fit_data,
+            group_fit_population_z=group_fit_population_z,
+            group_z_estimation_method=group_z_estimation_method,
+            plot_derivative=plot_derivative,
+            grayscale=grayscale,
+        )
+
+    def plot_item_entropy(
+        self,
+        item: int,
+        scale="bit",
+        latent_variables: int = 1,
+        steps: int = 1000,
+        z_range: tuple[float, float] = (-4, 4),
+        **kwargs,
+    ) -> tuple[Figure, Axes]:
+        """
+        Plot the entropy of item responses against latent variables.
+
+        Parameters
+        ----------
+        item : int
+            The item to plot.
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : int, optional
+            The latent variable dimension to plot. (default is 1)
+        steps : int, optional
+            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
+        bit_score_method : str, optional
+            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
+        bit_score_grid_steps : int, optional
+            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
+        z_range : tuple[float, float], optional
+            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
+        **kwargs
+            Additional keyword arguments to pass to the bit score computation.
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        return self.plotter.plot_item_entropy(
+            item=item,
+            scale=scale,
+            latent_variables=latent_variables,
+            steps=steps,
+            z_range=z_range,
+            **kwargs,
+        )
+
+    def plot_item_latent_variable_relationships(
+        self,
+        relationships: torch.Tensor,
+        title: str = "Relationships: Items vs. latent variables",
+        x_label: str = "Latent variables",
+        y_label: str = "Items",
+        cmap: str = "inferno",
+    ) -> tuple[Figure, Axes]:
+        """
+        Create a heatmap of item-latent variable relationships.
+
+        Parameters
+        ----------
+        relationships : torch.Tensor
+            A tensor of item-latent variable relationships. Typically the returned tensor from expected_item_score_slopes() where each row represents an item and each column represents a latent variable.
+        title : str, optional
+            The title for the plot. (default is "Relationships: Items vs. latent variables")
+        x_label : str, optional
+            The label for the X-axis. (default is "Latent variables")
+        y_label : str, optional
+            The label for the Y-axis. (default is "Items")
+        cmap : str, optional
+            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
+
+        Returns
+        -------
+        tuple[Figure, Axes]
+            The matplotlib Figure and Axes objects for the plot.
+        """
+        return self.plotter.plot_item_latent_variable_relationships(
+            relationships, title, x_label, y_label, cmap
+        )

@@ -78,7 +78,7 @@ def irt_evaluator(latent_variables):
     def pdf_mock(z):
         return torch.rand(z.shape[0])
     mock_scorer.latent_scores = MagicMock(side_effect=latent_scores)
-    mock_scorer._bit_scores_from_z = MagicMock(side_effect=bit_scores_from_z_mock)
+    mock_scorer.bit_scores_from_z = MagicMock(side_effect=bit_scores_from_z_mock)
     mock_scorer.min_max_z_for_integration = MagicMock(
         side_effect=min_max_z_for_integration_mock
     )
@@ -186,7 +186,7 @@ def test_latent_group_probabilities(irt_evaluator: IRTEvaluator, scale):
 
     if scale == "bit":
         # check if bit score was called
-        irt_evaluator.scorer._bit_scores_from_z.assert_called_once()
+        irt_evaluator.scorer.bit_scores_from_z.assert_called_once()
 
 def test_group_fit_residuals(irt_evaluator: IRTEvaluator):
     data = torch.cat(

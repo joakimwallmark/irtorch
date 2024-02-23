@@ -262,8 +262,8 @@ class IRT:
         """
         Computes the bit scores from z scores.
 
-        Parameters:
-        ----------
+        Parameters
+        -----------
         z : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
         start_z : torch.Tensor, optional
@@ -287,7 +287,7 @@ class IRT:
         start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
         
-        Returns:
+        Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_z.
@@ -664,7 +664,7 @@ class IRT:
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
-                title : str, optional
+        title : str, optional
             The title for the plot. (default is None)
         x_label : str, optional
             The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
@@ -677,7 +677,7 @@ class IRT:
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the latent_scores method if scores_to_plot is not provided.
+            Additional keyword arguments to be passed to the latent_scores method if scores_to_plot is not provided. See :meth:`latent_scores` for details.
 
         Returns
         -------
@@ -695,6 +695,77 @@ class IRT:
             color=color,
             contour_colorscale=contour_colorscale,
             contour_plot_bins=contour_plot_bins,
+            **kwargs
+        )
+    
+    def plot_information(
+        self,
+        items: list[int] = None,
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        degrees: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the information function for the model.
+        Supports both item and test information.
+
+        Parameters
+        ----------
+        items : list[int], optional
+            The items to plot. If None, the full test information is plotted. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : tuple[int], optional
+            The latent space variables to plot. (default is (1,))
+        degrees : list[int], optional
+            A list of angles in degrees between 0 and 90. One degree for each latent variable.
+            Only applicable when the model is multidimensional.
+            Information will be computed in the direction of the angles. (default is None)
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Information" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        z_range : tuple[float, float], optional
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`bit_scores_from_z` for details. 
+        """
+        return self.plotter.plot_information(
+            items=items,
+            scale=scale,
+            latent_variables=latent_variables,
+            degrees=degrees,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            color=color,
+            colorscale=colorscale,
+            z_range=z_range,
+            second_z_range=second_z_range,
+            steps=steps,
+            fixed_zs=fixed_zs,
             **kwargs
         )
 

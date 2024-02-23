@@ -383,14 +383,14 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
 
     The entropy is a measure of the uncertainty or randomness of a set of probabilities. It is calculated as the sum of the product of each probability and its surprisal (negative log probability).
 
-    Parameters:
+    Parameters
     -------------
     probabilities: torch.Tensor
         A tensor of probabilities. The last tensor dimension should represent a discrete probability distribution and should sum to 1.
     log_base: int, optional
         The base of the logarithm used in the calculation. (default is 2, which gives entropy in bits)
 
-    Returns:
+    Returns
     -------------
     entropy: torch.Tensor
         The entropy of each row of probabilities.

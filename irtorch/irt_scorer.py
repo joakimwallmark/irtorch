@@ -529,7 +529,7 @@ class IRTScorer:
         """
         Computes the bit scores from z scores.
 
-        Parameters:
+        Parameters
         ----------
         z : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
@@ -554,7 +554,7 @@ class IRTScorer:
         start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
         
-        Returns:
+        Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_z.
@@ -771,7 +771,7 @@ class IRTScorer:
         """
         Computes the multi-dimensional bit scores for the given input z scores.
 
-        Parameters:
+        Parameters
         -----------
         z_adjusted : torch.Tensor
             The input z scores.
@@ -788,7 +788,7 @@ class IRTScorer:
         grid_points : int
             The number of points in the grid.
 
-        Returns:
+        Returns
         --------
         bit_scores : torch.Tensor
             The multi-dimensional bit scores for the input z scores.

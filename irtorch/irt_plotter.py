@@ -500,7 +500,7 @@ class IRTPlotter:
         colorscale: str = "Plasma",
         z_range: tuple[float, float] = None,
         second_z_range: tuple[float, float] = None,
-        steps: int = 150,
+        steps: int = None,
         fixed_zs: torch.Tensor = None,
         **kwargs
     ) -> go.Figure:
@@ -512,13 +512,34 @@ class IRTPlotter:
         ----------
         items : list[int], optional
             The items to plot. If None, the full test information is plotted. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : tuple[int], optional
+            The latent space variables to plot. (default is (1,))
         degrees : list[int], optional
             A list of angles in degrees between 0 and 90. One degree for each latent variable.
             Only applicable when the model is multidimensional.
-            If provided, the information will be computed in the direction of the angles. 
-            If not provided, the information matrices are returned. (default is None)
+            Information will be computed in the direction of the angles. (default is None)
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Information" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
             Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        z_range : tuple[float, float], optional
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -533,10 +554,15 @@ class IRTPlotter:
             raise TypeError("second_z_range needs to have a length of 2 if specified.")
         if degrees is None and model_dim > 1:
             raise ValueError("Degrees must be provided for multidimensional models.")
+        if steps is None:
+            steps = 100 if len(latent_variables) == 1 else 18
 
         latent_indices = [z - 1 for z in latent_variables]
 
         z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        
+        if z_grid.shape[0] > 2000:
+            logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)

@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 import logging
 import torch
-from torch import nn
+from torch import nn, vmap
+from torch.func import jacrev
 import torch.nn.functional as F
 from irtorch.helper_functions import linear_regression
 
@@ -279,11 +280,14 @@ class BaseIRTModel(ABC, nn.Module):
             A torch tensor with the gradients for each z score. Dimensions are (z rows, items, item categories, latent variables).
         """
         z = z.clone().requires_grad_(True)
-        logger.info("Computing Jacobian for all items and item categories...")
-        # Jacobian for each row in z
-        gradients = [torch.autograd.functional.jacobian(self.item_probabilities, z[i].view(1, -1)).squeeze((0, 3)) for i in range(z.shape[0])]
-        gradients = torch.stack(gradients)
 
+        def compute_jacobian(z_single):
+            jacobian = jacrev(self.item_probabilities)(z_single.view(1, -1))
+            return jacobian.squeeze((0, 3))
+
+        logger.info("Computing Jacobian for all items and item categories...")
+        # vectorized version of jacobian
+        gradients = torch.vmap(compute_jacobian)(z)
         return gradients
     
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
@@ -312,7 +316,7 @@ class BaseIRTModel(ABC, nn.Module):
         """
         if degrees is not None and len(degrees) != self.latent_variables:
             raise ValueError("There must be one degree for each latent variable.")
-        
+
         probabilities = self.item_probabilities(z.clone())
         gradients = self.probability_gradients(z)
         # squared gradient matrices for each latent variable

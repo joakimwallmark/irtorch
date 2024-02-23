@@ -1,12 +1,14 @@
 import logging
 import torch
-from torch.autograd import Function
 
 logger = logging.getLogger('irtorch')
 
-class BoundedELU(Function):
+class BoundedELU(torch.autograd.Function):
+    # Set generate_vmap_rule to True to ask PyTorch to automatically generate a vmap rule.
+    generate_vmap_rule = True
+
     @staticmethod
-    def forward(ctx, input, alpha=1.0):
+    def forward(input_tensor: torch.Tensor, alpha=1.0):
         """
         Applies the bounded ELU function element-wise to the input tensor.
 
@@ -21,7 +23,7 @@ class BoundedELU(Function):
 
         Parameters
         ----------
-        input : torch.Tensor
+        input_tensor : torch.Tensor
             The input tensor.
         alpha : float, optional
             The alpha parameter. Default is 1.0.
@@ -31,18 +33,29 @@ class BoundedELU(Function):
         torch.Tensor
             The output tensor.
         """
-        ctx.save_for_backward(input)
-        ctx.alpha = alpha
+        neg_mask = (input_tensor <= -1).float()
+        pos_mask = (input_tensor >= 1).float()
+        middle_mask = 1 - neg_mask - pos_mask
 
-        output = input.clone()
-        # Implementing the piecewise function
-        mask1 = input <= -1
-        mask2 = input >= 1
-        output[mask1] = (alpha * (torch.exp(input[mask1] + 1) - 1) - 1).to(output.dtype)
-        output[mask2] = (-alpha * (torch.exp(-input[mask2] + 1) - 1) + 1).to(output.dtype)
-        # No change for -1 < input < 1 as output is same as input
+        neg_part = alpha * (torch.exp(input_tensor + 1) - 1) - 1
+        pos_part = -alpha * (torch.exp(-input_tensor + 1) - 1) + 1
+        middle_part = input_tensor
+
+        # we need to remove possible infinities to avoid nan in the output
+        neg_part = torch.where(neg_part == float('inf'), torch.zeros_like(neg_part), neg_part)
+        pos_part = torch.where(pos_part == float('-inf'), torch.zeros_like(pos_part), pos_part)
+
+        output = neg_mask * neg_part + pos_mask * pos_part + middle_mask * middle_part
 
         return output
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        # Method needed for functorch compatibility (vmap etc.)
+        # Setup any necessary context for functorch transforms
+        input_tensor, alpha = inputs
+        ctx.save_for_backward(input_tensor)
+        ctx.alpha = alpha
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -59,14 +72,16 @@ class BoundedELU(Function):
         torch.Tensor
             The gradient of the loss with respect to the input of the bounded ELU function.
         """
-        input, = ctx.saved_tensors
+        input_tensor, = ctx.saved_tensors
         alpha = ctx.alpha
 
-        grad_input = grad_output.clone()
-        mask1 = input <= -1
-        mask2 = input >= 1
-        grad_input[mask1] = alpha * torch.exp(input[mask1] + 1) * grad_output[mask1]
-        grad_input[mask2] = alpha * torch.exp(-input[mask2] + 1) * grad_output[mask2]
-        # No change for -1 < input < 1 as gradient is 1
+        neg_mask = (input_tensor <= -1).float()
+        pos_mask = (input_tensor >= 1).float()
+        middle_mask = 1 - neg_mask - pos_mask
 
-        return grad_input, None
+        neg_grad = alpha * torch.exp(input_tensor + 1)
+        pos_grad = alpha * torch.exp(-input_tensor + 1)
+        middle_grad = 1
+
+        grad_input = neg_mask * neg_grad + pos_mask * pos_grad + middle_mask * middle_grad
+        return grad_input * grad_output, None

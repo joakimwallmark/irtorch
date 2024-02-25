@@ -207,6 +207,11 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 current_loss = train_loss
                 scheduler.step(train_loss)
 
+            if validation_loss is not None:
+                dynamic_print(f"Epoch: {epoch}. Average training batch loss: {train_loss:.4f}. Average validation batch loss: {validation_loss:.4f}")
+            else:
+                dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
+
             if current_loss < best_loss:
                 best_loss = current_loss
                 best_epoch = epoch
@@ -268,7 +273,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # Calculate averge per batch loss and accuracy per epoch and print out what's happening
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
-        dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {loss:.4f}")
         return loss
 
     def _impute_missing(self, batch, missing_mask):
@@ -333,7 +337,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
         self.training_history["validation_loss"].append(loss)
-        logger.info("Average validation batch loss function: %.4f", loss)
         return loss
 
     @torch.inference_mode()

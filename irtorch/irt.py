@@ -670,14 +670,14 @@ class IRT:
         if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
             self.algorithm.encoder.load_state_dict(checkpoint["encoder_state_dict"])
 
-    def plot_training_history(self) -> tuple[Figure, Axes]:
+    def plot_training_history(self) -> go.Figure:
         """
         Plots the training history of the model.
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         return self.plotter.plot_training_history()
 

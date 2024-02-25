@@ -44,76 +44,49 @@ class IRTPlotter:
         self.markersize = 9
         self.color_map = "tab10"
 
-    def plot_training_history(self) -> tuple[plt.Figure, plt.Axes]:
+
+    def plot_training_history(self) -> go.Figure:
         """
         Plots the training history of the model.
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         if all(len(val) == 0 for val in self.algorithm.training_history.values()):
             logging.error("Model has not been trained yet")
             raise AttributeError("Model has not been trained yet")
 
-        measures = {
-            "Loss function": {
-                "train": "train_loss",
-                "validation": "validation_loss",
-                "y_label": "Loss",
-            }
-        }
+        data_frames = []
 
-        existing_measures = [
-            m
-            for m in measures.values()
-            if len(self.algorithm.training_history.get(m.get("train"), [])) > 0
-            or len(self.algorithm.training_history.get(m.get("validation"), [])) > 0
-        ]
+        if 'train_loss' in self.algorithm.training_history and len(self.algorithm.training_history['train_loss']) > 0:
+            train_df = pd.DataFrame({
+                'Epoch': range(1, len(self.algorithm.training_history['train_loss']) + 1),
+                'Loss': self.algorithm.training_history['train_loss'],
+                'Type': 'Training'
+            })
+            data_frames.append(train_df)
 
-        # If no measures have data, return without creating a plot
-        if not existing_measures:
-            raise ValueError(
-                "None of the selected measures have data available for plotting."
-            )
+        if 'validation_loss' in self.algorithm.training_history and len(self.algorithm.training_history['validation_loss']) > 0:
+            validation_df = pd.DataFrame({
+                'Epoch': range(1, len(self.algorithm.training_history['validation_loss']) + 1),
+                'Loss': self.algorithm.training_history['validation_loss'],
+                'Type': 'Validation'
+            })
+            data_frames.append(validation_df)
 
-        fig, axs = plt.subplots(
-            len(existing_measures), 1, figsize=(12, len(existing_measures) * 3)
-        )
-        if len(existing_measures) == 1:
-            axs = [axs]  # Ensure axs is a list even when only one subplot is created
+        if not data_frames:
+            raise ValueError("No training or validation loss data available for plotting.")
 
-        for i, measure in enumerate(existing_measures):
-            axs[i].grid(True)
+        plot_df = pd.concat(data_frames)
 
-            if (
-                measure.get("train")
-                and len(self.algorithm.training_history[measure["train"]]) > 0
-            ):
-                axs[i].plot(
-                    self.algorithm.training_history[measure["train"]],
-                    label="training data",  # Change 'train' to 'training'
-                    linewidth=self.linewidth,
-                )
+        fig = px.line(
+            plot_df, x='Epoch', y='Loss', color='Type',
+            labels={'Loss': 'Loss', 'Epoch': 'Epoch'},
+            title='Training History')
 
-                # Add an additional check here to ensure we only plot if the data list is not empty
-            if len(self.algorithm.training_history.get(measure["validation"], [])) > 0:
-                axs[i].plot(
-                    self.algorithm.training_history.get(measure["validation"]),
-                    label="validation data",
-                    linewidth=self.linewidth,
-                )
-
-            axs[i].set_title(
-                list(measures.keys())[list(measures.values()).index(measure)]
-            )
-            axs[i].set_xlabel("Epochs")
-            axs[i].set_ylabel(measure["y_label"])
-            axs[i].legend()
-
-        plt.tight_layout()
-        return fig, axs
+        return fig
 
     @torch.inference_mode()
     def plot_latent_score_distribution(

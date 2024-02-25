@@ -174,63 +174,127 @@ class IRTPlotter:
             contour_plot_bins=contour_plot_bins,
         )
 
-    @torch.inference_mode()
     def plot_item_entropy(
         self,
         item: int,
-        scale="bit",
-        latent_variables: int = 1,
-        steps: int = 1000,
-        z_range: tuple[float, float] = (-4, 4),
-        **kwargs,
-    ) -> tuple[plt.Figure, plt.Axes]:
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
         """
-        Plot the entropy of item responses against latent variables.
+        Plot the entropy of an item against the latent variable(s).
 
         Parameters
         ----------
         item : int
-            The item to plot.
+            The item for which to plot the entropy.
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
-        latent_variables : int, optional
-            The latent variable dimension to plot. (default is 1)
-        steps : int, optional
-            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
-        bit_score_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
-        bit_score_grid_steps : int, optional
-            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses 'Entropy' for one latent variable, and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
         z_range : tuple[float, float], optional
-            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
-        **kwargs
-            Additional keyword arguments to pass to the bit score computation.
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
-        z_grid = (
-            torch.linspace(z_range[0], z_range[1], steps=steps)
-            .repeat(self.model.latent_variables, 1)
-            .T
-        )
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if z_range is not None and len(z_range) != 2:
+            raise TypeError("z_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
+            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if steps is None:
+            steps = 100 if len(latent_variables) == 1 else 18
 
+        latent_indices = [z - 1 for z in latent_variables]
+
+        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        
         mean_output = self.model(z_grid)
         item_entropies = output_to_item_entropy(
             mean_output, self.model.modeled_item_responses
         )[:, item - 1]
 
         if scale == "bit":
-            scores_to_plot, _ = self.scorer.bit_scores_from_z(
+            scores_to_plot = self.scorer.bit_scores_from_z(
                 z=z_grid,
-                **kwargs,
-            )
+                **kwargs
+            )[0][:, latent_indices]
         else:
-            scores_to_plot = z_grid[:, latent_variables - 1]
+            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
 
-        return self._item_bit_score_plot(scores_to_plot, item_entropies)
+        if len(latent_variables) == 1:
+            scores_to_plot.squeeze_()
+            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+                start_idx = min_indices[0].item()  # get the first index
+                scores_to_plot = scores_to_plot[:start_idx]
+                item_entropies = item_entropies[:start_idx]
+            else:
+                start_idx = min_indices[-1].item()  # get the last index
+                scores_to_plot = scores_to_plot[start_idx:]
+                item_entropies = item_entropies[start_idx:]
+                
+            fig = self._2d_line_plot(
+                x = scores_to_plot,
+                y = item_entropies,
+                title = title or f"Item {item} entropy",
+                x_label = x_label or "Latent variable",
+                y_label = y_label or "Entropy",
+                color = color or None
+            )
+            fig.update_yaxes(range=[0, None])
+            return fig
+        
+        if len(latent_variables) == 2:
+            grid_size = int(np.sqrt(item_entropies.size()))
+            return self._3d_surface_plot(
+                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
+                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
+                z = item_entropies.reshape((grid_size, grid_size)),
+                title = title or f"Item {item} entropy",
+                x_label = x_label or "Latent variable 1",
+                y_label = y_label or "Latent variable 2",
+                z_label = "Entropy",
+                colorscale = colorscale
+            )
 
     @torch.inference_mode()
     def plot_item_latent_variable_relationships(
@@ -635,6 +699,11 @@ class IRTPlotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
             Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+
+        Returns
+        -------
+        go.Figure
+            The plotly Figure object for the plot.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:

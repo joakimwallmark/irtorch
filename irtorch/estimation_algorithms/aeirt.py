@@ -203,13 +203,10 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 validation_loss = self._validation_step()
                 current_loss = validation_loss
                 scheduler.step(validation_loss)
+                dynamic_print(f"Epoch: {epoch}. Average training batch loss: {train_loss:.4f}. Average validation batch loss: {validation_loss:.4f}")
             else:
                 current_loss = train_loss
                 scheduler.step(train_loss)
-
-            if validation_loss is not None:
-                dynamic_print(f"Epoch: {epoch}. Average training batch loss: {train_loss:.4f}. Average validation batch loss: {validation_loss:.4f}")
-            else:
                 dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
 
             if current_loss < best_loss:

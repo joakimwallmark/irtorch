@@ -980,46 +980,70 @@ class IRT:
     def plot_item_entropy(
         self,
         item: int,
-        scale="bit",
-        latent_variables: int = 1,
-        steps: int = 1000,
-        z_range: tuple[float, float] = (-4, 4),
-        **kwargs,
-    ) -> tuple[Figure, Axes]:
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
         """
-        Plot the entropy of item responses against latent variables.
+        Plot the entropy of an item against the latent variable(s).
 
         Parameters
         ----------
         item : int
-            The item to plot.
+            The item for which to plot the entropy.
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
-        latent_variables : int, optional
-            The latent variable dimension to plot. (default is 1)
-        steps : int, optional
-            The number of steps along the latent variable scale used for entropy evaluation. (default is 1000)
-        bit_score_method : str, optional
-            The method used for scale value calculation. Only used if scale is 'bit'. (default is 'tanh')
-        bit_score_grid_steps : int, optional
-            The number of steps used to calculate bit scores. Only used if scale is 'bit'. (default is 300)
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses 'Entropy' for one latent variable, and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
         z_range : tuple[float, float], optional
-            The range for z-values for plotting. Only used if scale is 'z'. (default is (-4, 4))
-        **kwargs
-            Additional keyword arguments to pass to the bit score computation.
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         return self.plotter.plot_item_entropy(
             item=item,
             scale=scale,
             latent_variables=latent_variables,
-            steps=steps,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            color=color,
+            colorscale=colorscale,
             z_range=z_range,
-            **kwargs,
+            second_z_range=second_z_range,
+            steps=steps,
+            fixed_zs=fixed_zs,
+            **kwargs
         )
 
     def plot_item_latent_variable_relationships(

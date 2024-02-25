@@ -79,9 +79,13 @@ class BoundedELU(torch.autograd.Function):
         pos_mask = (input_tensor >= 1).float()
         middle_mask = 1 - neg_mask - pos_mask
 
-        neg_grad = alpha * torch.exp(input_tensor + 1)
-        pos_grad = alpha * torch.exp(-input_tensor + 1)
-        middle_grad = 1
+        neg_part_grad = alpha * torch.exp(input_tensor + 1)
+        pos_part_grad = alpha * torch.exp(-input_tensor + 1)
+        middle_part_grad = 1
 
-        grad_input = neg_mask * neg_grad + pos_mask * pos_grad + middle_mask * middle_grad
+        # Ensuring gradient is not infinite
+        neg_part_grad = torch.where(neg_part_grad == float('inf'), torch.zeros_like(neg_part_grad), neg_part_grad)
+        pos_part_grad = torch.where(pos_part_grad == float('inf'), torch.zeros_like(pos_part_grad), pos_part_grad)
+
+        grad_input = neg_mask * neg_part_grad + pos_mask * pos_part_grad + middle_mask * middle_part_grad
         return grad_input * grad_output, None

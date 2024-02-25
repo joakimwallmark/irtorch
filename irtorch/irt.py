@@ -879,7 +879,6 @@ class IRT:
             **kwargs
         )
 
-    @torch.inference_mode()
     def plot_item_probabilities(
         self,
         item: int,
@@ -1050,10 +1049,10 @@ class IRT:
         self,
         relationships: torch.Tensor,
         title: str = "Relationships: Items vs. latent variables",
-        x_label: str = "Latent variables",
+        x_label: str = "Latent variable",
         y_label: str = "Items",
-        cmap: str = "inferno",
-    ) -> tuple[Figure, Axes]:
+        colorscale: str = "Plasma",
+    ) -> go.Figure:
         """
         Create a heatmap of item-latent variable relationships.
 
@@ -1064,17 +1063,17 @@ class IRT:
         title : str, optional
             The title for the plot. (default is "Relationships: Items vs. latent variables")
         x_label : str, optional
-            The label for the X-axis. (default is "Latent variables")
+            The label for the X-axis. (default is "Latent variable")
         y_label : str, optional
             The label for the Y-axis. (default is "Items")
-        cmap : str, optional
-            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
+        colorscale : str, optional
+            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         return self.plotter.plot_item_latent_variable_relationships(
-            relationships, title, x_label, y_label, cmap
+            relationships, title, x_label, y_label, colorscale
         )

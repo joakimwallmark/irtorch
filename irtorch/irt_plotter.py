@@ -295,16 +295,16 @@ class IRTPlotter:
                 z_label = "Entropy",
                 colorscale = colorscale
             )
-
+        
     @torch.inference_mode()
     def plot_item_latent_variable_relationships(
         self,
         relationships: torch.Tensor,
         title: str = "Relationships: Items vs. latent variables",
-        x_label: str = "Latent variables",
+        x_label: str = "Latent variable",
         y_label: str = "Items",
-        cmap: str = "inferno",
-    ) -> tuple[plt.Figure, plt.Axes]:
+        colorscale: str = "Plasma",
+    ) -> go.Figure:
         """
         Create a heatmap of item-latent variable relationships.
 
@@ -315,31 +315,39 @@ class IRTPlotter:
         title : str, optional
             The title for the plot. (default is "Relationships: Items vs. latent variables")
         x_label : str, optional
-            The label for the X-axis. (default is "Latent variables")
+            The label for the X-axis. (default is "Latent variable")
         y_label : str, optional
             The label for the Y-axis. (default is "Items")
-        cmap : str, optional
-            The matplotlib color map to use for the plot. Use for example "Greys" for black and white. (default is "inferno")
+        colorscale : str, optional
+            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         relationships = relationships.numpy()
+        
+        df = pd.DataFrame(relationships)
+        df.columns = [f"{i+1}" for i in range(df.shape[1])]
+        df.index = [f"Item {i+1}" for i in range(df.shape[0])]
+        
+        fig = px.imshow(
+            df,
+            labels=dict(x=x_label, y=y_label, color="Relationship"),
+            x=df.columns,
+            y=df.index,
+            aspect="auto",
+            title=title,
+            color_continuous_scale=colorscale
+        )
 
-        fig, ax = plt.subplots()
-        cax = ax.imshow(relationships, cmap=cmap, aspect='auto')
-        fig.colorbar(cax)  # Adds a color bar to the side
-        ax.set_xticks(range(relationships.shape[1]))
-        ax.set_xticklabels([str(i+1) for i in range(relationships.shape[1])])
-        ax.set_yticks(range(relationships.shape[0]))
-        ax.set_yticklabels([str(i+1) for i in range(relationships.shape[0])])
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-
-        return fig, ax
+        base_height = 200 # high based on the number of items
+        per_item_height = 20
+        total_height = base_height + (per_item_height * 80)
+        fig.update_layout(height=total_height, width=800)
+        
+        return fig
 
     @torch.inference_mode()
     def plot_item_probabilities(
@@ -1183,42 +1191,3 @@ class IRTPlotter:
         )
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
         return fig
-
-    def _item_bit_score_plot(
-        self,
-        latent_scores: torch.Tensor,
-        entropies: torch.Tensor,
-        x_label: str = "Latent variable",
-    ) -> tuple[plt.Figure, plt.Axes]:
-        """
-        Creates a plot of item entropies against latent scores.
-
-        Parameters
-        ----------
-        latent_scores : torch.Tensor
-            A tensor of latent scores. These form the X-axis values for the plot.
-        entropies : torch.Tensor
-            A tensor of item entropies. These form the Y-axis values for the plot.
-        x_label : str, optional
-            The label for the X-axis. (default is "Latent variable")
-
-        Returns
-        -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
-        """
-        entropies = entropies.cpu().numpy()
-        latent_scores = latent_scores.cpu().numpy()
-        fig, ax = plt.subplots()
-        ax.grid(True)
-        ax.set_xlim(min(latent_scores), max(latent_scores))
-        ax.plot(
-            latent_scores,
-            entropies,
-            linewidth=self.linewidth,
-        )
-        ax.set_xlabel(x_label)
-        ax.set_ylabel("Entropy")
-        ax.set_title("Item entropy")
-        ax.legend()
-        return fig, ax

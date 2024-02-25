@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 import logging
 import torch
-from torch import nn, vmap
-from torch.func import jacrev
+from torch import nn
 import torch.nn.functional as F
 from irtorch.helper_functions import linear_regression
 
@@ -10,7 +9,7 @@ logger = logging.getLogger('irtorch')
 
 class BaseIRTModel(ABC, nn.Module):
     """
-    Abstract base class for Item Response Theory models.
+    Abstract base class for Item Response Theory models. All IRT models should inherit from this class.
     
     Parameters
     ----------
@@ -46,7 +45,7 @@ class BaseIRTModel(ABC, nn.Module):
     @abstractmethod
     def forward(self, z) -> torch.Tensor:
         """
-        Forward pass of the model.
+        Forward pass of the model. PyTorch requires this method to be implemented in subclasses of nn.Module.
 
         Parameters
         ----------
@@ -62,7 +61,7 @@ class BaseIRTModel(ABC, nn.Module):
     @abstractmethod
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
-        Compute probabilities from the output tensor.
+        Compute probabilities from the output tensor from the forward method.
 
         Parameters
         ----------
@@ -164,8 +163,8 @@ class BaseIRTModel(ABC, nn.Module):
 
         Parameters
         ----------
-        z : torch.Tensor
-            A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        z : torch.Tensor, optional
+            A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
         bit_scores : torch.Tensor, optional
             A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
         rescale_by_item_score : bool, optional
@@ -282,7 +281,7 @@ class BaseIRTModel(ABC, nn.Module):
         z = z.clone().requires_grad_(True)
 
         def compute_jacobian(z_single):
-            jacobian = jacrev(self.item_probabilities)(z_single.view(1, -1))
+            jacobian = torch.func.jacrev(self.item_probabilities)(z_single.view(1, -1))
             return jacobian.squeeze((0, 3))
 
         logger.info("Computing Jacobian for all items and item categories...")
@@ -292,27 +291,42 @@ class BaseIRTModel(ABC, nn.Module):
     
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """
-        Calculate the Fisher information for the z scores. If 'item' is True, the item information is computed. Otherwise, the test information is computed.
+        Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
 
         Parameters
         ----------
         z : torch.Tensor
             A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
         item : bool, optional
-            Whether to compute the information. If False, the test information is computed. (default is True)
+            Whether to compute the information for each item (True) or for the test as a whole (False). Default is True.
         degrees : list[int], optional
-            A list of angles in degrees between 0 and 90. One degree for each latent variable.
-            Only applicable when the model is multidimensional.
-            If provided, the information will be computed in the direction of the angles. 
-            If not provided, the information matrices are returned. (default is None)
-            
+            A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. Default is None.
+
         Returns
         -------
         torch.Tensor
-            A torch tensor with the information for each z score. The last two dimensions are the information matrices for each item or for the test as a whole.
+            A tensor with the information for each z score. Dimensions depend on the 'item' and 'degrees' parameters.
 
-            - For test information, dimensions are (z, lv, lv) where lv is the number of latent variables in the model.
-            - For item information, dimensions are (z, items, lv, lv) where lv is the number of latent variables in the model.
+        Notes
+        -----
+        In the context of IRT, the Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the latent variable(s)
+        :math:`\\mathbf{z}`.
+
+        The formula for the Fisher information matrix in the case of multiple parameters is:
+
+        .. math::
+
+            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+
+        Where:
+
+        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        
+        For additional details, see :cite:t:`Chang2017`.
         """
         if degrees is not None and len(degrees) != self.latent_variables:
             raise ValueError("There must be one degree for each latent variable.")

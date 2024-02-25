@@ -21,6 +21,7 @@ setup(
         "tensorboard",
         "numpy",
         "pandas",
+        "plotly",
         "matplotlib",
         "scikit-learn",
     ],

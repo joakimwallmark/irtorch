@@ -159,91 +159,45 @@ class IRT:
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         **kwargs
-            Additional keyword arguments to pass to the fit method of the estimation algorithm. For details, see fit method documentation of the estimation algorithm. 
-            Currently supported algorithms are AEIRT and VAEIRT.
+            Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective fit estimation algorithm for details.
+            Currently supported algorithms are:
+
+            - 'AEIRT': See :class:`irtorch.estimation_algorithms.aeirt.AEIRT`
+            - 'VAEIRT': See :class:`irtorch.estimation_algorithms.vaeirt.VAEIRT`
         """
         self.algorithm.fit(
             train_data=train_data,
             **kwargs
         )
 
-    def latent_scores(
+    def accuracy(
         self,
-        data: torch.Tensor,
-        scale: str = "bit",
+        data: torch.Tensor = None,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
-        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
-        eap_z_integration_points: int = None,
-        bit_score_one_dimensional: bool = False,
-        bit_score_population_z: torch.Tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: str = None,
-        bit_score_start_z: torch.tensor = None,
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None
+        level: str = "all",
     ) -> torch.Tensor:
         """
-        Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
-        ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
-        EAP for models with more than three factors is not recommended since the integration grid becomes huge.
+        Calculate the prediction accuracy of the model for the supplied data.
 
         Parameters
         ----------
         data : torch.Tensor
-            A 2D tensor with test data. Each row represents one respondent, each column an item.
-        scale : str, optional
-            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
-        z : torch.Tensor, optional
-            For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
         z_estimation_method : str, optional
-            Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        ml_map_device : str, optional
-            For ML and MAP. The device to use for the LBFGS optimizer. (default is "cuda" if available else "cpu")
-        lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
-        eap_z_integration_points: int, optional
-            For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-        bit_score_one_dimensional: bool, optional
-            Whether to estimate one combined bit score for a multidimensional model. (default is False)
-        bit_score_population_z: torch.Tensor, optional
-            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        bit_score_start_z_guessing_iterations: int, optional
-            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        bit_score_items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        level: str = "all", optional
+            Specifies the level at which the accuracy is calculated. Can be 'all', 'item' or 'respondent'. For example, for 'item' the accuracy is calculated for each item. (default is 'all')
+
         Returns
         -------
         torch.Tensor
-            A 2D tensor of latent scores, with latent variables as columns.
+            The accuracy.
         """
-        return self.scorer.latent_scores(
-            data,
-            scale,
-            z,
-            z_estimation_method,
-            ml_map_device,
-            lbfgs_learning_rate,
-            eap_z_integration_points,
-            bit_score_one_dimensional,
-            bit_score_population_z,
-            bit_score_grid_points,
-            bit_score_z_grid_method,
-            bit_score_start_z,
-            bit_score_start_z_guessing_probabilities,
-            bit_score_start_z_guessing_iterations,
-            bit_score_items,
-        )
+        return self.evaluator.accuracy(data, z, z_estimation_method, level)
+    
 
     def bit_scores_from_z(
         self,
@@ -306,42 +260,6 @@ class IRT:
             start_z_guessing_iterations=start_z_guessing_iterations,
         )
 
-    def sum_score_probabilities(
-        self,
-        latent_density_method: str = "data",
-        population_data: torch.Tensor = None,
-        trapezoidal_segments: int = 1000,
-        sample_size: int = 100000,
-    ) -> torch.Tensor:
-        """
-        Computes the marginal probabilities for each sum score, averged over the latent space density. For 'qmvn' and 'gmm' densities, the trapezoidal rule is used for integral approximation.
-
-        Parameters
-        ----------
-        latent_density_method : str, optional
-            Specifies the method used to approximate the latent space density.
-            Possible options are
-            - 'data' averages over the z scores from the population data.
-            - 'encoder sampling' samples z scores from the encoder. Only available for VariationalAutoencoderIRT models
-            - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
-            - 'gmm' for an sklearn gaussian mixture model.
-
-        population_data : torch.Tensor, optional
-            The population data used for approximating sum score probabilities. Default is None and uses the training data.
-        trapezoidal_segments : int, optional
-            The number of integration approximation intervals for each z dimension. (Default is 1000)
-        sample_size : int, optional
-            Sample size for the 'encoder sampling' method. (Default is 100000)
-
-        Returns
-        -------
-        torch.Tensor
-            A 1D tensor with the probability for each total score.
-        """
-        return self.evaluator.sum_score_probabilities(
-            latent_density_method, population_data, trapezoidal_segments, sample_size
-        )
-
     def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
         Computes the model expected item scores/sum scores for each respondent.
@@ -387,95 +305,6 @@ class IRT:
             z = self.algorithm.training_z_scores
         return self.model.expected_item_score_slopes(z, bit_scores, rescale_by_item_score)
         
-
-    def accuracy(
-        self,
-        data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        level: str = "all",
-    ) -> torch.Tensor:
-        """
-        Calculate the prediction accuracy of the model for the supplied data.
-
-        Parameters
-        ----------
-        data : torch.Tensor
-            The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        level: str = "all", optional
-            Specifies the level at which the accuracy is calculated. Can be 'all', 'item' or 'respondent'. For example, for 'item' the accuracy is calculated for each item. (default is 'all')
-
-        Returns
-        -------
-        torch.Tensor
-            The accuracy.
-        """
-        return self.evaluator.accuracy(data, z, z_estimation_method, level)
-    
-    def residuals(
-        self,
-        data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        average_per: str = "none",
-    ) -> torch.Tensor:
-        """
-        Calculate the residuals of the model for the supplied data.
-
-        Parameters
-        ----------
-        data : torch.Tensor
-            The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        average_per: str = "none", optional
-            Whether to average the residuals and over which level. Can be 'all', 'item' or 'respondent'. Use 'none' for no average. For example, with 'item' the average residuals is calculated for each item. (default is 'none')
-            
-        Returns
-        -------
-        torch.Tensor
-            The residuals.
-        """
-        return self.evaluator.residuals(data, z, z_estimation_method, average_per)
-    
-    def log_likelihood(
-        self,
-        data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        reduction: str = "sum",
-        level: str = "all",
-    ) -> torch.Tensor:
-        """
-        Calculate the log-likelihood for the provided data.
-
-        If 'data' is not supplied, the function defaults to using the model's training data.
-
-        Parameters
-        ----------
-        data : torch.Tensor, optional
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z : torch.Tensor, optional
-            A 2D tensor containing latent variable z scores. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
-        reduction : str, optional
-            Specifies the reduction method for the log-likelihood. Can be 'sum', 'none' or 'mean'. (default is 'sum')
-        level : str, optional
-            For reductions other than 'none', specifies the level at which the log-likelihood is summed/averaged. Can be 'all', 'item' or 'respondent'. For example, for 'item' the log-likelihood is summed/averaged for each item. (default is 'all')
-            
-        Returns
-        -------
-        torch.Tensor
-            The log-likelihood for the provided data.
-        """
-        return self.evaluator.log_likelihood(data, z, z_estimation_method, reduction, level)
 
     def group_fit_log_likelihood(
         self,
@@ -583,6 +412,222 @@ class IRT:
             bit_score_start_z_guessing_probabilities = bit_score_start_z_guessing_probabilities,
             bit_score_start_z_guessing_iterations = bit_score_start_z_guessing_iterations,
             bit_score_items = bit_score_items,
+        )
+
+    def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
+        """
+        Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
+        item : bool, optional
+            Whether to compute the information for each item (True) or for the test as a whole (False). Default is True.
+        degrees : list[int], optional
+            A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. Default is None.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the information for each z score. Dimensions depend on the 'item' and 'degrees' parameters.
+
+        Notes
+        -----
+        In the context of IRT, the Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the latent variable(s)
+        :math:`\\mathbf{z}`.
+
+        The formula for the Fisher information matrix in the case of multiple parameters is:
+
+        .. math::
+
+            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+
+        Where:
+
+        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        
+        For additional details, see :cite:t:`Chang2017`.
+        """
+        return self.model.information(z, item, degrees)
+
+    def latent_scores(
+        self,
+        data: torch.Tensor,
+        scale: str = "bit",
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        lbfgs_learning_rate: float = 0.3,
+        eap_z_integration_points: int = None,
+        bit_score_one_dimensional: bool = False,
+        bit_score_population_z: torch.Tensor = None,
+        bit_score_grid_points: int = 300,
+        bit_score_z_grid_method: str = None,
+        bit_score_start_z: torch.tensor = None,
+        bit_score_start_z_guessing_probabilities: list[float] = None,
+        bit_score_start_z_guessing_iterations: int = 10000,
+        bit_score_items: list[int] = None
+    ) -> torch.Tensor:
+        """
+        Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
+        ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
+        EAP for models with more than three factors is not recommended since the integration grid becomes huge.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            A 2D tensor with test data. Each row represents one respondent, each column an item.
+        scale : str, optional
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+        z : torch.Tensor, optional
+            For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        ml_map_device : str, optional
+            For ML and MAP. The device to use for the LBFGS optimizer. (default is "cuda" if available else "cpu")
+        lbfgs_learning_rate: float, optional
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+        eap_z_integration_points: int, optional
+            For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
+        bit_score_one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is False)
+        bit_score_population_z: torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
+        bit_score_grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        bit_score_z_grid_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is None and uses z_estimation_method)
+        bit_score_start_z : int, optional
+            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        bit_score_start_z_guessing_probabilities: list[float], optional
+            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        bit_score_start_z_guessing_iterations: int, optional
+            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
+        bit_score_items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent scores, with latent variables as columns.
+        """
+        return self.scorer.latent_scores(
+            data,
+            scale,
+            z,
+            z_estimation_method,
+            ml_map_device,
+            lbfgs_learning_rate,
+            eap_z_integration_points,
+            bit_score_one_dimensional,
+            bit_score_population_z,
+            bit_score_grid_points,
+            bit_score_z_grid_method,
+            bit_score_start_z,
+            bit_score_start_z_guessing_probabilities,
+            bit_score_start_z_guessing_iterations,
+            bit_score_items,
+        )
+
+    def log_likelihood(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        reduction: str = "sum",
+        level: str = "all",
+    ) -> torch.Tensor:
+        """
+        Calculate the log-likelihood for the provided data.
+
+        If 'data' is not supplied, the function defaults to using the model's training data.
+
+        Parameters
+        ----------
+        data : torch.Tensor, optional
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        z : torch.Tensor, optional
+            A 2D tensor containing latent variable z scores. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        reduction : str, optional
+            Specifies the reduction method for the log-likelihood. Can be 'sum', 'none' or 'mean'. (default is 'sum')
+        level : str, optional
+            For reductions other than 'none', specifies the level at which the log-likelihood is summed/averaged. Can be 'all', 'item' or 'respondent'. For example, for 'item' the log-likelihood is summed/averaged for each item. (default is 'all')
+            
+        Returns
+        -------
+        torch.Tensor
+            The log-likelihood for the provided data.
+        """
+        return self.evaluator.log_likelihood(data, z, z_estimation_method, reduction, level)
+
+    def residuals(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        average_per: str = "none",
+    ) -> torch.Tensor:
+        """
+        Calculate the residuals of the model for the supplied data.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        average_per: str = "none", optional
+            Whether to average the residuals and over which level. Can be 'all', 'item' or 'respondent'. Use 'none' for no average. For example, with 'item' the average residuals is calculated for each item. (default is 'none')
+            
+        Returns
+        -------
+        torch.Tensor
+            The residuals.
+        """
+        return self.evaluator.residuals(data, z, z_estimation_method, average_per)
+
+    def sum_score_probabilities(
+        self,
+        latent_density_method: str = "data",
+        population_data: torch.Tensor = None,
+        trapezoidal_segments: int = 1000,
+        sample_size: int = 100000,
+    ) -> torch.Tensor:
+        """
+        Computes the marginal probabilities for each sum score, averged over the latent space density. For 'qmvn' and 'gmm' densities, the trapezoidal rule is used for integral approximation.
+
+        Parameters
+        ----------
+        latent_density_method : str, optional
+            Specifies the method used to approximate the latent space density.
+            Possible options are
+            - 'data' averages over the z scores from the population data.
+            - 'encoder sampling' samples z scores from the encoder. Only available for VariationalAutoencoderIRT models
+            - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
+            - 'gmm' for an sklearn gaussian mixture model.
+
+        population_data : torch.Tensor, optional
+            The population data used for approximating sum score probabilities. Default is None and uses the training data.
+        trapezoidal_segments : int, optional
+            The number of integration approximation intervals for each z dimension. (Default is 1000)
+        sample_size : int, optional
+            Sample size for the 'encoder sampling' method. (Default is 100000)
+
+        Returns
+        -------
+        torch.Tensor
+            A 1D tensor with the probability for each total score.
+        """
+        return self.evaluator.sum_score_probabilities(
+            latent_density_method, population_data, trapezoidal_segments, sample_size
         )
 
     def save_model(self, path: str) -> None:
@@ -698,6 +743,71 @@ class IRT:
             **kwargs
         )
     
+    def plot_expected_sum_score(
+        self,
+        items: list[int] = None,
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the expected sum score from the model against the latent variable(s).
+        Supports full test scores, a single item or a subset of items.
+
+        Parameters
+        ----------
+        items : list[int], optional
+            The items used to compte the sum score. If None, all items are used. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Expected sum score" or "Expected item score" for one latent variable, and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        z_range : tuple[float, float], optional
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+        """
+        return self.plotter.plot_expected_sum_score(
+            items=items,
+            scale=scale,
+            latent_variables=latent_variables,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            color=color,
+            colorscale=colorscale,
+            z_range=z_range,
+            second_z_range=second_z_range,
+            steps=steps,
+            fixed_zs=fixed_zs,
+            **kwargs
+        )
+
     def plot_information(
         self,
         items: list[int] = None,
@@ -716,7 +826,7 @@ class IRT:
         **kwargs
     ) -> go.Figure:
         """
-        Plots the information function for the model.
+        Plots the Fisher information function against the latent variable(s).
         Supports both item and test information.
 
         Parameters
@@ -726,7 +836,7 @@ class IRT:
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple[int], optional
-            The latent space variables to plot. (default is (1,))
+            The latent variables to plot. (default is (1,))
         degrees : list[int], optional
             A list of angles in degrees between 0 and 90. One degree for each latent variable.
             Only applicable when the model is multidimensional.
@@ -803,7 +913,7 @@ class IRT:
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
-            The latent space variables to plot. (default is (1,))
+            The latent variables to plot. (default is (1,))
         fixed_zs: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         steps : int, optional

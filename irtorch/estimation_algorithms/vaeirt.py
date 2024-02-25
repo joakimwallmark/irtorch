@@ -12,7 +12,7 @@ logger = logging.getLogger('irtorch')
 
 class VAEIRT(AEIRT):
     """
-    Initialize the variational autoencoder neural network.
+    Variational autoencoder neural network for fitting IRT models.
 
     Parameters
     ----------

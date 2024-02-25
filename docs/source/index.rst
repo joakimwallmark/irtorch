@@ -30,8 +30,15 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
 
    irt
    irt_models
+   estimation_algorithms
    config
    datasets
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Literature 🧾
+
+   literature 
 
 .. * :ref:`genindex`
 .. * :ref:`modindex`

@@ -338,7 +338,7 @@ class IRTPlotter:
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
-            The latent space variables to plot. (default is (1,))
+            The latent variables to plot. (default is (1,))
         fixed_zs: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         steps : int, optional
@@ -505,7 +505,7 @@ class IRTPlotter:
         **kwargs
     ) -> go.Figure:
         """
-        Plots the information function for the model.
+        Plots the Fisher information function against the latent variable(s).
         Supports both item and test information.
 
         Parameters
@@ -515,7 +515,7 @@ class IRTPlotter:
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple[int], optional
-            The latent space variables to plot. (default is (1,))
+            The latent variables to plot. (default is (1,))
         degrees : list[int], optional
             A list of angles in degrees between 0 and 90. One degree for each latent variable.
             Only applicable when the model is multidimensional.
@@ -577,7 +577,9 @@ class IRTPlotter:
                 **kwargs
             )[0][:, latent_indices]
         else:
-            scores_to_plot = z_grid
+            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
@@ -609,6 +611,131 @@ class IRTPlotter:
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
                 z_label = "Information",
+                colorscale = colorscale
+            )
+
+    def plot_expected_sum_score(
+        self,
+        items: list[int] = None,
+        scale: str = "bit",
+        latent_variables: tuple[int] = (1,),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        z_range: tuple[float, float] = None,
+        second_z_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_zs: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the expected sum score from the model against the latent variable(s).
+        Supports full test scores, a single item or a subset of items.
+
+        Parameters
+        ----------
+        items : list[int], optional
+            The items used to compte the sum score. If None, all items are used. (default is None)
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Expected sum score" or "Expected item score" for one latent variable, and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        z_range : tuple[float, float], optional
+            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
+        second_z_range : tuple[float, float], optional
+            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+        """
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if z_range is not None and len(z_range) != 2:
+            raise TypeError("z_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
+            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if steps is None:
+            steps = 100 if len(latent_variables) == 1 else 18
+
+        latent_indices = [z - 1 for z in latent_variables]
+
+        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        
+        if items is not None:
+            item_mask = torch.zeros(self.model.items, dtype=bool)
+            item_mask[[item - 1 for item in items]] = 1
+            sum_scores = self.model.expected_item_sum_score(z_grid, return_item_scores=True)[:, [item - 1 for item in items]].sum(dim=1)
+        else:
+            sum_scores = self.model.expected_item_sum_score(z_grid, return_item_scores=False)
+
+        if scale == "bit":
+            scores_to_plot = self.scorer.bit_scores_from_z(
+                z=z_grid,
+                **kwargs
+            )[0][:, latent_indices]
+        else:
+            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
+
+        if items is not None and len(items) == 1:
+            title = f"Expected score. Item {items[0]}" if title is None else title
+
+        if len(latent_variables) == 1:
+            if items is not None and len(items) == 1:
+                y_label = "Expected item score" if y_label is None else y_label
+            scores_to_plot.squeeze_()
+            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+                start_idx = min_indices[0].item()  # get the first index
+                scores_to_plot = scores_to_plot[:start_idx]
+                sum_scores = sum_scores[:start_idx]
+            else:
+                start_idx = min_indices[-1].item()  # get the last index
+                scores_to_plot = scores_to_plot[start_idx:]
+                sum_scores = sum_scores[start_idx:]
+                
+            fig = self._2d_line_plot(
+                x = scores_to_plot,
+                y = sum_scores,
+                title = title or "Expected sum score",
+                x_label = x_label or "Latent variable",
+                y_label = y_label or "Expected sum score",
+                color = color or None
+            )
+            fig.update_yaxes(range=[0, None])
+            return fig
+        
+        if len(latent_variables) == 2:
+            grid_size = int(np.sqrt(sum_scores.size()))
+            return self._3d_surface_plot(
+                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
+                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
+                z = sum_scores.reshape((grid_size, grid_size)),
+                title = title or "Expected sum score",
+                x_label = x_label or "Latent variable 1",
+                y_label = y_label or "Latent variable 2",
+                z_label = "Expected sum score",
                 colorscale = colorscale
             )
 

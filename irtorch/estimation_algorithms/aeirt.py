@@ -13,7 +13,7 @@ logger = logging.getLogger('irtorch')
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
     """
-    Initialize the autoencoder neural network.
+    Autoencoder neural network for fitting IRT models.
 
     Parameters
     ----------

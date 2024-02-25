@@ -6,21 +6,21 @@ from irtorch.models import BaseIRTModel
 logger = logging.getLogger('irtorch')
 
 class BaseIRTAlgorithm(ABC):
+    """
+    Abstract base class for IRT algorithms. All IRT algorithms should inherit from this class.
+
+    Parameters
+    ----------
+    model : BaseIRTModel, optional
+        The model to train. Needs to inherit irtorch.models.BaseIRTModel.
+    one_hot_encoded : bool, optional
+        Whether the algorithm uses one-hot encoded data. (default is False)
+    """
     def __init__(
         self,
         model: BaseIRTModel,
         one_hot_encoded: bool = False,
     ):
-        """
-        Initialize the IRT fitting algorithm.
-
-        Parameters
-        ----------
-        model : BaseIRTModel, optional
-            The model to train. Needs to inherit irtorch.models.BaseIRTModel.
-        one_hot_encoded : bool, optional
-            Whether the algorithm uses one-hot encoded data. (default is False)
-        """
         super().__init__()
         self.model = model
         self.imputation_method = "zero"

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 import torch
 import pytest
-from matplotlib.figure import Figure
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.irt_plotter import IRTScorer, IRTPlotter, IRTEvaluator
 from irtorch.models import BaseIRTModel

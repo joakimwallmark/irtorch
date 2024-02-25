@@ -2,8 +2,6 @@ import logging
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from plotly import graph_objects as go
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
 from irtorch.models import BaseIRTModel
 from irtorch.models import Parametric
 from irtorch.models import NonparametricMonotoneNN
@@ -344,18 +342,13 @@ class IRT:
         self,
         data: torch.Tensor = None,
         z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        scale: str = "z",
+        latent_variable: int = 1,
         standardize: bool = True,
         groups: int = 10,
-        latent_variable: int = 1,
-        scale: str = "z",
-        bit_score_start_z: torch.tensor = None,
+        z_estimation_method: str = "ML",
         population_z: torch.Tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None,
+        **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
@@ -370,28 +363,22 @@ class IRT:
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z : torch.Tensor, optional
             A 2D tensor containing the pre-estimated z scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        scale : str, optional
+            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
+            models, 'z' and 'bit' are equivalent. (default is 'z')
+        latent_variable: int, optional
+            Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         standardize : bool, optional
             Specifies whether the residuals should be standardized. (default is True)
         groups: int
             The number of groups. (default is 10)
-        latent_variable: int, optional
-            Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
-        scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'bit' are equivalent. (default is 'z')
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
         population_z : torch.Tensor, optional
             Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the bit_scores_from_z method if scale is 'bit'. See :meth:`bit_scores_from_z` for details.
+            
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
@@ -405,13 +392,8 @@ class IRT:
             groups = groups,
             latent_variable = latent_variable,
             scale = scale,
-            bit_score_start_z = bit_score_start_z,
             population_z = population_z,
-            bit_score_grid_points = bit_score_grid_points,
-            bit_score_z_grid_method = bit_score_z_grid_method,
-            bit_score_start_z_guessing_probabilities = bit_score_start_z_guessing_probabilities,
-            bit_score_start_z_guessing_iterations = bit_score_start_z_guessing_iterations,
-            bit_score_items = bit_score_items,
+            **kwargs
         )
 
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
@@ -884,24 +866,20 @@ class IRT:
         item: int,
         scale: str = "bit",
         latent_variables: tuple = (1, ),
-        fixed_zs: torch.Tensor = None,
-        steps: int = 1000,
-        bit_score_start_z: torch.tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
         z_range: tuple[float, float] = None,
         second_z_range: tuple[float, float] = None,
+        steps: int = 300,
+        fixed_zs: torch.Tensor = None,
         plot_group_fit: bool = False,
         group_fit_groups: int = 10,
         group_fit_data: int = None,
         group_fit_population_z: torch.Tensor = None,
-        group_z_estimation_method: str = "ML",
-        plot_derivative: bool = False,
         grayscale: bool = False,
-    ) -> tuple[Figure, Axes]:
+        **kwargs
+    ) -> go.Figure:
         """
         Plots the item probability curves for a given item. Supports 2D and 3D plots.
 
@@ -913,26 +891,20 @@ class IRT:
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
             The latent variables to plot. (default is (1,))
-        fixed_zs: torch.Tensor, optional
-            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
-        steps : int, optional
-            The number of steps along each z axis used for probability evaluation. (default is 1000)
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        bit_score_start_z_guessing_iterations: int, optional
-            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        bit_score_items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+        title : str, optional
+            The title for the plot. (default is None and uses "IRF - Item {item}")
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Probability")
         z_range : tuple, optional
             Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
         second_z_range : tuple, optional
             Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis used for probability evaluation. (default is 300)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         plot_group_fit : bool, optional
             Plot group average probabilities to assess fit. (default is False)
         group_fit_groups : int, optional
@@ -941,39 +913,33 @@ class IRT:
             Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
         group_fit_population_z : torch.tensor, optional
             Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
-        group_z_estimation_method : str, optional
-            The method used for computing z-scores for the groups. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'ML')
-        plot_derivative : bool, optional
-            If true, plots the derivative of the item probabilitiy curves. Note that this feature is not yet implemented and will raise a TypeError if set to true. (default is False)
         grayscale : bool, optional
-            Grayscale plot. (default is False)
+            Plot the item probability curves in grey scale. (default is False)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         return self.plotter.plot_item_probabilities(
             item=item,
             scale=scale,
             latent_variables=latent_variables,
-            fixed_zs=fixed_zs,
-            steps=steps,
-            bit_score_start_z=bit_score_start_z,
-            bit_score_grid_points=bit_score_grid_points,
-            bit_score_z_grid_method=bit_score_z_grid_method,
-            bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-            bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
-            bit_score_items=bit_score_items,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
             z_range=z_range,
             second_z_range=second_z_range,
+            steps=steps,
+            fixed_zs=fixed_zs,
             plot_group_fit=plot_group_fit,
             group_fit_groups=group_fit_groups,
             group_fit_data=group_fit_data,
             group_fit_population_z=group_fit_population_z,
-            group_z_estimation_method=group_z_estimation_method,
-            plot_derivative=plot_derivative,
             grayscale=grayscale,
+            **kwargs
         )
 
     def plot_item_entropy(

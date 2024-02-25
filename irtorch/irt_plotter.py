@@ -5,10 +5,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from matplotlib.legend import Legend
-from matplotlib.lines import Line2D
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.irt_scorer import IRTScorer
@@ -202,7 +198,7 @@ class IRTPlotter:
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
-            The title for the plot. (default is None)
+            The title for the plot. (default is None and prints "Item {item} entropy")
         x_label : str, optional
             The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
         y_label : str, optional
@@ -355,24 +351,20 @@ class IRTPlotter:
         item: int,
         scale: str = "bit",
         latent_variables: tuple = (1, ),
-        fixed_zs: torch.Tensor = None,
-        steps: int = 1000,
-        bit_score_start_z: torch.tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
         z_range: tuple[float, float] = None,
         second_z_range: tuple[float, float] = None,
+        steps: int = 300,
+        fixed_zs: torch.Tensor = None,
         plot_group_fit: bool = False,
         group_fit_groups: int = 10,
         group_fit_data: int = None,
         group_fit_population_z: torch.Tensor = None,
-        group_z_estimation_method: str = "ML",
-        plot_derivative: bool = False,
         grayscale: bool = False,
-    ) -> tuple[plt.Figure, plt.Axes]:
+        **kwargs
+    ) -> go.Figure:
         """
         Plots the item probability curves for a given item. Supports 2D and 3D plots.
 
@@ -384,26 +376,20 @@ class IRTPlotter:
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables : tuple, optional
             The latent variables to plot. (default is (1,))
-        fixed_zs: torch.Tensor, optional
-            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
-        steps : int, optional
-            The number of steps along each z axis used for probability evaluation. (default is 1000)
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        bit_score_start_z_guessing_iterations: int, optional
-            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        bit_score_items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+        title : str, optional
+            The title for the plot. (default is None and uses "IRF - Item {item}")
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Probability")
         z_range : tuple, optional
             Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
         second_z_range : tuple, optional
             Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each z axis used for probability evaluation. (default is 300)
+        fixed_zs: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         plot_group_fit : bool, optional
             Plot group average probabilities to assess fit. (default is False)
         group_fit_groups : int, optional
@@ -412,22 +398,17 @@ class IRTPlotter:
             Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
         group_fit_population_z : torch.tensor, optional
             Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
-        group_z_estimation_method : str, optional
-            The method used for computing z-scores for the groups. Can be 'NN', 'ML', 'MAP' or 'EAP'. (default is 'ML')
-        plot_derivative : bool, optional
-            If true, plots the derivative of the item probabilitiy curves. Note that this feature is not yet implemented and will raise a TypeError if set to true. (default is False)
         grayscale : bool, optional
-            Grayscale plot. (default is False)
+            Plot the item probability curves in grey scale. (default is False)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         # TODO: Integrate over non-plotted dimensions for multidimensional models...
-        if plot_derivative:
-            raise TypeError("Derivatives not yet implemented.")
-
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
             raise TypeError("Cannot plot more than two latent variables in one plot.")
@@ -471,16 +452,10 @@ class IRTPlotter:
         prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
 
         if scale == "bit":
-            scores_to_plot, bit_score_start_z = self.scorer.bit_scores_from_z(
+            scores_to_plot, _ = self.scorer.bit_scores_from_z(
                 z=z_grid,
-                start_z=bit_score_start_z,
                 one_dimensional=False,
-                z_estimation_method=bit_score_z_grid_method,
-                # ml_map_device=ml_map_device,
-                grid_points=bit_score_grid_points,
-                items=bit_score_items,
-                start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-                start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
+                **kwargs
             )
         else:
             scores_to_plot = z_grid
@@ -492,18 +467,12 @@ class IRTPlotter:
                     group_probs_model,
                     latent_group_means,
                 ) = self.evaluator.latent_group_probabilities(
-                    groups=group_fit_groups,
                     data=group_fit_data,
-                    scale=scale,
                     z=group_fit_population_z,
-                    z_estimation_method=group_z_estimation_method,
-                    bit_score_start_z=bit_score_start_z,
-                    bit_score_grid_points=bit_score_grid_points,
-                    bit_score_z_grid_method=bit_score_z_grid_method,
-                    bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-                    bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
-                    bit_score_items=bit_score_items,
+                    scale=scale,
                     latent_variable=latent_variables[0],
+                    groups=group_fit_groups,
+                    **kwargs
                 )
                 group_probs_data = group_probs_data[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
                 group_probs_model = group_probs_model[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
@@ -517,8 +486,10 @@ class IRTPlotter:
                 latent_group_means,
                 group_probs_data,
                 group_probs_model,
-                title=f"IRF - Item {item}",
-                grayscale=grayscale,
+                title=title or f"IRF - Item {item}",
+                x_label=x_label or f"Latent variable {latent_variables[0]}",
+                y_label=y_label or "Probability",
+                grayscale=grayscale
             )
         
         if len(latent_variables) == 2:
@@ -526,10 +497,11 @@ class IRTPlotter:
                 scores_to_plot[:, latent_indices[0]],
                 scores_to_plot[:, latent_indices[1]],
                 prob_matrix,
-                x_label=f"Latent variable {latent_variables[0]}",
-                y_label=f"Latent variable {latent_variables[1]}",
-                title=f"IRF - Item {item}",
-                grayscale=grayscale,
+                title=title or f"IRF - Item {item}",
+                x_label=x_label or f"Latent variable {latent_variables[0]}",
+                y_label=y_label or f"Latent variable {latent_variables[1]}",
+                z_label="Probability",
+                grayscale=grayscale
             )
 
     def plot_information(
@@ -876,7 +848,7 @@ class IRTPlotter:
         y_label: str = "Probability",
         title: str = "IRF",
         grayscale: bool = False,
-    ) -> tuple[plt.Figure, plt.Axes]:
+    ) -> go.Figure:
         """
         Creates a plot of item probabilities against latent variable.
 
@@ -903,8 +875,8 @@ class IRTPlotter:
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         min_indices = (latent_scores == latent_scores.min()).nonzero().flatten()
         if min_indices[-1] == len(latent_scores) - 1:  # if we have reversed z scale
@@ -916,114 +888,75 @@ class IRTPlotter:
             latent_scores = latent_scores[start_idx:]
             prob_matrix = prob_matrix[start_idx:, :]
 
-        plot_group_fit = False
         latent_scores = latent_scores.cpu().numpy()
         prob_matrix = prob_matrix.cpu().numpy()
-        if (
-            latent_group_means is not None
-            and group_probs_data is not None
-            and group_probs_model is not None
-        ):
-            plot_group_fit = True
+        if latent_group_means is not None:
             latent_group_means = latent_group_means.cpu().numpy()
+        if group_probs_data is not None:
             group_probs_data = group_probs_data.cpu().numpy()
+        if group_probs_model is not None:
             group_probs_model = group_probs_model.cpu().numpy()
 
-        fig, ax = plt.subplots()
-        ax.grid(True)
-        ax.set_xlim(min(latent_scores), max(latent_scores))
+        fig = go.Figure()
+        num_categories = prob_matrix.shape[1]
 
         if grayscale:
-            cmap = plt.get_cmap("binary")
-            colors = cmap(torch.linspace(0.3, 1, prob_matrix.shape[1]).numpy())
+            colors = self._generate_grayscale_colors(num_categories)
         else:
-            cmap = plt.get_cmap(self.color_map)
-            colors = cmap(torch.linspace(0, 1, prob_matrix.shape[1]).numpy())
+            colors = px.colors.qualitative.Plotly
+        
+        # Adjust the size of the palette if there are more categories than colors
+        if len(colors) < num_categories:
+            colors = colors * (num_categories // len(colors) + 1)
 
-        # Create empty lists for custom legend handles and labels
-        handles = []
-        labels = []
+        # Plot each response category
+        for i in range(prob_matrix.shape[1]):
+            color = colors[i % len(colors)]  # Ensure color wraps around if more categories than colors
+            fig.add_trace(go.Scatter(
+                x=latent_scores,
+                y=prob_matrix[:, i],
+                mode='lines',
+                name=f'Response {i}',
+                line=dict(color=color)
+            ))
 
-        for response_category in range(prob_matrix.shape[1]):
-            color = colors[response_category]
-            (line,) = ax.plot(
-                latent_scores,
-                prob_matrix[:, response_category],
-                color=color,
-                linewidth=self.linewidth,
-            )
-            if plot_group_fit:
-                scatter_data = ax.scatter(
-                    latent_group_means,
-                    group_probs_data[:, response_category],
-                    marker="o",
-                    edgecolors=color,
-                    facecolors="none",
-                    s=self.markersize**2,  # size
-                    zorder=3,  # draw dots above grid, default is 2
-                )
-                scatter_model = ax.scatter(
-                    latent_group_means,
-                    group_probs_model[:, response_category],
-                    marker="o",
-                    color=color,
-                    s=self.markersize**2,
-                    zorder=3,
-                )
-                handles.append((line, scatter_data, scatter_model))
-            else:
-                handles.append(line)
+            if latent_group_means is not None and group_probs_data is not None and group_probs_model is not None:
+                # Adding scatter plot for group data
+                fig.add_trace(go.Scatter(
+                    x=latent_group_means,
+                    y=group_probs_data[:, i],
+                    mode='markers', name=f'Data {i}',
+                    marker=dict(symbol='circle-open', color=color)
+                ))
+                # Adding scatter plot for group model predictions
+                fig.add_trace(go.Scatter(
+                    x=latent_group_means,
+                    y=group_probs_model[:, i],
+                    mode='markers',
+                    name=f'Model {i}',
+                    marker=dict(symbol='circle', color=color)
+                ))
 
-            # Add custom legend handle and label
-            labels.append(response_category)
+        fig.update_layout(
+            title=title,
+            xaxis_title=x_label,
+            yaxis_title=y_label,
+            legend_title="Item responses",
+        )
 
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_title(title)
-
-        if plot_group_fit:
-            # Create a custom legend
-            legend_elements = [
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    markersize=self.markersize,
-                    color="black",
-                    linestyle="None",
-                    markerfacecolor="none",
-                    label="Data",
-                ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    markersize=self.markersize,
-                    color="black",
-                    linestyle="None",
-                    markerfacecolor="black",
-                    label="Model",
-                ),
-            ]
-            ax.legend(handles=legend_elements, loc="lower right")
-
-        # Add the line legend
-        line_legend = Legend(ax, handles, labels, title="Scores", loc="upper right")
-        ax.add_artist(line_legend)
-
-        return fig, ax
+        return fig
 
     def _item_probabilities_3dplot(
         self,
         latent_variable_x: torch.Tensor,
         latent_variable_y: torch.Tensor,
         prob_matrix: torch.Tensor,
+        title: str = "IRF",
         x_label: str = "Latent variable",
         y_label: str = "Latent variable",
         z_label: str = "Probability",
-        title: str = "IRF",
         grayscale: bool = False,
-    ) -> tuple[plt.Figure, plt.Axes]:
+    ) -> go.Figure:
         """
         Creates a 3D plot of item probabilities against two latent variables.
 
@@ -1048,52 +981,57 @@ class IRTPlotter:
 
         Returns
         -------
-        tuple[Figure, Axes]
-            The matplotlib Figure and Axes objects for the plot.
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         latent_variable_x = latent_variable_x.cpu().numpy()
         latent_variable_y = latent_variable_y.cpu().numpy()
         prob_matrix = prob_matrix.cpu().numpy()
-        num_responses = prob_matrix.shape[1]
-
         # The number of steps (points in each dimension) should be the square root of the number of points.
         steps = int(np.sqrt(len(latent_variable_x)))
-        # Reshape the data into a format suitable for a surface plot.
-        latent_variable_x = np.array(latent_variable_x).reshape((steps, steps))
-        latent_variable_y = np.array(latent_variable_y).reshape((steps, steps))
+        num_responses = prob_matrix.shape[1]
+
+        # Reshape the data into a format suitable for a surface plot
+        x = np.array(latent_variable_x).reshape((steps, steps))
+        y = np.array(latent_variable_y).reshape((steps, steps))
 
         if grayscale:
-            cmap = plt.get_cmap("binary")
-            colors = cmap(torch.linspace(0.3, 1, num_responses).numpy())
+            colors = self._generate_grayscale_colors(num_responses)
         else:
-            cmap = plt.get_cmap(self.color_map)
-            colors = cmap(torch.linspace(0, 1, num_responses).numpy())
+            colors = px.colors.qualitative.Plotly
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        # Ensure we have enough colors for the number of responses
+        if len(colors) < num_responses:
+            colors += colors * (num_responses // len(colors) + 1) 
 
-        handles = []
+        fig = go.Figure()
         for response_category in range(num_responses):
-            category_probs = prob_matrix[:, response_category].reshape((steps, steps))
-            ax.plot_surface(
-                latent_variable_x,
-                latent_variable_y,
-                category_probs,
-                color=colors[response_category],
-                shade=False,  # Avoids the darkening effect of shading
-                alpha=0.7)  # For better visualization of overlaying surfaces
+            z = prob_matrix[:, response_category].reshape((steps, steps))
+            fig.add_trace(go.Surface(
+                x=x, y=y, z=z, 
+                name=f'Response {response_category}',
+                showscale=False,  # Optionally hide the color scale
+                colorscale=[(0, colors[response_category % len(colors)]), (1, colors[response_category % len(colors)])],
+            ))
+            # Dummy trace for legend
+            fig.add_trace(go.Scatter3d(
+                x=[None], y=[None], z=[None], mode='markers',
+                marker=dict(size=10, color=colors[response_category % len(colors)]),
+                showlegend=True, name=f'Response {response_category}'
+            ))
 
-            # Create a proxy artist for the legend entry (since you cannot directly use a 3D surface)
-            proxy = Patch(facecolor=colors[response_category], label=response_category)
-            handles.append(proxy)
-            
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_zlabel(z_label)
-        ax.set_title(title)
-        ax.legend(handles=handles, loc="upper right", title="Scores", bbox_to_anchor=(1.15, 1.1))
+        fig.update_layout(
+            title=title,
+            scene=dict(
+                xaxis_title=x_label,
+                yaxis_title=y_label,
+                zaxis_title=z_label,
+            ),
+            legend_title="Item responses",
+            autosize=True,
+        )
 
-        return fig, ax
+        return fig
 
     def _distribution_plot(
         self,
@@ -1191,3 +1129,28 @@ class IRTPlotter:
         )
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
         return fig
+
+    def _generate_grayscale_colors(self, n, start_color='#b0b0b0'):
+        """
+        Generates a list of n colors in grayscale from light gray to black.
+
+        Parameters
+        ----------
+        n : int
+            The number of colors to generate.
+        start_color : str, optional
+            The color to start from. (default is '#b0b0b0')
+
+        Returns
+        -------
+        list
+            A list of n colors in hexadecimal format.
+        """
+        start_rgb = np.array([int(start_color[i:i+2], 16) for i in (1, 3, 5)])  # Convert start_color to RGB
+        end_rgb = np.array([0, 0, 0])  # RGB for black
+        colors = [(
+            start_rgb + (end_rgb - start_rgb) * i / (n - 1)
+        ).astype(int) for i in range(n)]
+        # Convert RGB to hexadecimal
+        hex_colors = ['#' + ''.join(f'{int(c):02x}' for c in color) for color in colors]
+        return hex_colors

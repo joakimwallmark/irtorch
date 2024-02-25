@@ -22,7 +22,6 @@ setup(
         "numpy",
         "pandas",
         "plotly",
-        "matplotlib",
         "scikit-learn",
     ],
     zip_safe=False,

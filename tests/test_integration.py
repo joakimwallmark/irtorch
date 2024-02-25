@@ -139,3 +139,10 @@ def test_get_bit_score_starting_z(model: IRT):
     starting_z = model.scorer.get_bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
     assert starting_z.shape == (1, model.model.latent_variables)
     model.scorer.algorithm.model.mc_correct = None
+
+@pytest.mark.integration
+def test_probability_gradients(model: IRT, latent_variables):
+    # This makes sure we can run torch.vmap inside probability_gradients, as it is not compatible with some tensor operations
+    z = torch.randn((40, latent_variables))
+    gradients = model.model.probability_gradients(z)
+    assert gradients.shape == torch.Size([z.shape[0], model.model.items, model.model.max_item_responses, model.model.latent_variables])

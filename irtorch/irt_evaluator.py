@@ -116,7 +116,7 @@ class IRTEvaluator:
             return residuals.mean(dim=1)
         if average_per == "all":
             return residuals.mean(dim=None)
-        
+
         return residuals
 
     @torch.inference_mode()
@@ -124,19 +124,14 @@ class IRTEvaluator:
         self,
         data: torch.Tensor = None,
         z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        scale: str = "z",
+        latent_variable: int = 1,
         standardize: bool = True,
         groups: int = 10,
-        latent_variable: int = 1,
-        scale: str = "z",
-        bit_score_start_z: torch.tensor = None,
+        z_estimation_method: str = "ML",
         population_z: torch.Tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None,
-    ):
+        **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate the residuals between the model estimated and observed data within each group.
@@ -150,48 +145,37 @@ class IRTEvaluator:
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z : torch.Tensor, optional
             A 2D tensor containing the pre-estimated z scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        scale : str, optional
+            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
+            models, 'z' and 'bit' are equivalent. (default is 'z')
+        latent_variable: int, optional
+            Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         standardize : bool, optional
             Specifies whether the residuals should be standardized. (default is True)
         groups: int
             The number of groups. (default is 10)
-        latent_variable: int, optional
-            Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
-        scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'bit' are equivalent. (default is 'z')
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
         population_z : torch.Tensor, optional
             Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit scores. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the bit_scores_from_z method if scale is 'bit'. See :meth:`bit_scores_from_z` for details.
+            
         Returns
         -------
-        torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
             A tuple with torch tensors. The first one holds the residuals for each group and has dimensions (groups, items, item categories). The second one is a 1D tensor and holds the mid points of the groups.
         """
         grouped_data_probabilties, grouped_model_probabilties, group_mid_points = \
             self.latent_group_probabilities(
-                groups=groups,
                 data=data,
                 z=z,
-                z_estimation_method=z_estimation_method,
                 scale=scale,
-                bit_score_start_z=bit_score_start_z,
+                latent_variable=latent_variable,
+                groups=groups,
+                z_estimation_method=z_estimation_method,
                 population_z=population_z,
-                bit_score_grid_points=bit_score_grid_points,
-                bit_score_z_grid_method=bit_score_z_grid_method,
-                bit_score_start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-                bit_score_start_z_guessing_iterations=bit_score_start_z_guessing_iterations,
-                bit_score_items=bit_score_items,
-                latent_variable=latent_variable
+                **kwargs
             )
 
         raw_residuals = grouped_data_probabilties - grouped_model_probabilties
@@ -366,18 +350,13 @@ class IRTEvaluator:
         self,
         data: torch.Tensor = None,
         z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        groups: int = 10,
-        latent_variable: int = 1,
         scale: str = "z",
-        bit_score_start_z: torch.tensor = None,
+        latent_variable: int = 1,
+        groups: int = 10,
+        z_estimation_method: str = "ML",
         population_z: torch.Tensor = None,
-        bit_score_grid_points: int = 300,
-        bit_score_z_grid_method: int = "ML",
-        bit_score_start_z_guessing_probabilities: list[float] = None,
-        bit_score_start_z_guessing_iterations: int = 10000,
-        bit_score_items: list[int] = None
-    ):
+        **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate both the observed and IRT model probabilities for each possible item response, within each group.
@@ -389,34 +368,24 @@ class IRTEvaluator:
         data : torch.Tensor, optional
         z : torch.Tensor, optional
             The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        groups: int
-            The number of groups. (default is 10)
         scale : str, optional
             The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
             models, 'z' and 'bit' are equivalent. (default is 'z')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
-        bit_score_start_z : int, optional
-            The z score used as the starting point for bit score computation. Computed automatically if not provided. (default is 'None')
+        groups: int
+            The number of groups. (default is 10)
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         population_z : torch.Tensor, optional
             Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
-        bit_score_grid_points : int, optional
-            The number of points to use for computing bit scores. More steps lead to more accurate results. (default is 300)
-        bit_score_z_grid_method : str, optional
-            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        bit_score_start_z_guessing_probabilities: list[float], optional
-            Custom guessing probabilities for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
-        bit_score_start_z_guessing_iterations: int, optional
-            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
-        bit_score_items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the latent_scores method if scores_to_plot is not provided. See :meth:`latent_scores` for details.
 
         Returns
         -------
-        torch.Tensor, torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
             A 3D torch tensor with data group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
 
             A 3D torch tensor with model group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
@@ -433,16 +402,11 @@ class IRTEvaluator:
             if population_z is None and data is self.algorithm.train_data:
                 population_z = z
             
-            bit_scores, _ = self.scorer._bit_scores_from_z(
+            bit_scores, _ = self.scorer.bit_scores_from_z(
                 z=z,
                 one_dimensional=False,
-                start_z=bit_score_start_z,
-                population_z=population_z,
-                z_estimation_method=bit_score_z_grid_method,
-                grid_points=bit_score_grid_points,
-                items=bit_score_items,
-                start_z_guessing_probabilities=bit_score_start_z_guessing_probabilities,
-                start_z_guessing_iterations=bit_score_start_z_guessing_iterations
+                z_estimation_method=z_estimation_method,
+                **kwargs
             )
 
             # Sort based on correct column and get the sorted indices

@@ -11,6 +11,30 @@ from irtorch.helper_functions import decode_one_hot_test_data
 logger = logging.getLogger('irtorch')
 
 class VAEIRT(AEIRT):
+    """
+    Variational autoencoder neural network for fitting IRT models.
+
+    Parameters
+    ----------
+    model : BaseIRTModel
+        The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
+    encoder : BaseEncoder, optional
+        The encoder instance to use. Needs to inherit irtorch.models.BaseEncoder. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
+    one_hot_encoded : bool, optional
+        Whether the model uses one-hot encoded data. (default is False)
+    hidden_layers_encoder : list[int], optional
+        List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
+    nonlinear_encoder : torch.nn.Module, optional
+        The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
+    batch_normalization_encoder : bool, optional
+        Whether to use batch normalization for the encoder. (default is True)
+    iw_samples : int, optional
+        The number of importance weighted samples to use. (default is 1)
+    anneal : bool, optional
+        Whether to anneal the KL divergence. (default is True)
+    annealing_epochs : int, optional
+        The number of epochs to anneal the KL divergence. (default is 5)
+    """
     def __init__(
         self,
         model: BaseIRTModel,
@@ -24,30 +48,6 @@ class VAEIRT(AEIRT):
         annealing_epochs: int = 5,
         summary_writer: SummaryWriter = None,
     ):
-        """
-        Initialize the autoencoder IRT neural network.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
-        encoder : BaseEncoder, optional
-            The encoder instance to use. Needs to inherit irtorch.models.BaseEncoder. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
-        one_hot_encoded : bool, optional
-            Whether the model uses one-hot encoded data. (default is False)
-        hidden_layers_encoder : list[int], optional
-            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-        nonlinear_encoder : torch.nn.Module, optional
-            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-        batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
-        iw_samples : int, optional
-            The number of importance weighted samples to use. (default is 1)
-        anneal : bool, optional
-            Whether to anneal the KL divergence. (default is True)
-        annealing_epochs : int, optional
-            The number of epochs to anneal the KL divergence. (default is 5)
-        """
         self.iw_samples = iw_samples
         self.annealing_epochs = annealing_epochs
         self.anneal = anneal
@@ -134,7 +134,7 @@ class VAEIRT(AEIRT):
             imputation_method=imputation_method,
         )
 
-    def forward(self, data):
+    def forward(self, data) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Samples self.iw_samples logit outputs for each respondent in the input.
 
@@ -145,7 +145,7 @@ class VAEIRT(AEIRT):
 
         Returns
         -------
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
             Four 2D tensors with rows corresponding respondent samples.
             -   Output logits tensor
             -   z samples tensor

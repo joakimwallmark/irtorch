@@ -86,10 +86,10 @@ def test_bit_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables, bi
             with patch.object(IRTScorer, '_get_grid_boundaries', return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
                 if one_dimensional:
                     with patch.object(IRTScorer, '_compute_1d_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
-                        bit_scores, _ = irt_scorer._bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
+                        bit_scores, _ = irt_scorer.bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
                 else:
                     with patch.object(IRTScorer, '_compute_multi_dimensional_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
-                        bit_scores, _ = irt_scorer._bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
+                        bit_scores, _ = irt_scorer.bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
 
     # Assert the result
     if one_dimensional:

@@ -12,7 +12,7 @@ class OutlierDetector:
         """
         Initializes an instance of the OutlierDetector class.
 
-        Parameters:
+        Parameters
         ------------
         factor : int, optional
             The factor used to determine the outliers. Default is 1.5.
@@ -23,7 +23,7 @@ class OutlierDetector:
         """
         Prevents the factor from being set to a value less than 1.
 
-        Parameters:
+        Parameters
         ------------
         name : str
             The name of the attribute being set.
@@ -38,7 +38,7 @@ class OutlierDetector:
         """
         Identifies outliers in the input data using the interquartile range method.
 
-        Parameters:
+        Parameters
         ------------
         data : torch.Tensor
             A 2D tensor. Columns are items and rows are observations.
@@ -47,7 +47,7 @@ class OutlierDetector:
         lower : bool, optional
             Whether to identify lower outliers. Default is True.
 
-        Returns:
+        Returns
         ----------
         torch.Tensor
             A 2D boolean tensor indicating the outlier status for each element in 'data'.
@@ -79,7 +79,7 @@ class OutlierDetector:
         """
         Determines if new observations are outliers in any of the columns based on the existing dataset.
 
-        Parameters:
+        Parameters
         -------------
         new_observations : torch.Tensor
             A 2D tensor representing new observations to be tested. Its number of columns should match the number of columns in 'data'.
@@ -90,7 +90,7 @@ class OutlierDetector:
         lower : bool, optional
             Whether to identify lower outliers. Default is True.
 
-        Returns:
+        Returns
         ------------
         torch.Tensor
             A 2D boolean tensor where each row corresponds to an observation and each column corresponds to a latent variable. 
@@ -125,7 +125,7 @@ class OutlierDetector:
         """
         Identifies the smallest non-outlier value in each column of the input data.
 
-        Parameters:
+        Parameters
         -------------
         data : torch.Tensor
             A 2D tensor. Columns are features, and rows are observations.
@@ -134,7 +134,7 @@ class OutlierDetector:
         smallest : bool, optional
             Whether to identify the smallest non-outlier value (True) or the largest non-outlier value (False). (default is True)
 
-        Returns:
+        Returns
         ------------
         torch.Tensor
             A 1D tensor containing the smallest non-outlier values for each column.

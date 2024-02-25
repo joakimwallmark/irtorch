@@ -5,7 +5,7 @@ import torch
 
 logger = logging.getLogger('irtorch')
 
-def swedish_national_mathematics_2019():
+def swedish_national_mathematics_2019() -> torch.Tensor:
     """
     Load the Swedish National Mathematics 2019 dataset.
 
@@ -13,11 +13,6 @@ def swedish_national_mathematics_2019():
     -------
     torch.Tensor
         The loaded dataset.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset cannot be loaded.
     """
     try:
         file_path = resources.files("irtorch.datasets.national_mathematics").joinpath("mathematics_2019.feather")
@@ -26,7 +21,7 @@ def swedish_national_mathematics_2019():
         raise RuntimeError("Failed to load data") from e
     return data
 
-def swedish_national_mathematics_2018():
+def swedish_national_mathematics_2018() -> torch.Tensor:
     """
     Load the Swedish National Mathematics 2018 dataset.
 
@@ -34,11 +29,6 @@ def swedish_national_mathematics_2018():
     -------
     torch.Tensor
         The loaded dataset.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset cannot be loaded.
     """
     try:
         file_path = resources.files("irtorch.datasets.national_mathematics").joinpath("mathematics_2018.feather")
@@ -55,11 +45,6 @@ def swedish_sat_verbal_2022() -> tuple[torch.Tensor, list[int]]:
     -------
     tuple (torch.Tensor, list[int])
         A tuple containing the loaded dataset and the correct item responses.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset or the correct item responses cannot be loaded.
     """
     try:
         file_path = resources.files("irtorch.datasets.swedish_sat").joinpath("swesat22b_nominal_verb.feather")
@@ -84,11 +69,6 @@ def swedish_sat_quantitative_2022() -> tuple[torch.Tensor, list[int]]:
     -------
     tuple (torch.Tensor, list[int])
         A tuple containing the loaded dataset and the correct item responses.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset or the correct item responses cannot be loaded.
     """
     try:
         file_path = resources.files("irtorch.datasets.swedish_sat").joinpath("swesat22b_nominal_quant.feather")
@@ -113,11 +93,6 @@ def swedish_sat_2022() -> tuple[torch.Tensor, list[int]]:
     -------
     tuple (torch.Tensor, list[int])
         A tuple containing the loaded dataset and the correct item responses.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset or the correct item responses cannot be loaded.
     """
     data_quant, correct_quant = swedish_sat_quantitative_2022()
     data_verb, correct_verb = swedish_sat_verbal_2022()
@@ -135,11 +110,6 @@ def swedish_sat_2022_binary() -> torch.Tensor:
     -------
     torch.Tensor
         A tuple containing the loaded dataset.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset cannot be loaded.
     """
     data_quant, correct_quant = swedish_sat_quantitative_2022()
     data_verb, correct_verb = swedish_sat_verbal_2022()
@@ -160,11 +130,6 @@ def big_five() -> torch.Tensor:
     -------
     torch.Tensor
         The loaded dataset.
-        
-    Raises
-    ------
-    RuntimeError
-        If the dataset cannot be loaded.
     """
     try:
         file_path = resources.files("irtorch.datasets.big_five").joinpath("big_five.csv")

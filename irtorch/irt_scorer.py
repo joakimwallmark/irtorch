@@ -72,7 +72,7 @@ class IRTScorer:
     def min_max_z_for_integration(
         self,
         z: torch.Tensor = None,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Retrieve the minimum and maximum z score for approximating integrals over the latent space. Uses one standard deviation below/above the min/max of each z score vector.
 
@@ -189,7 +189,7 @@ class IRTScorer:
         elif scale == "bit":
             if bit_score_z_grid_method is None:
                 bit_score_z_grid_method = z_estimation_method
-            return self._bit_scores_from_z(
+            return self.bit_scores_from_z(
                 z=z,
                 start_z=bit_score_start_z,
                 population_z=bit_score_population_z,
@@ -202,7 +202,14 @@ class IRTScorer:
             )[0]
 
     @torch.inference_mode(False)
-    def _ml_map_z_scores(self, data: torch.Tensor, encoder_z_scores:torch.Tensor = None, z_estimation_method: str = "ML", learning_rate: float = 0.5, device: str = "cuda" if torch.cuda.is_available() else "cpu"):
+    def _ml_map_z_scores(
+        self, 
+        data: torch.Tensor, 
+        encoder_z_scores:torch.Tensor = None, 
+        z_estimation_method: str = "ML", 
+        learning_rate: float = 0.5, 
+        device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    ) -> torch.Tensor:
         """
         Get the latent scores from test data using an already fitted model.
 
@@ -221,8 +228,8 @@ class IRTScorer:
         
         Returns
         -------
-        torch.Tensor, torch.Tensor
-            A tuple of 2D tensors, one with the z scores and one with the associated standard errors. The columns are latent variables and rows are respondents.
+        torch.Tensor
+            A torch.Tensor with the z scores. The columns are latent variables and rows are respondents.
         """
         try:
             if self.algorithm.training_z_scores is None:
@@ -295,7 +302,7 @@ class IRTScorer:
         return optimized_z_scores
     
     @torch.inference_mode()
-    def _eap_z_scores(self, data: torch.Tensor, grid_points: int = None):
+    def _eap_z_scores(self, data: torch.Tensor, grid_points: int = None) -> torch.Tensor:
         """
         Get the latent z scores from test data using an already fitted model.
 
@@ -308,8 +315,8 @@ class IRTScorer:
         
         Returns
         -------
-        torch.Tensor, torch.Tensor
-            A tuple of 2D tensors, one with the z scores and one with the associated standard errors. The columns are latent variables and rows are respondents.
+        torch.Tensor
+            A torch.Tensor with the z scores. The columns are latent variables and rows are respondents.
         """
         if self.algorithm.training_z_scores is None:
             raise ValueError("Please fit the model before computing latent scores.")
@@ -505,7 +512,7 @@ class IRTScorer:
 
 
     @torch.inference_mode()
-    def _bit_scores_from_z(
+    def bit_scores_from_z(
         self,
         z: torch.Tensor,
         start_z: torch.Tensor = None,
@@ -518,11 +525,11 @@ class IRTScorer:
         items: list[int] = None,
         start_z_guessing_probabilities: list[float] = None,
         start_z_guessing_iterations: int = 10000,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the bit scores from z scores.
 
-        Parameters:
+        Parameters
         ----------
         z : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
@@ -547,9 +554,9 @@ class IRTScorer:
         start_z_guessing_iterations: int, optional
             The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
         
-        Returns:
+        Returns
         -------
-        torch.Tensor, torch.Tensor
+        tuple[torch.Tensor, torch.Tensor]
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_z.
         """
         if grid_points <= 0:
@@ -764,7 +771,7 @@ class IRTScorer:
         """
         Computes the multi-dimensional bit scores for the given input z scores.
 
-        Parameters:
+        Parameters
         -----------
         z_adjusted : torch.Tensor
             The input z scores.
@@ -781,7 +788,7 @@ class IRTScorer:
         grid_points : int
             The number of points in the grid.
 
-        Returns:
+        Returns
         --------
         bit_scores : torch.Tensor
             The multi-dimensional bit scores for the input z scores.

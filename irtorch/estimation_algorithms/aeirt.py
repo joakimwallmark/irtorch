@@ -6,13 +6,30 @@ from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
-from irtorch.dataset import PytorchIRTDataset
 from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
-from irtorch.utils import dynamic_print, is_jupyter
+from irtorch.utils import dynamic_print, PytorchIRTDataset
 
 logger = logging.getLogger('irtorch')
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
+    """
+    Autoencoder neural network for fitting IRT models.
+
+    Parameters
+    ----------
+    model : BaseIRTModel
+        The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
+    encoder : BaseEncoder, optional
+        The encoder instance to use. Needs to inherit irtorch.models.BaseEncoder. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
+    one_hot_encoded : bool, optional
+        Whether the model uses one-hot encoded data. (default is False)
+    hidden_layers_encoder : list[int], optional
+        List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
+    nonlinear_encoder : torch.nn.Module, optional
+        The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
+    batch_normalization_encoder : bool, optional
+        Whether to use batch normalization for the encoder. (default is True)
+    """
     def __init__(
         self,
         model: BaseIRTModel,
@@ -23,24 +40,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         batch_normalization_encoder: bool = True,
         summary_writer: SummaryWriter = None,
     ):
-        """
-        Initialize the  IRT neural network.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
-        encoder : BaseEncoder, optional
-            The encoder instance to use. Needs to inherit irtorch.models.BaseEncoder. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
-        one_hot_encoded : bool, optional
-            Whether the model uses one-hot encoded data. (default is False)
-        hidden_layers_encoder : list[int], optional
-            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-        nonlinear_encoder : torch.nn.Module, optional
-            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-        batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
-        """
         super().__init__(model = model, one_hot_encoded=one_hot_encoded)
         self.imputation_method = "zero"
         self.summary_writer = summary_writer
@@ -204,9 +203,11 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 validation_loss = self._validation_step()
                 current_loss = validation_loss
                 scheduler.step(validation_loss)
+                dynamic_print(f"Epoch: {epoch}. Average training batch loss: {train_loss:.4f}. Average validation batch loss: {validation_loss:.4f}")
             else:
                 current_loss = train_loss
                 scheduler.step(train_loss)
+                dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
 
             if current_loss < best_loss:
                 best_loss = current_loss
@@ -269,7 +270,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         # Calculate averge per batch loss and accuracy per epoch and print out what's happening
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
-        dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {loss:.4f}")
         return loss
 
     def _impute_missing(self, batch, missing_mask):
@@ -334,7 +334,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
         self.training_history["validation_loss"].append(loss)
-        logger.info("Average validation batch loss function: %.4f", loss)
         return loss
 
     @torch.inference_mode()

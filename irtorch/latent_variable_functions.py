@@ -15,7 +15,7 @@ def interp(x_new, x, y):
         y: torch.Tensor
             The y-coordinates of the data points.
 
-    Returns:
+    Returns
         torch.Tensor: The interpolated values at x_new.
     """
 
@@ -65,7 +65,7 @@ def quantile_transform(tensor):
     Args:
         tensor (torch.Tensor): A 2D tensor.
 
-    Returns:
+    Returns
         torch.Tensor: A tensor of the same shape as the input, but with each column transformed to follow a standard normal distribution.
     """
     normal = torch.distributions.Normal(0, 1)

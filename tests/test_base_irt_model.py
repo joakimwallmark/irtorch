@@ -124,26 +124,35 @@ def test_information(base_irt_model: BaseIRTModel):
 
     input_z = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
     information_matrices = base_irt_model.information(input_z)
-
-    # Check the shape of the output
     assert information_matrices.shape == (2, 2, 2, 2)
-
-    # Check the values of the output
     expected_output = torch.tensor([
         [[[ 4184.934082,  4786.798340], [ 4786.798340,  5478.406738]], [[19931.039062, 21267.791016], [21267.791016, 22694.289062]]],
         [[[646821568, 739235008], [739235008, 844860736]], [[2972079104, 3170238464], [3170238464, 3381610496]]]
     ])
     assert torch.allclose(information_matrices, expected_output)
 
+    # Test with degrees
+    if base_irt_model.latent_variables == 2:
+        information_matrices = base_irt_model.information(input_z, degrees=[45, 45])
+        assert information_matrices.shape == (2, 2)
+        expected_output = torch.tensor([
+            [ 9618.4677734, 42580.4531250],
+            [1485075968.0000000, 6347082752.0000000]]
+        )
+        assert torch.allclose(information_matrices, expected_output)
+
     # Test with item=False
     information_matrices = base_irt_model.information(input_z, item=False)
-
-    # Check the shape of the output
     assert information_matrices.shape == (2, 2, 2)
-
-    # Check the values of the output
     expected_output = torch.tensor([
         [[24115.972656, 26054.589844], [26054.589844, 28172.695312]],
         [[3618900480, 3909473536], [3909473536, 4226471168]]
     ])
     assert torch.allclose(information_matrices, expected_output)
+
+    # Test with item=False and degrees
+    if base_irt_model.latent_variables == 2:
+        information_matrices = base_irt_model.information(input_z, item=False, degrees=[0, 90])
+        assert information_matrices.shape == (2, )
+        expected_output = torch.tensor([24115.972656, 3618899968.000000])
+        assert torch.allclose(information_matrices, expected_output)

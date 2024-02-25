@@ -152,9 +152,8 @@ class NonparametricMonotoneNN(BaseIRTModel):
                     )
                 )
 
-    def forward(self, z: torch.Tensor):
-        out = torch.zeros(z.shape[0], self.separations, device=z.device)
-            
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        latent_variable_outputs = []
         for latent_variable in range(self.latent_variables):
             layer_out = self._modules[f'linear0_dim{latent_variable}'](z[:, latent_variable].unsqueeze(1))
 
@@ -166,9 +165,11 @@ class NonparametricMonotoneNN(BaseIRTModel):
             layer_out = layer_out.reshape(-1, self.separations, self.hidden_out_dim).sum(dim=2)
 
             if self.negative_latent_variable_item_relationships:
-                out += self._modules[f'negation_dim{latent_variable}'](layer_out)
-            else:
-                out += layer_out
+                layer_out = self._modules[f'negation_dim{latent_variable}'](layer_out)
+
+            latent_variable_outputs.append(layer_out)
+        
+        out = torch.stack(latent_variable_outputs, dim=-1).sum(dim=-1)
 
         if self.separate == "items":
             out = out.repeat_interleave(self.max_item_responses, dim=1)
@@ -184,7 +185,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
         out[:, self.missing_categories] = -torch.inf
         return out
 
-    def split_activation(self, x: torch.Tensor):
+    def split_activation(self, x: torch.Tensor) -> torch.Tensor:
         """
         Runs various activation functions on every second/third item in the input tensor.
 
@@ -201,7 +202,7 @@ class NonparametricMonotoneNN(BaseIRTModel):
         if self.use_bounded_activation:
             x1 = F.elu(x[:, ::3])
             x2 = -F.elu(-x[:, 1::3])
-            x3 = BoundedELU.apply(x[:, 2::3])
+            x3 = BoundedELU.apply(x[:, 2::3], 1.0)
             y = torch.stack((x1, x2, x3), dim=2).view(x.shape)
         else:
             x1 = F.elu(x[:, ::2])

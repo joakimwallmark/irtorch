@@ -1,7 +1,5 @@
 .. IRTorch documentation master file, created by
    sphinx-quickstart on Mon Feb 12 17:34:38 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
 Welcome to IRTorch's documentation!
 ===================================
@@ -32,8 +30,15 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
 
    irt
    irt_models
+   estimation_algorithms
    config
    datasets
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Literature 🧾
+
+   literature 
 
 .. * :ref:`genindex`
 .. * :ref:`modindex`

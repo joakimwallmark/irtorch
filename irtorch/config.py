@@ -1,7 +1,7 @@
 import logging
 logger = logging.getLogger('irtorch')
 
-def set_verbosity(level):
+def set_verbosity(level) -> None:
     """
     Specifies the severity of log messages that the package will display.
 

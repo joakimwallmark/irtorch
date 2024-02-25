@@ -6,21 +6,21 @@ from irtorch.models import BaseIRTModel
 logger = logging.getLogger('irtorch')
 
 class BaseIRTAlgorithm(ABC):
+    """
+    Abstract base class for IRT algorithms. All IRT algorithms should inherit from this class.
+
+    Parameters
+    ----------
+    model : BaseIRTModel, optional
+        The model to train. Needs to inherit irtorch.models.BaseIRTModel.
+    one_hot_encoded : bool, optional
+        Whether the algorithm uses one-hot encoded data. (default is False)
+    """
     def __init__(
         self,
         model: BaseIRTModel,
         one_hot_encoded: bool = False,
     ):
-        """
-        Initialize the autoencoder IRT neural network.
-
-        Parameters
-        ----------
-        model : BaseIRTModel, optional
-            The model to train. Needs to inherit irtorch.models.BaseIRTModel.
-        one_hot_encoded : bool, optional
-            Whether the algorithm uses one-hot encoded data. (default is False)
-        """
         super().__init__()
         self.model = model
         self.imputation_method = "zero"
@@ -47,9 +47,25 @@ class BaseIRTAlgorithm(ABC):
         else:
             self.train_data = train_data.contiguous()
 
+    @abstractmethod
     def _impute_missing_with_prior(self, batch, missing_mask):
+        """
+        Impute missing values with the prior.
+
+        Parameters
+        ----------
+        batch : torch.Tensor
+            The batch of data.
+        missing_mask : torch.Tensor
+            The mask of missing values.
+
+        Returns
+        -------
+        torch.Tensor
+            The imputed data.
+        """
         raise NotImplementedError(
-            "There is no prior for non-variational autoencoder models"
+            "Prior imputation not implemented for this algorithm."
         )
 
     def fix_missing_values(self, data: torch.Tensor):

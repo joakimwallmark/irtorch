@@ -1,4 +1,5 @@
 [![Documentation Status](https://readthedocs.org/projects/irtorch/badge/?version=latest)](https://irtorch.readthedocs.io/en/latest/?badge=latest)
+
 <img src="https://raw.githubusercontent.com/joakimwallmark/irtorch/main/docs/source/_static/logo_readme.png" alt="IRTorch" style="width: 50%;">
 
 `IRTorch` is a Python package for item response theory (IRT). It utilizes [PyTorch](https://pytorch.org/) with GPU support.

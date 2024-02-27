@@ -1,4 +1,5 @@
 [![Documentation Status](https://readthedocs.org/projects/irtorch/badge/?version=latest)](https://irtorch.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/joakimwallmark/irtorch/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/joakimwallmark/irtorch)
 
 <img src="https://raw.githubusercontent.com/joakimwallmark/irtorch/main/docs/source/_static/logo_readme.png" alt="IRTorch" style="width: 50%;">
 

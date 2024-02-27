@@ -36,12 +36,20 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Install package
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install .
+        pip install . 
+        pip install pytest pytest-cov
 
     - name: Test with pytest
       run: |
-        pip install pytest
-        pytest
+        pytest --cov=irtorch --cov-report=xml:./coverage.xml tests/
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4.0.1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-irtorch

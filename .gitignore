@@ -144,5 +144,4 @@ data.csv
 
 tests/models
 irtorch/datasets/swedish_sat
-irtorch/datasets/national_mathematics
 runs/

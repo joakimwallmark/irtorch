@@ -9,7 +9,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
-from irtorch.helper_functions import output_to_item_entropy
+from irtorch._internal_utils import output_to_item_entropy
 
 pio.templates.default = "plotly_white"
 logger = logging.getLogger('irtorch')

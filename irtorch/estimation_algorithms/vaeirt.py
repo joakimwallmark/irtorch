@@ -6,7 +6,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
-from irtorch.helper_functions import decode_one_hot_test_data
+from irtorch.utils import decode_one_hot_test_data
 
 logger = logging.getLogger('irtorch')
 

@@ -3,7 +3,7 @@ from unittest.mock import patch
 from utils import initialize_fit
 import torch
 from irtorch.estimation_algorithms import AEIRT
-from irtorch.models import NonparametricMonotoneNN
+from irtorch.models import MonotoneNN
 
 
 # The @pytest.fixture decorator is used to create fixture methods.
@@ -16,7 +16,7 @@ class TestAEIRT:
         if device == "cuda" and not torch.cuda.is_available():
             pytest.skip("GPU is not available.")
 
-        model = NonparametricMonotoneNN(
+        model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories,
             hidden_dim = [3]

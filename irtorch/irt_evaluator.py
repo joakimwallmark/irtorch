@@ -4,7 +4,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
 from irtorch.irt_scorer import QuantileMVNormal, GaussianMixtureTorch
 from irtorch.irt_scorer import IRTScorer
-from irtorch.helper_functions import (
+from irtorch._internal_utils import (
     impute_missing,
     conditional_score_distribution,
     sum_incorrect_probabilities,
@@ -75,10 +75,13 @@ class IRTEvaluator:
         data: torch.Tensor = None,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
-        average_per: str = "none",
-    ):
+        average_over: str = "none",
+    ) -> torch.Tensor:
         """
-        Calculate the residuals of the model for the supplied data.
+        Calculate the residuals of the model for the supplied data. 
+        
+        For multiple choice models, the residuals are computed as 1 - the probability of the selected response option.
+        For other models, the residuals are computed as the difference between the observed and model expected item scores.
 
         Parameters
         ----------
@@ -88,19 +91,19 @@ class IRTEvaluator:
             The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
         z_estimation_method : str, optional
             Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        average_per: str = "none", optional
-            Whether to average the residuals and over which level. Can be 'all', 'item' or 'respondent'. Use 'none' for no average. For example, with 'item' the average residuals is calculated for each item. (default is 'none')
+        average_over: str = "none", optional
+            Whether to average the residuals and over which level. Can be 'everything', 'items', 'respondents' or 'none'. Use 'none' for no average. For example, with 'respondent' the residuals are averaged over all respondents and is thus an average per item. (default is 'none')
             
         Returns
         -------
         torch.Tensor
-            The residuals. When average_per is 'none', the tensor has dimensions (respondents, items). Otherwise, the tensor has just one dimension or one value for 'all'.
+            The residuals.
         """
         data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
 
         # 3D tensor with dimensions (respondents, items, item categories)
-        probabilities = self.model.item_probabilities(z)
         if self.model.mc_correct is not None:
+            probabilities = self.model.item_probabilities(z)
             # Creating a range tensor for slice indices
             respndents = torch.arange(probabilities.size(0)).view(-1, 1)
             # Expand slices to match the shape of indices
@@ -110,11 +113,11 @@ class IRTEvaluator:
         else:
             residuals = data - self.model.expected_item_sum_score(z, return_item_scores=True)
 
-        if average_per == "item":
-            return residuals.mean(dim=0)
-        if average_per == "respondent":
+        if average_over == "items":
             return residuals.mean(dim=1)
-        if average_per == "all":
+        if average_over == "respondents":
+            return residuals.mean(dim=0)
+        if average_over == "everything":
             return residuals.mean(dim=None)
 
         return residuals

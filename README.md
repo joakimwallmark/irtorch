@@ -5,7 +5,7 @@
 <img src="https://raw.githubusercontent.com/joakimwallmark/irtorch/main/docs/source/_static/logo_readme.png" alt="IRTorch" style="width: 50%;">
 
 `IRTorch` is a Python package for item response theory (IRT). It utilizes [PyTorch](https://pytorch.org/) for model optimization and GPU support.
-Check out our [documentation page](https://irtorch.readthedocs.io/en/latest/) for more usage examples and API reference.
+Check out our [documentation page](https://irtorch.readthedocs.io/en/latest/) for usage examples and API reference.
 
 ## Installation
 Install from Python Package Index (PyPI)

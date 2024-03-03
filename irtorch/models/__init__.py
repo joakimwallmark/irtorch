@@ -1,3 +1,3 @@
 from .base_irt_model import BaseIRTModel
-from .nonparametric_monotone_nn import NonparametricMonotoneNN
+from .monotone_nn import MonotoneNN
 from .parametric import Parametric

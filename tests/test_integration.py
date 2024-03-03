@@ -1,8 +1,8 @@
 # import re
 # import torch
 # import pytest
-# from helper_functions_for_tests import spearman_correlation
-# from irtorch.helper_functions import get_item_categories
+# from utils import spearman_correlation
+# from irtorch.utils import get_item_categories
 # from irtorch import IRT
 
 # @pytest.mark.integration

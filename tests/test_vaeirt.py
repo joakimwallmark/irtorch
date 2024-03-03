@@ -2,7 +2,7 @@ import pytest
 import torch
 from utils import initialize_fit
 from irtorch.estimation_algorithms.vaeirt import VAEIRT
-from irtorch.models import NonparametricMonotoneNN
+from irtorch.models import MonotoneNN
 
 
 # The @pytest.fixture decorator is used to create fixture methods.
@@ -15,7 +15,7 @@ class TestVAIRT:
         if device == "cuda" and not torch.cuda.is_available():
             pytest.skip("GPU is not available.")
 
-        model = NonparametricMonotoneNN(
+        model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories,
             hidden_dim = [3]
@@ -38,7 +38,7 @@ class TestVAIRT:
     ):
         # same weights and biases every time
         torch.manual_seed(0)
-        model = NonparametricMonotoneNN(
+        model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories_small,
             hidden_dim = [3]

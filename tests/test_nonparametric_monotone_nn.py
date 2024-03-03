@@ -1,9 +1,9 @@
 import pytest
 import torch
-from irtorch.models import NonparametricMonotoneNN
+from irtorch.models import MonotoneNN
 
 def test_mc_correct_output_idx():
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         hidden_dim=[6],
         item_categories=[3, 4],
@@ -14,7 +14,7 @@ def test_mc_correct_output_idx():
 
     assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, False,  True, False, False, False,  True, False, False, False]))
 
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         hidden_dim=[6],
         item_categories=[3, 4],
@@ -27,7 +27,7 @@ def test_mc_correct_output_idx():
 
 
 def test_log_likelihood():
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         hidden_dim=[6],
         item_categories=[3, 4],
@@ -49,7 +49,7 @@ def test_log_likelihood():
 
 
 def test_split_activation():
-    model = NonparametricMonotoneNN(2, [2, 2, 2], [6], use_bounded_activation=True)
+    model = MonotoneNN(2, [2, 2, 2], [6], use_bounded_activation=True)
 
     input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
     output_tensor_true = model.split_activation(input_tensor)
@@ -76,7 +76,7 @@ def test_split_activation():
 @pytest.mark.parametrize("separate", ["items", "categories"])
 def test_forward_ordered(separate):
     hidden_dim = [3, 6]
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         item_categories=[2, 3, 3],
         hidden_dim=hidden_dim,
@@ -111,7 +111,7 @@ def test_forward_ordered(separate):
 @pytest.mark.parametrize("separate", ["items", "categories"])
 def test_forward_mc(separate):
     hidden_dim = [3, 6]
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         item_categories=[2, 3, 3],
         hidden_dim=hidden_dim,
@@ -144,7 +144,7 @@ def test_forward_mc(separate):
 
 
 def test_probabilities_from_output():
-    model = NonparametricMonotoneNN(
+    model = MonotoneNN(
         latent_variables = 2,
         item_categories=[2, 3, 4],
         hidden_dim=[6],

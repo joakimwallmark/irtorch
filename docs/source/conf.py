@@ -15,12 +15,15 @@ release = '0.1'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
+    'nbsphinx', # Support for Jupyter Notebooks
     'sphinx.ext.duration', # Support for durations in the format 1h 30m 15s when using building the documentation
     'sphinx.ext.autodoc', # Automatically document code
     'sphinx.ext.napoleon', # Support for Google-style and NumPy-style docstrings
     'sphinx.ext.mathjax', # Support for LaTeX math
     'sphinxcontrib.bibtex' # Support for BibTeX
 ]
+
+# nbsphinx_execute = 'always'
 
 bibtex_bibfiles = ['refs.bib']
 bibtex_default_style = 'plain'

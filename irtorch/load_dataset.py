@@ -1,13 +1,12 @@
 import logging
 from importlib import resources
-import pandas as pd
 import torch
 
 logger = logging.getLogger('irtorch')
 
-def swedish_national_mathematics_2019() -> torch.Tensor:
+def swedish_national_mathematics_2() -> torch.Tensor:
     """
-    Load the Swedish National Mathematics 2019 dataset.
+    Load the second Swedish National Mathematics dataset.
 
     Returns
     -------
@@ -15,15 +14,15 @@ def swedish_national_mathematics_2019() -> torch.Tensor:
         The loaded dataset.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_2019.pt'
+        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_2.pt'
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
     return data
 
-def swedish_national_mathematics_2018() -> torch.Tensor:
+def swedish_national_mathematics_1() -> torch.Tensor:
     """
-    Load the Swedish National Mathematics 2018 dataset.
+    Load the first Swedish National Mathematics dataset.
 
     Returns
     -------
@@ -31,7 +30,7 @@ def swedish_national_mathematics_2018() -> torch.Tensor:
         The loaded dataset.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_2018.pt'
+        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_1.pt'
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e

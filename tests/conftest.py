@@ -4,8 +4,8 @@ import pytest
 import torch
 import numpy as np
 from irtorch.irt import IRT
-from irtorch.utils import PytorchIRTDataset
-from irtorch.helper_functions import get_item_categories
+from irtorch._internal_utils import PytorchIRTDataset
+from irtorch.utils import get_item_categories
 
 @pytest.fixture(
     scope="module",

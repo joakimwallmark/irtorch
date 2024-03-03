@@ -7,9 +7,9 @@ from irtorch.estimation_algorithms.base_irt_algorithm import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_torch import GaussianMixtureTorch
-from irtorch.helper_functions import output_to_item_entropy, random_guessing_data, linear_regression, one_hot_encode_test_data
+from irtorch._internal_utils import output_to_item_entropy, random_guessing_data, linear_regression, dynamic_print
 from irtorch.outlier_detector import OutlierDetector
-from irtorch.utils import dynamic_print, is_jupyter
+from irtorch.utils import one_hot_encode_test_data
 
 logger = logging.getLogger('irtorch')
 
@@ -133,7 +133,7 @@ class IRTScorer:
         ml_map_device: str, optional
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
         eap_z_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         bit_score_one_dimensional: bool, optional
@@ -205,9 +205,9 @@ class IRTScorer:
     def _ml_map_z_scores(
         self, 
         data: torch.Tensor, 
-        encoder_z_scores:torch.Tensor = None, 
-        z_estimation_method: str = "ML", 
-        learning_rate: float = 0.5, 
+        encoder_z_scores:torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        learning_rate: float = 0.3,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ) -> torch.Tensor:
         """
@@ -222,7 +222,7 @@ class IRTScorer:
         z_estimation_method: str, optional
             Method used to obtain the z scores. Can be 'ML', 'MAP' for maximum likelihood or maximum a posteriori respectively. (default is 'ML')
         learning_rate: float, optional
-            The learning rate to use for the LBFGS optimizer. (default is None and uses 1 or 0.5 in the case of a single respondent to avoid divergence)
+            The learning rate to use for the LBFGS optimizer. (default is 0.3)
         device: str, optional
             The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         
@@ -572,7 +572,7 @@ class IRTScorer:
         
         if population_z is None:
             if z_estimation_method != "NN":
-                logger.info("Estimation of population z scores needed for bit score computation.")
+                logger.info("Estimating population z scores needed for bit score computation.")
                 population_z = self.latent_scores(self.algorithm.train_data, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
                 logger.info("Using traning data z scores as population z scores for bit score computation.")

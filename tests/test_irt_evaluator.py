@@ -347,16 +347,16 @@ def test_residuals(irt_evaluator: IRTEvaluator):
     )), "Residuals are not correct"
 
     # overall
-    residuals = irt_evaluator.residuals(data=data, average_per="all")
+    residuals = irt_evaluator.residuals(data=data, average_over="everything")
     assert residuals.shape == ()  # We have 30 respondents
     assert torch.isclose(residuals, torch.tensor(0.6050)), "Residuals are not correct"
 
     # respondent level
-    residuals = irt_evaluator.residuals(data=data, average_per="respondent")
+    residuals = irt_evaluator.residuals(data=data, average_over="items")
     assert residuals.shape == (5,)  # We have 5 respondents
     assert torch.allclose(residuals, torch.tensor([0.5000, 0.6000, 0.2750, 0.9000, 0.7500])), "Residuals are not correct"
 
     # item level
-    residuals = irt_evaluator.residuals(data=data, average_per="item")
+    residuals = irt_evaluator.residuals(data=data, average_over="respondents")
     assert residuals.shape == (2,)  # We have 2 items
     assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"

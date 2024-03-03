@@ -3,7 +3,7 @@ import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
-from irtorch.helper_functions import linear_regression
+from irtorch._internal_utils import linear_regression
 
 logger = logging.getLogger('irtorch')
 
@@ -291,7 +291,7 @@ class BaseIRTModel(ABC, nn.Module):
     
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """
-        Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
+        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
 
         Parameters
         ----------
@@ -300,12 +300,17 @@ class BaseIRTModel(ABC, nn.Module):
         item : bool, optional
             Whether to compute the information for each item (True) or for the test as a whole (False). Default is True.
         degrees : list[int], optional
-            A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. Default is None.
+            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. Default is None.
 
         Returns
         -------
         torch.Tensor
-            A tensor with the information for each z score. Dimensions depend on the 'item' and 'degrees' parameters.
+            A tensor with the information for each z score. Dimensions are:
+            
+            - By default: (z rows, items, FIM rows, FIM columns).
+            - If degrees are specified: (z rows, items).
+            - If item is False: (z rows, FIM rows, FIM columns).
+            - If degrees are specified and item is False: (z rows).
 
         Notes
         -----
@@ -345,6 +350,8 @@ class BaseIRTModel(ABC, nn.Module):
             information = torch.einsum('i,...ij,j->...', [cos_degrees, information_matrices, cos_degrees])
         else:
             information = information_matrices
+            if self.latent_variables == 1:
+                information.squeeze_()
 
         if item:
             return information

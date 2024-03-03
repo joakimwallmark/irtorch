@@ -6,8 +6,8 @@ from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
-from irtorch.helper_functions import one_hot_encode_test_data, decode_one_hot_test_data
-from irtorch.utils import dynamic_print, PytorchIRTDataset
+from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
+from irtorch.utils import one_hot_encode_test_data, decode_one_hot_test_data
 
 logger = logging.getLogger('irtorch')
 

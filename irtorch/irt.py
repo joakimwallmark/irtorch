@@ -4,7 +4,7 @@ from torch.utils.tensorboard import SummaryWriter
 from plotly import graph_objects as go
 from irtorch.models import BaseIRTModel
 from irtorch.models import Parametric
-from irtorch.models import NonparametricMonotoneNN
+from irtorch.models import MonotoneNN
 from irtorch.estimation_algorithms import AEIRT, VAEIRT
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
@@ -31,11 +31,11 @@ class IRT:
         - "MMCNN": Monotone multiple choice neural network model.
         
         Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
-        An instantiated model can also be provided.
+        An instantiated model can also be provided, see :class:`irtorch.models.parametric.Parametric` and :class:`irtorch.models.monotone_nn.MonotoneNN` for model specific details.
     estimation_algorithm : str, optional
         The estimation algorithm to use. Available options are
 
-        - "AE" for autoencoder. This is the default.
+        - "AE" for autoencoder. This is the default. 
         - "VAE" for variational autoencoder.
 
     latent_variables : int, optional
@@ -109,7 +109,7 @@ class IRT:
                 if hidden_layers_decoder is None:  # 1 layer with 2x number of categories as neurons is default
                     hidden_layers_decoder = [3]
 
-                self.model = NonparametricMonotoneNN(
+                self.model = MonotoneNN(
                     latent_variables=latent_variables,
                     item_categories=item_categories,
                     hidden_dim=hidden_layers_decoder,
@@ -274,7 +274,7 @@ class IRT:
         torch.Tensor
             A tensor with the expected scores for each respondent.
         """
-        return self.model.expected_item_sum_score(z, return_item_scores)
+        return self.model.expected_item_sum_score(z, return_item_scores).detach()
     
     def expected_item_score_slopes(
         self,
@@ -412,7 +412,12 @@ class IRT:
         Returns
         -------
         torch.Tensor
-            A tensor with the information for each z score. Dimensions depend on the 'item' and 'degrees' parameters.
+            A tensor with the information for each z score. Dimensions are:
+            
+            - By default: (z rows, items, FIM rows, FIM columns).
+            - If degrees are specified: (z rows, items).
+            - If item is False: (z rows, FIM rows, FIM columns).
+            - If degrees are specified and item is False: (z rows).
 
         Notes
         -----
@@ -440,7 +445,7 @@ class IRT:
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "bit",
+        scale: str = "z",
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -465,7 +470,7 @@ class IRT:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'z')
         z : torch.Tensor, optional
             For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
@@ -553,10 +558,13 @@ class IRT:
         data: torch.Tensor = None,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
-        average_per: str = "none",
+        average_over: str = "none",
     ) -> torch.Tensor:
         """
-        Calculate the residuals of the model for the supplied data.
+        Calculate the residuals of the model for the supplied data. 
+        
+        For multiple choice models, the residuals are computed as 1 - the probability of the selected response option.
+        For other models, the residuals are computed as the difference between the observed and model expected item scores.
 
         Parameters
         ----------
@@ -566,15 +574,15 @@ class IRT:
             The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
         z_estimation_method : str, optional
             Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        average_per: str = "none", optional
-            Whether to average the residuals and over which level. Can be 'all', 'item' or 'respondent'. Use 'none' for no average. For example, with 'item' the average residuals is calculated for each item. (default is 'none')
+        average_over: str = "none", optional
+            Whether to average the residuals and over which level. Can be 'everything', 'items', 'respondents' or 'none'. Use 'none' for no average. For example, with 'respondent' the residuals are averaged over all respondents and is thus an average per item. (default is 'none')
             
         Returns
         -------
         torch.Tensor
             The residuals.
         """
-        return self.evaluator.residuals(data, z, z_estimation_method, average_per)
+        return self.evaluator.residuals(data, z, z_estimation_method, average_over)
 
     def sum_score_probabilities(
         self,

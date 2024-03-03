@@ -144,4 +144,4 @@ data.csv
 
 tests/models
 irtorch/datasets/swedish_sat
-runs/
+notebooks/old

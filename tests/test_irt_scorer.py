@@ -1,9 +1,24 @@
 from unittest.mock import MagicMock, patch
 import torch
+from torch.nn.functional import softmax
 import pytest
 from irtorch.irt_scorer import IRTScorer
 from irtorch.estimation_algorithms import AEIRT
 from irtorch.models import BaseIRTModel
+
+class ConcreteIRTModel(BaseIRTModel):
+    """
+    Concrete implementation of BaseIRTModel for testing purposes.
+    """
+    def forward(self, z):
+        pass
+
+    def probabilities_from_output(self, output: torch.Tensor):
+        pass
+
+@pytest.fixture
+def base_irt_model(latent_variables):
+    return ConcreteIRTModel(latent_variables, [2, 3])
 
 @pytest.fixture
 def irt_scorer(z_scores, latent_variables):
@@ -198,3 +213,20 @@ def test_compute_multi_dimensional_bit_scores(irt_scorer: IRTScorer, latent_vari
     assert bit_scores.size(1) == latent_variables, "bit scores should have size 1 in the second dimension"
     assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
     assert torch.all(bit_scores[z_adjusted < start_z_adjusted] == 0), "Smaller than start should be set to start"
+
+def test_expected_item_score_slopes(irt_scorer: IRTScorer, base_irt_model: BaseIRTModel):
+    irt_scorer.model = base_irt_model
+    # Create a mock for item_probabilities() method
+    def item_probabilities_mock(z):
+        logits = torch.tensor([[[1, 2, 3, 0], [4, 3, 2, 1]]]).expand(3, 2, 4) * z.sum(dim=1).reshape(-1, 1, 1)
+        logits[:, 0, 3] = -torch.inf
+        return softmax(logits, dim=2)
+    
+    irt_scorer.model.item_probabilities = MagicMock(
+        side_effect=item_probabilities_mock
+    )
+
+    input_z = torch.tensor([[-2.0, -3.0], [1.0, 2.0], [1.0, 1.0]])
+    expected_item_scores = irt_scorer.expected_item_score_slopes(input_z)
+
+    assert torch.allclose(expected_item_scores, torch.tensor([[ 0.2472,  0.1237], [-0.1613, -0.0677]]), atol=1e-3)

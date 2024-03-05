@@ -9,12 +9,12 @@ def linear_regression(x, y):
     x : torch.Tensor
         Design matrix of shape (m, n), where m is the number of samples and n is the number of features.
     y : torch.Tensor
-        Target vector of shape (m, 1).
+        Target vector of shape (m, o), where m is the number of samples and o is the number response variables.
 
     Returns
     -----------
     w : torch.Tensor
-        A tensor vector with the bias and the weights of shape (n+1, 1).
+        A tensor vector with the bias and the weights of shape (n+1, o).
     """
     # Add a bias term (1) to each sample in x
     bias = torch.cat([torch.ones(x.size(0), 1), x], dim=1)

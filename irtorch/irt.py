@@ -258,6 +258,79 @@ class IRT:
             start_z_guessing_iterations=start_z_guessing_iterations,
         )
 
+    def bit_score_gradients(
+        self,
+        z: torch.Tensor,
+        h: float = None,
+        independent_z: int = None,
+        start_z: torch.Tensor = None,
+        population_z: torch.Tensor = None,
+        one_dimensional: bool = False,
+        z_estimation_method: str = "ML",
+        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        lbfgs_learning_rate: float = 0.3,
+        grid_points: int = 300,
+        items: list[int] = None,
+        start_z_guessing_probabilities: list[float] = None,
+        start_z_guessing_iterations: int = 10000,
+    ) -> torch.Tensor:
+        """
+        Computes the gradients of the bit scores with respect to the input z scores using the central difference method: 
+        .. math ::
+
+            f^{\\prime}(z) \\approx \\frac{f(z+h)-f(z-h)}{2 h}
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores. Each column represents one latent variable.
+        h : float, optional
+            The step size for the central difference method. (default is uses the difference between the smaller and upper outlier limits (computed using the interquantile range rule) of the training z scores divided by 1000)
+        independent_z : int, optional
+            The latent variable to differentiate with respect to. (default is None and computes gradients with respect to z)
+        start_z : torch.Tensor, optional
+            A one row 2D tensor with bit score starting values of each latent variable. Estimated automatically if not provided. (default is None)
+        population_z : torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
+        one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is True)
+        z_estimation_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        lbfgs_learning_rate: float, optional
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+        grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
+        start_z_guessing_probabilities: list[float], optional
+            The guessing probability for each item if start_z is None. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        start_z_guessing_iterations: int, optional
+            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the gradients for each z score. Dimensions are (z rows, bit scores, z scores) where the last two dimensions represent the jacobian.
+            If independent_z is provided, the tensor has dimensions (z rows, bit scores).
+        """
+        return self.scorer.bit_score_gradients(
+            z=z,
+            h=h,
+            independent_z=independent_z,
+            start_z=start_z,
+            population_z=population_z,
+            one_dimensional=one_dimensional,
+            z_estimation_method=z_estimation_method,
+            ml_map_device=ml_map_device,
+            lbfgs_learning_rate=lbfgs_learning_rate,
+            grid_points=grid_points,
+            items=items,
+            start_z_guessing_probabilities=start_z_guessing_probabilities,
+            start_z_guessing_iterations=start_z_guessing_iterations,
+        )
+
     def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
         Computes the model expected item scores/sum scores for each respondent.
@@ -440,7 +513,7 @@ class IRT:
         
         For additional details, see :cite:t:`Chang2017`.
         """
-        return self.model.information(z, item, degrees)
+        return self.evaluator.information(z, item, degrees)
 
     def latent_scores(
         self,
@@ -801,7 +874,7 @@ class IRT:
     def plot_information(
         self,
         items: list[int] = None,
-        scale: str = "bit",
+        scale: str = "z",
         latent_variables: tuple[int] = (1,),
         degrees: list[int] = None,
         title: str = None,
@@ -817,7 +890,7 @@ class IRT:
     ) -> go.Figure:
         """
         Plots the Fisher information function against the latent variable(s).
-        Supports both item and test information.
+        Supports both item and test information. See :meth:`information` for details.
 
         Parameters
         ----------
@@ -886,6 +959,7 @@ class IRT:
         group_fit_data: int = None,
         group_fit_population_z: torch.Tensor = None,
         grayscale: bool = False,
+        plot_derivative: bool = False,
         **kwargs
     ) -> go.Figure:
         """
@@ -923,6 +997,8 @@ class IRT:
             Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
         grayscale : bool, optional
             Plot the item probability curves in grey scale. (default is False)
+        plot_derivative : bool, optional
+            Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         **kwargs : dict, optional
             Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
@@ -947,6 +1023,7 @@ class IRT:
             group_fit_data=group_fit_data,
             group_fit_population_z=group_fit_population_z,
             grayscale=grayscale,
+            plot_derivative=plot_derivative,
             **kwargs
         )
 

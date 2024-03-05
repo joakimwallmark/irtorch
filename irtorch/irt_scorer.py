@@ -614,6 +614,184 @@ class IRTScorer:
             )
         
         return bit_scores, start_z
+    
+    @torch.inference_mode(False)
+    def bit_score_gradients(
+        self,
+        z: torch.Tensor,
+        h: float = None,
+        independent_z: int = None,
+        start_z: torch.Tensor = None,
+        population_z: torch.Tensor = None,
+        one_dimensional: bool = False,
+        z_estimation_method: str = "ML",
+        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        lbfgs_learning_rate: float = 0.3,
+        grid_points: int = 300,
+        items: list[int] = None,
+        start_z_guessing_probabilities: list[float] = None,
+        start_z_guessing_iterations: int = 10000,
+    ) -> torch.Tensor:
+        """
+        Computes the gradients of the bit scores with respect to the input z scores using the central difference method: 
+        .. math ::
+
+            f^{\\prime}(z) \\approx \\frac{f(z+h)-f(z-h)}{2 h}
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores. Each column represents one latent variable.
+        h : float, optional
+            The step size for the central difference method. (default is uses the difference between the smaller and upper outlier limits (computed using the interquantile range rule) of the training z scores divided by 1000)
+        independent_z : int, optional
+            The latent variable to differentiate with respect to. (default is None and computes gradients with respect to z)
+        start_z : torch.Tensor, optional
+            A one row 2D tensor with bit score starting values of each latent variable. Estimated automatically if not provided. (default is None)
+        population_z : torch.Tensor, optional
+            A 2D tensor with z scores of the population. Used to estimate relationships between each z and sum scores. Columns are latent variables and rows are respondents. (default is None and uses z_estimation_method with the model training data)
+        one_dimensional: bool, optional
+            Whether to estimate one combined bit score for a multidimensional model. (default is True)
+        z_estimation_method : str, optional
+            Method used to obtain the z score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        lbfgs_learning_rate: float, optional
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+        grid_points : int, optional
+            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
+        items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
+        start_z_guessing_probabilities: list[float], optional
+            The guessing probability for each item if start_z is None. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        start_z_guessing_iterations: int, optional
+            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 10000)
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the gradients for each z score. Dimensions are (z rows, bit scores, z scores) where the last two dimensions represent the jacobian.
+            If independent_z is provided, the tensor has dimensions (z rows, bit scores).
+        """
+        if start_z is None:
+            start_z = self.get_bit_score_starting_z(
+                z_estimation_method=z_estimation_method,
+                items=items,
+                start_all_incorrect=one_dimensional,
+                train_z=population_z,
+                guessing_probabilities=start_z_guessing_probabilities,
+                guessing_iterations=start_z_guessing_iterations,
+            )
+
+        q1_q3 = torch.quantile(self.algorithm.training_z_scores, torch.tensor([0.25, 0.75]), dim=0)
+        iqr = q1_q3[1] - q1_q3[0]
+        lower_bound = q1_q3[0] - 1.5 * iqr
+        upper_bound = q1_q3[1] + 1.5 * iqr
+        h = (upper_bound - lower_bound) / 1000
+        z_low = z-h
+        z_high = z+h
+        if independent_z is None:
+            gradients = torch.zeros(z.shape[0], z.shape[1], z.shape[1])
+            for latent_variable in range(z.shape[1]):
+                z_low_var = torch.cat((z[:, :latent_variable], z_low[:, latent_variable].view(-1, 1), z[:, latent_variable+1:]), dim=1)
+                z_high_var = torch.cat((z[:, :latent_variable], z_high[:, latent_variable].view(-1, 1), z[:, latent_variable+1:]), dim=1)
+                bit_scores_low = self.bit_scores_from_z(
+                    z_low_var, start_z = start_z, population_z=population_z, one_dimensional=one_dimensional, z_estimation_method=z_estimation_method,
+                    ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
+                )[0]
+                bit_scores_high = self.bit_scores_from_z(
+                    z_high_var, start_z = start_z, population_z=population_z, one_dimensional=one_dimensional, z_estimation_method=z_estimation_method,
+                    ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
+                )[0]
+                gradients[:, latent_variable, :] = (bit_scores_high - bit_scores_low) / (2 * h[latent_variable])
+        else:
+            z_low_var = torch.cat((z[:, :independent_z-1], z_low[:, independent_z-1].view(-1, 1), z[:, independent_z:]), dim=1)
+            z_high_var = torch.cat((z[:, :independent_z-1], z_high[:, independent_z-1].view(-1, 1), z[:, independent_z:]), dim=1)
+            bit_scores_low = self.bit_scores_from_z(
+                z_low_var, start_z = start_z, population_z=population_z, one_dimensional=one_dimensional, z_estimation_method=z_estimation_method,
+                ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
+            )[0]
+            bit_scores_high = self.bit_scores_from_z(
+                z_high_var, start_z = start_z, population_z=population_z, one_dimensional=one_dimensional, z_estimation_method=z_estimation_method,
+                ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
+            )[0]
+            gradients = (bit_scores_high - bit_scores_low) / (2 * h[independent_z-1])
+
+        return gradients
+
+        
+    @torch.inference_mode(False)
+    def expected_item_score_slopes(
+        self,
+        z: torch.Tensor,
+        scale: str = 'z',
+        bit_scores: torch.Tensor = None,
+        rescale_by_item_score: bool = True,
+        **kwargs
+    ) -> torch.Tensor:
+        """
+        Computes the slope of the expected item scores, averaged over the sample in z. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median z scores for the other latent variables.
+
+        Parameters
+        ----------
+        z : torch.Tensor, optional
+            A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
+        scale : str, optional
+            The latent trait scale to differentiate with respect to. Can be 'bit' or 'z'. 
+            'bit' is only a linear approximation for multidimensional models since multiple z scores can lead to the same bit scores, 
+            and thus there are no unique derivatives of the item scores with respect to the bit scores for multidimensional models. (default is 'z')
+        bit_scores: torch.Tensor, optional
+            A 2D tensor with bit scores corresponding to the z scores. If not provided, computes the bit scores from the z scores. (default is None)
+        rescale_by_item_score : bool, optional
+            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
+        **kwargs
+            Additional keyword arguments for the bit_score_gradients method.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the expected item score slopes.
+        """
+        if z.shape[0] < 2:
+            raise ValueError("z must have at least 2 rows.")
+        if z.requires_grad:
+            z.requires_grad_(False)
+
+        if scale == 'bit' and self.model.latent_variables > 1:
+            expected_item_sum_scores = self.model.expected_item_sum_score(z, return_item_scores=True).detach()
+            if not self.model.mc_correct and rescale_by_item_score:
+                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
+            if bit_scores is None:
+                bit_scores = self.bit_scores_from_z(z)[0]
+            # item score slopes for each item
+            mean_slopes = linear_regression(bit_scores, expected_item_sum_scores).t()[:, 1:]
+        else:
+            median, _ = torch.median(z, dim=0)
+            mean_slopes = torch.zeros(z.shape[0], len(self.model.modeled_item_responses), z.shape[1])
+            for latent_variable in range(z.shape[1]):
+                z_scores = median.repeat(z.shape[0], 1)
+                z_scores[:, latent_variable], _ = z[:, latent_variable].sort()
+                z_scores.requires_grad_(True)
+                expected_item_sum_scores = self.model.expected_item_sum_score(z_scores, return_item_scores=True)
+                if not self.model.mc_correct and rescale_by_item_score:
+                    expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
+
+                # item score slopes for each item
+                for item in range(expected_item_sum_scores.shape[1]):
+                    if z_scores.grad is not None:
+                        z_scores.grad.zero_()
+                    expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
+                    mean_slopes[:, item, latent_variable] = z_scores.grad[:, latent_variable]
+
+            if scale == 'bit' and self.model.latent_variables == 1:
+                dbit_dz = self.bit_score_gradients(z, independent_z=1, **kwargs)
+                # divide by the derivative of the bit scores with respect to the z scores
+                # to get the expected item score slopes with respect to the bit scores
+                mean_slopes = torch.einsum('ab...,a...->ab...', mean_slopes, 1/dbit_dz)
+            else:
+                mean_slopes = mean_slopes.mean(dim=0)
+
+        return mean_slopes
 
     def _inverted_scales(self, train_z):
         """

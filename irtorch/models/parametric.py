@@ -227,14 +227,9 @@ class Parametric(BaseIRTModel):
 
     # TODO remove if not used
     @torch.inference_mode()
-    def item_z_relationship_directions(self, z: torch.tensor = None) -> torch.Tensor:
+    def item_z_relationship_directions(self, *args) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.
-
-        Parameters
-        ----------
-        z : torch.Tensor, optional
-            A 2D tensor with population z scores. Only required for the nominal model.
 
         Returns
         -------
@@ -244,7 +239,11 @@ class Parametric(BaseIRTModel):
         if self.model == "1PL":
             weights = self.weight_param.repeat(self.items, 1)
         if self.model == "nominal":
-            weights = self.expected_item_score_slopes(z)
+            model_weights = torch.zeros(self.output_size, self.latent_variables)
+            model_weights[self.free_weights] = self.weight_param
+            weights = torch.zeros(self.items, self.latent_variables)
+            for item in range(self.items):
+                weights[item] = model_weights[item * self.max_item_responses + self.mc_correct[item]-1]
         else:
             weights = torch.zeros(self.items, self.latent_variables)
             weights[self.free_weights] = self.weight_param

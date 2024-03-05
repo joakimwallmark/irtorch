@@ -239,18 +239,17 @@ def test_item_z_relationship_directions():
         model = "nominal",
         item_categories=[2, 3, 3],
         item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
-        mc_correct=[1, 1, 3],
+        mc_correct=[2, 2, 3],
         reference_category=True
     )
 
     model.weight_param.data = torch.tensor([1.0, -1.0, -1.0, -1.0, -1.0, 3.0, 1.0, 1.0])
 
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.2], [0.8, -0.6]])
-    directions = model.item_z_relationship_directions(z)
+    directions = model.item_z_relationship_directions()
     assert directions.shape == (3, 2), "Incorrect directions shape"
-    assert directions[0, 0] == -1, "Incorrect directions"
-    assert directions[0, 1] == 1, "Incorrect directions"
-    assert directions[1, 0] == 1, "Incorrect directions"
+    assert directions[0, 0] == 1, "Incorrect directions"
+    assert directions[0, 1] == -1, "Incorrect directions"
+    assert directions[1, 0] == -1, "Incorrect directions"
     assert directions[1, 1] == -1, "Incorrect directions"
     assert directions[2, 0] == 0, "Incorrect directions"
     assert directions[2, 1] == 1, "Incorrect directions"
@@ -261,18 +260,17 @@ def test_item_z_relationship_directions():
         model = "nominal",
         item_categories=[2, 3, 3],
         item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
-        mc_correct=[1, 1, 3],
+        mc_correct=[2, 2, 3],
         reference_category=False
     )
 
     model.weight_param.data = torch.tensor([0.0, 0.0, 1.0, -1.0, 0.0, 0.0, -1.0, -1.0, -1.0, 3.0, 0.0, 1.0, 1.0])
 
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.2], [0.8, -0.6]])
-    directions = model.item_z_relationship_directions(z)
+    directions = model.item_z_relationship_directions()
     assert directions.shape == (3, 2), "Incorrect directions shape"
-    assert directions[0, 0] == -1, "Incorrect directions"
-    assert directions[0, 1] == 1, "Incorrect directions"
-    assert directions[1, 0] == 1, "Incorrect directions"
+    assert directions[0, 0] == 1, "Incorrect directions"
+    assert directions[0, 1] == -1, "Incorrect directions"
+    assert directions[1, 0] == -1, "Incorrect directions"
     assert directions[1, 1] == -1, "Incorrect directions"
     assert directions[2, 0] == 0, "Incorrect directions"
     assert directions[2, 1] == 1, "Incorrect directions"

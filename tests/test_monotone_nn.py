@@ -172,31 +172,31 @@ def test_probabilities_from_output():
     assert torch.all(probabilities[:, 1, 3:4] == 0.0), "probabilities for missing categories should be 0"
     assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1])), "probabilities for missing categories should be 0"
 
-# TODO remove if not needed
-# def test_item_z_relationship_directions():
-#     model = NonparametricMonotone(
-#         latent_variables = 2,
-#         item_categories=[2, 3, 4],
-#         hidden_dim=[6],
-#         item_z_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
-#         use_bounded_activation=True
-#     )
+def test_item_z_relationship_directions():
+    torch.manual_seed(0)
+    model = MonotoneNN(
+        latent_variables = 2,
+        item_categories=[2, 3, 4],
+        hidden_dim=[6],
+        item_z_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
+        use_bounded_activation=True
+    )
 
-#     optimizer = torch.optim.Adam(
-#         [{"params": model.parameters()}], lr=0.02, amsgrad=True
-#     )
-#     z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
-#     data = torch.tensor([[0, 2, 0], [0, 1, 1], [1, 0, 1], [1, 0, 3]]).float()
-#     for _ in range(2): # update two times with the same data
-#         optimizer.zero_grad()
-#         output = model.forward(z)
-#         loss = -model.log_likelihood(data=data, output=output)
-#         loss.backward()
-#         optimizer.step()
+    optimizer = torch.optim.Adam(
+        [{"params": model.parameters()}], lr=0.02, amsgrad=True
+    )
+    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    data = torch.tensor([[0, 2, 0], [0, 1, 1], [1, 0, 1], [1, 0, 3]]).float()
+    for _ in range(2): # update two times with the same data
+        optimizer.zero_grad()
+        output = model.forward(z)
+        loss = -model.log_likelihood(data=data, output=output)
+        loss.backward()
+        optimizer.step()
 
-#     item_z_relationship_directions = model.item_z_relationship_directions()
-#     assert item_z_relationship_directions.shape == (3, 2), "Incorrect item_z_relationship_directions shape"
-#     assert torch.all(item_z_relationship_directions[0, :] == 1), "item_z_relationship_directions should be 1 for the first item"
-#     assert torch.all(item_z_relationship_directions[1, :] == -1), "item_z_relationship_directions should be -1 the second item"
-#     assert item_z_relationship_directions[2, 0] == 1, "item_z_relationship_directions should be 1 the third and first latent variable"
-#     assert item_z_relationship_directions[2, 1] == 0, "item_z_relationship_directions should be 0 the third and second latent variable"
+    item_z_relationship_directions = model.item_z_relationship_directions()
+    assert item_z_relationship_directions.shape == (3, 2), "Incorrect item_z_relationship_directions shape"
+    assert torch.all(item_z_relationship_directions[0, :] == 1), "item_z_relationship_directions should be 1 for the first item"
+    assert torch.all(item_z_relationship_directions[1, :] == -1), "item_z_relationship_directions should be -1 the second item"
+    assert item_z_relationship_directions[2, 0] == 1, "item_z_relationship_directions should be 1 the third and first latent variable"
+    assert item_z_relationship_directions[2, 1] == 0, "item_z_relationship_directions should be 0 the third and second latent variable"

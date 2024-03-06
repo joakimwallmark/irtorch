@@ -589,7 +589,6 @@ class IRTScorer:
 
         inverted_scales = self._inverted_scales(population_z)
         z_adjusted, train_z_adjusted, start_z_adjusted = self._anti_invert_and_adjust_z_scores(z, population_z, start_z, inverted_scales)
-        
         grid_start, grid_end, _ = self._get_grid_boundaries(train_z_adjusted, start_z_adjusted)
         
         if one_dimensional:

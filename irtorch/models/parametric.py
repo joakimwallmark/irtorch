@@ -225,7 +225,6 @@ class Parametric(BaseIRTModel):
 
         return weights, biases
 
-    # TODO remove if not used
     @torch.inference_mode()
     def item_z_relationship_directions(self, *args) -> torch.Tensor:
         """

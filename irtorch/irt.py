@@ -768,15 +768,11 @@ class IRT:
         path : str
             Where to save fitted model.
         """
-        # TODO save training history
-        if self.algorithm.train_data is None:
-            logger.error("Attempted to save model before fitting.")
-            raise AttributeError("Cannot save model before fitting.")
-        
         to_save = {
             "model_state_dict": self.model.state_dict(),
             "train_data": self.algorithm.train_data,
             "training_z_scores": self.algorithm.training_z_scores,
+            "training_history": self.algorithm.training_history,
         }
         if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
             to_save["encoder_state_dict"] = self.algorithm.encoder.state_dict()
@@ -791,11 +787,14 @@ class IRT:
         path : str
             Where to load fitted model from.
         """
-        # TODO load training history
         checkpoint = torch.load(path)
         self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.algorithm.train_data = checkpoint["train_data"]
-        self.algorithm.training_z_scores = checkpoint["training_z_scores"]
+        if "train_data" in checkpoint:
+            self.algorithm.train_data = checkpoint["train_data"]
+        if "training_z_scores" in checkpoint:
+            self.algorithm.training_z_scores = checkpoint["training_z_scores"]
+        if "training_history" in checkpoint:
+            self.algorithm.training_history = checkpoint["training_history"]
         if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
             self.algorithm.encoder.load_state_dict(checkpoint["encoder_state_dict"])
 

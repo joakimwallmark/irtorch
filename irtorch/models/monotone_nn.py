@@ -250,7 +250,6 @@ class MonotoneNN(BaseIRTModel):
         return F.softmax(reshaped_output, dim=1).reshape(output.shape[0], self.items, self.max_item_responses)
 
 
-    # TODO remove if not used
     def item_z_relationship_directions(self, *args) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.

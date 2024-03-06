@@ -91,7 +91,6 @@ class BaseIRTAlgorithm(ABC):
             if self.imputation_method == "zero":
                 data[data == -1] = 0
             else:
-                # TODO: imputation methods.
                 # self._impute_missing(data, data.isnan())
                 # see also helper_function impute_missing
                 raise NotImplementedError("Imputation methods not implemented yet")

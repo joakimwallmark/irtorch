@@ -177,10 +177,8 @@ class TestVAIRT:
             iw_samples, latent_variables
         )
         std = torch.exp(0.5 * logvars)
-        # torch.manual_seed(0)
         z_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
             test_data[0:2, 0:2], logits, z_samples, means, logvars
         )
         assert loss > 0
-        # TODO: make better assertions here

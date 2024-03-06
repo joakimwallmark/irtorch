@@ -98,8 +98,3 @@ class QuantileMVNormal:
         raise NotImplementedError(
             "Not yet implemented as pytorch MultivariateNormal does not support cdf"
         )
-        # mv_norm_data = torch.zeros_like(data)
-        # for i in range(data.shape[1]):
-        #     mv_norm_data[:, i] = interp(data[:, i], self.data[:, i], self.qt_data[:, i])
-
-        # return torch.exp(self.mvnormal.cdf(mv_norm_data))

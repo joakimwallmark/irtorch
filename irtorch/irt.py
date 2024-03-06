@@ -1,5 +1,6 @@
 import logging
 import torch
+import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
 from plotly import graph_objects as go
 from irtorch.models import BaseIRTModel
@@ -518,6 +519,25 @@ class IRT:
             population_z = population_z,
             **kwargs
         )
+
+    def item_parameters(self, IRT_format = False) -> pd.DataFrame:
+        """
+        For parametric models, get the item parameters for a fitted model.
+
+        Parameters
+        ----------
+        IRT_format : bool, optional
+            Only for unidimensional models. Whether to return the item parameters in traditional IRT format. Otherwise returns weights and biases. (default is False)
+
+        Returns
+        -------
+        pd.DataFrame
+            A dataframe with the item parameters.
+        """
+        if isinstance(self.model, Parametric):
+            return self.model.item_parameters(IRT_format)
+        else:
+            raise ValueError("Item parameters are only available for parametric models.")
 
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """

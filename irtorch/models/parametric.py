@@ -1,4 +1,5 @@
 import logging
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -201,14 +202,19 @@ class Parametric(BaseIRTModel):
         reshaped_output = output.reshape(-1, self.max_item_responses)
         return F.softmax(reshaped_output, dim=1).reshape(output.shape[0], self.items, self.max_item_responses)
 
-    def item_parameters(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def item_parameters(self, IRT_format = False) -> pd.DataFrame:
         """
         Get the item parameters for a fitted model.
 
+        Parameters
+        ----------
+        IRT_format : bool, optional
+            Only for unidimensional models. Whether to return the item parameters in traditional IRT format. Otherwise returns weights and biases. (default is False)
+
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor]
-            A tuple of 2D tensor with the item parameters. Items are rows and parameters are columns. Weights are in the first tensor, ordered by latent variable. The second tensor holds the biases, ordered by item category.
+        pd.DataFrame
+            A dataframe with the item parameters.
         """
         biases = torch.zeros(self.output_size)
         biases[self.free_bias] = self.bias_param
@@ -223,7 +229,25 @@ class Parametric(BaseIRTModel):
             weights = torch.zeros(self.items, self.latent_variables)
             weights[self.free_weights] = self.weight_param
 
-        return weights, biases
+        weights_df = pd.DataFrame(weights.detach().numpy())
+        if IRT_format and self.latent_variables == 1:
+            if self.model == "nominal":
+                weights_df.columns = [f"a{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
+                biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
+            else:
+                weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
+                biases_df = pd.DataFrame(-(weights*biases).detach()[:, 1:].numpy())
+        else:
+            if self.model == "nominal":
+                weights_df.columns = [f"w{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
+            else:
+                weights_df.columns = [f"w{i+1}" for i in range(weights.shape[1])]
+            biases_df = pd.DataFrame(biases.detach().numpy())
+            
+        biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
+        parameters = pd.concat([weights_df, biases_df], axis=1)
+
+        return parameters
 
     @torch.inference_mode()
     def item_z_relationship_directions(self, *args) -> torch.Tensor:

@@ -145,3 +145,5 @@ data.csv
 tests/models
 irtorch/datasets/swedish_sat
 notebooks/old
+runs/
+*test.ipynb

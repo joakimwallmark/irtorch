@@ -398,7 +398,7 @@ class IRTScorer:
         # Ensure result is always a 2D tensor even with 1 latent variable
         return result.view(-1, z_scores.shape[1])
 
-    def get_bit_score_starting_z(
+    def bit_score_starting_z(
         self,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -410,7 +410,7 @@ class IRTScorer:
         guessing_iterations: int = 10000,
     ):
         """
-        Returns the starting z score from which to compute bit scores.
+        Computes the starting z score from which to compute bit scores.
         
         Parameters
         ----------
@@ -579,7 +579,7 @@ class IRTScorer:
                 population_z = self.algorithm.training_z_scores
 
         if start_z is None:
-            start_z = self.get_bit_score_starting_z(
+            start_z = self.bit_score_starting_z(
                 z_estimation_method=z_estimation_method,
                 items=items,
                 start_all_incorrect=one_dimensional,
@@ -674,7 +674,7 @@ class IRTScorer:
             If independent_z is provided, the tensor has dimensions (z rows, bit scores).
         """
         if start_z is None:
-            start_z = self.get_bit_score_starting_z(
+            start_z = self.bit_score_starting_z(
                 z_estimation_method=z_estimation_method,
                 items=items,
                 start_all_incorrect=one_dimensional,

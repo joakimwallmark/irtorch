@@ -375,7 +375,57 @@ class IRT:
         if z is None:
             z = self.algorithm.training_z_scores
         return self.model.expected_item_score_slopes(z, bit_scores, rescale_by_item_score)
+
+    def bit_score_starting_z(
+        self,
+        z_estimation_method: str = "ML",
+        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        lbfgs_learning_rate: float = 0.3,
+        items: list[int] = None,
+        start_all_incorrect: bool = False,
+        train_z: torch.Tensor = None,
+        guessing_probabilities: list[float] = None,
+        guessing_iterations: int = 10000,
+    ):
+        """
+        Computes the starting z score from which to compute bit scores. 
+        A z score at or below this starting z score will result in a bit score of zero when supplied to, i.e., :meth:`bit_scores_from_z` or :meth:`latent_scores`.
         
+        Parameters
+        ----------
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        lbfgs_learning_rate: float, optional
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+        items: list[int], optional
+            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
+        start_all_incorrect: bool, optional
+            Whether to compute the starting z scores based incorrect responses. If false, starting z is computed based on relationships between each latent variable and the item responses. (default is False)
+        train_z : torch.Tensor, optional
+            A 2D tensor with the training data z scores. Used to estimate relationships between z and getting the items correct when start_all_incorrect is False. Columns are latent variables and rows are respondents. (default is None and uses encoder z scores from the model training data)
+        guessing_probabilities: list[float], optional
+            The guessing probability for each item. The same length as the number of items. Guessing is not supported for polytomously scored items and the probabilities for them will be ignored. (default is None and uses no guessing or, for multiple choice models, 1 over the number of item categories)
+        guessing_iterations: int, optional
+            The number of iterations to use for approximating a minimum z when guessing is incorporated. (default is 200)
+        
+        
+        Returns
+        -------
+        torch.Tensor
+            A tensor with all the starting z values.
+        """
+        return self.scorer.bit_score_starting_z(
+            z_estimation_method=z_estimation_method,
+            ml_map_device=ml_map_device,
+            lbfgs_learning_rate=lbfgs_learning_rate,
+            items=items,
+            start_all_incorrect=start_all_incorrect,
+            train_z=train_z,
+            guessing_probabilities=guessing_probabilities,
+            guessing_iterations=guessing_iterations,
+        )
 
     def group_fit_log_likelihood(
         self,

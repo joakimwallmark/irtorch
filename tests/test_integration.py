@@ -123,20 +123,20 @@
 #     # TODO add bit scores plots
 
 # @pytest.mark.integration
-# def test_get_bit_score_starting_z(model: IRT):
+# def test_bit_score_starting_z(model: IRT):
 #     guessing_probabilities = [0.5] * len(model.scorer.algorithm.model.modeled_item_responses)
 
 #     # Test with no guessing (or default guessing for multiple choice)
-#     starting_z = model.scorer.get_bit_score_starting_z(guessing_iterations=200)
+#     starting_z = model.scorer.bit_score_starting_z(guessing_iterations=200)
 #     assert starting_z.shape == (1, model.model.latent_variables)
 
 #     # Test with guessing for dichotomous items
-#     starting_z = model.scorer.get_bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
+#     starting_z = model.scorer.bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
 #     assert starting_z.shape == (1, model.model.latent_variables)
 
 #     # Test with guessing and MC correct
 #     model.scorer.algorithm.model.mc_correct = [1] * len(model.scorer.algorithm.model.modeled_item_responses)
-#     starting_z = model.scorer.get_bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
+#     starting_z = model.scorer.bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
 #     assert starting_z.shape == (1, model.model.latent_variables)
 #     model.scorer.algorithm.model.mc_correct = None
 

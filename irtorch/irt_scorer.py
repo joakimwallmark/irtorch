@@ -1,4 +1,3 @@
-import sys
 import logging
 import torch
 from torch.distributions import MultivariateNormal

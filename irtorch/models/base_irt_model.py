@@ -176,7 +176,7 @@ class BaseIRTModel(ABC, nn.Module):
     @torch.inference_mode()
     def sample_test_data(self, z: torch.Tensor) -> torch.Tensor:
         """
-        Sample test data given latent z scores.
+        Sample test data for the provided z scores.
 
         Parameters
         ----------
@@ -188,14 +188,9 @@ class BaseIRTModel(ABC, nn.Module):
         torch.Tensor
             The sampled test data.
         """
-        # TODO change to work with new item_probabilities method
         probs = self.item_probabilities(z)
-        # Initialize an empty tensor to hold the samples
-        test_data = torch.empty(z.shape[0], len(probs))
-        for item_index, item_probs in enumerate(probs):
-            dist = torch.distributions.Categorical(item_probs)
-            test_data[:, item_index] = dist.sample()
-        return test_data
+        dist = torch.distributions.Categorical(probs)
+        return dist.sample().float()
     
     @torch.inference_mode(False)
     def probability_gradients(self, z: torch.Tensor) -> torch.Tensor:

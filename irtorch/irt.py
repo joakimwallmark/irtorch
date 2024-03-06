@@ -707,6 +707,22 @@ class IRT:
         """
         return self.evaluator.residuals(data, z, z_estimation_method, average_over)
 
+    def sample_test_data(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Sample test data for the provided z scores.
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            The latent scores.
+
+        Returns
+        -------
+        torch.Tensor
+            The sampled test data.
+        """
+        return self.model.sample_test_data(z)
+
     def sum_score_probabilities(
         self,
         latent_density_method: str = "data",

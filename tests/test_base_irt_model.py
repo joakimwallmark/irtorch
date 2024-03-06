@@ -86,3 +86,23 @@ def test_probability_gradients(base_irt_model: BaseIRTModel):
     prob_gradients = base_irt_model.probability_gradients(input_z)
 
     assert prob_gradients.shape == (3, 2, 4, 2)
+
+def test_sample_test_data(base_irt_model: BaseIRTModel):
+    # Create a mock for item_probabilities() method
+    def item_probabilities_mock(*args, **kwargs):
+        return torch.tensor([
+            [[0.1, 0.1, 0.8, 0.0], [0.1, 0.1, 0.1, 0.7]],
+            [[0.3, 0.3, 0.4, 0.0], [0.3, 0.5, 0.1, 0.1]]
+        ])
+    base_irt_model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
+
+    # Call sample_test_data
+    z = torch.randn((2, 2))
+    sampled_data = base_irt_model.sample_test_data(z)
+
+    # Check the output shape and type
+    assert sampled_data.shape == z.shape
+    assert sampled_data.dtype == torch.float32
+
+    # Check if the values are in the correct range (0 to number of categories - 1)
+    assert torch.all((sampled_data >= 0) & (sampled_data < 4))

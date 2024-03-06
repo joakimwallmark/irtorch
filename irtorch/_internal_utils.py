@@ -121,7 +121,6 @@ def random_guessing_data(
             responses = torch.bernoulli(torch.full((size,), guessing_prob))
         else:
             if mc_correct is not None:
-                # TODO what if we encoded missing?
                 # Create a tensor to hold probabilities for all choices
                 probs = torch.full((num_categories,), (1 - guessing_prob) / (num_categories - 1))
                 

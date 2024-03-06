@@ -411,7 +411,6 @@ class IRTPlotter:
         go.Figure
             The Plotly Figure object for the plot.
         """
-        # TODO: Integrate over non-plotted dimensions for multidimensional models...
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
             raise TypeError("Cannot plot more than two latent variables in one plot.")

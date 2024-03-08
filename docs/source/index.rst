@@ -32,6 +32,8 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    estimation_algorithms
    config
    datasets
+   cross_validation
+   utils
 
 .. toctree::
    :maxdepth: 2

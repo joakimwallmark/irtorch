@@ -1,14 +1,14 @@
 import pytest
 import torch
-from irtorch.load_dataset import swedish_national_mathematics_2019, swedish_national_mathematics_2018, swedish_sat_verbal_2022, swedish_sat_quantitative_2022, swedish_sat_2022, swedish_sat_2022_binary, big_five
+from irtorch.load_dataset import swedish_national_mathematics_2, swedish_national_mathematics_1, swedish_sat_verbal_2022, swedish_sat_quantitative_2022, swedish_sat_2022, swedish_sat_2022_binary, big_five
 
-def test_swedish_national_mathematics_2019():
-    data = swedish_national_mathematics_2019()
+def test_swedish_national_mathematics_2():
+    data = swedish_national_mathematics_2()
     assert data.dtype == torch.float32
     assert data.shape == (1401, 28)
 
-def test_swedish_national_mathematics_2018():
-    data = swedish_national_mathematics_2018()
+def test_swedish_national_mathematics_1():
+    data = swedish_national_mathematics_1()
     assert data.dtype == torch.float32
     assert data.shape == (1008, 28)
 

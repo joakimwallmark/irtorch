@@ -29,4 +29,3 @@ def set_verbosity(level) -> None:
     else:
         raise ValueError("Invalid verbosity level. Level should be 1, 2, 3, 4 or 5.")
     
-# TODO pandas mode?

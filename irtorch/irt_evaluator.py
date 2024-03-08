@@ -4,7 +4,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
 from irtorch.irt_scorer import QuantileMVNormal, GaussianMixtureTorch
 from irtorch.irt_scorer import IRTScorer
-from irtorch.helper_functions import (
+from irtorch._internal_utils import (
     impute_missing,
     conditional_score_distribution,
     sum_incorrect_probabilities,
@@ -75,10 +75,13 @@ class IRTEvaluator:
         data: torch.Tensor = None,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
-        average_per: str = "none",
-    ):
+        average_over: str = "none",
+    ) -> torch.Tensor:
         """
-        Calculate the residuals of the model for the supplied data.
+        Calculate the residuals of the model for the supplied data. 
+        
+        For multiple choice models, the residuals are computed as 1 - the probability of the selected response option.
+        For other models, the residuals are computed as the difference between the observed and model expected item scores.
 
         Parameters
         ----------
@@ -88,19 +91,19 @@ class IRTEvaluator:
             The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
         z_estimation_method : str, optional
             Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        average_per: str = "none", optional
-            Whether to average the residuals and over which level. Can be 'all', 'item' or 'respondent'. Use 'none' for no average. For example, with 'item' the average residuals is calculated for each item. (default is 'none')
+        average_over: str = "none", optional
+            Whether to average the residuals and over which level. Can be 'everything', 'items', 'respondents' or 'none'. Use 'none' for no average. For example, with 'respondent' the residuals are averaged over all respondents and is thus an average per item. (default is 'none')
             
         Returns
         -------
         torch.Tensor
-            The residuals. When average_per is 'none', the tensor has dimensions (respondents, items). Otherwise, the tensor has just one dimension or one value for 'all'.
+            The residuals.
         """
         data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
 
         # 3D tensor with dimensions (respondents, items, item categories)
-        probabilities = self.model.item_probabilities(z)
         if self.model.mc_correct is not None:
+            probabilities = self.model.item_probabilities(z)
             # Creating a range tensor for slice indices
             respndents = torch.arange(probabilities.size(0)).view(-1, 1)
             # Expand slices to match the shape of indices
@@ -110,11 +113,11 @@ class IRTEvaluator:
         else:
             residuals = data - self.model.expected_item_sum_score(z, return_item_scores=True)
 
-        if average_per == "item":
-            return residuals.mean(dim=0)
-        if average_per == "respondent":
+        if average_over == "items":
             return residuals.mean(dim=1)
-        if average_per == "all":
+        if average_over == "respondents":
+            return residuals.mean(dim=0)
+        if average_over == "everything":
             return residuals.mean(dim=None)
 
         return residuals
@@ -289,6 +292,86 @@ class IRTEvaluator:
             return likelihoods.view(z.shape[0], -1).sum(dim=dim)
         
         return likelihoods
+
+    def information(self, z: torch.Tensor, item: bool = True, scale: str = "z", degrees: list[int] = None, **kwargs) -> torch.Tensor:
+        """
+        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
+        item : bool, optional
+            Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
+        scale: str, optional
+            The grouping method scale, which can either be 'bit' or 'z'. (default is 'z')
+        degrees : list[int], optional
+            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
+            
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the information for each z score. Dimensions are:
+            
+            - By default: (z rows, items, FIM rows, FIM columns).
+            - If degrees are specified: (z rows, items).
+            - If item is False: (z rows, FIM rows, FIM columns).
+            - If degrees are specified and item is False: (z rows).
+
+        Notes
+        -----
+        In the context of IRT, the Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the latent variable(s)
+        :math:`\\mathbf{z}`.
+
+        The formula for the Fisher information matrix in the case of multiple parameters is:
+
+        .. math::
+
+            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+
+        Where:
+
+        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        
+        For additional details, see :cite:t:`Chang2017`.
+        """
+        if degrees is not None and len(degrees) != self.model.latent_variables:
+            raise ValueError("There must be one degree for each latent variable.")
+
+        probabilities = self.model.item_probabilities(z.clone())
+        gradients = self.model.probability_gradients(z).detach()
+        if scale == "bit":
+            bit_z_gradients = self.scorer.bit_score_gradients(z, one_dimensional=False, **kwargs)
+            # we divide by diagonal of the bit score gradients (the gradients in the direction of the bit score corresponding z scores)
+            bit_z_gradients_diag = torch.einsum('...ii->...i', bit_z_gradients)
+            gradients = (gradients.permute(1, 2, 0, 3) / bit_z_gradients_diag).permute(2, 0, 1, 3)
+
+        # squared gradient matrices for each latent variable
+        # Uses einstein summation with batch permutation ...
+        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
+        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
+        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
+
+        if degrees is not None and z.shape[1] > 1:
+            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
+            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
+            information = torch.einsum('i,...ij,j->...', cos_degrees, information_matrices, cos_degrees)
+        else:
+            information = information_matrices
+            if self.model.latent_variables == 1:
+                information.squeeze_()
+
+        if item:
+            return information
+        else:
+            return information.nansum(dim=1) # sum over items
+
 
     @torch.inference_mode()
     def group_fit_log_likelihood(

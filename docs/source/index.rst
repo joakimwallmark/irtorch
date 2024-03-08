@@ -21,8 +21,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    :maxdepth: 2
    :caption: Examples 🚀
 
-   examples/swesat
-   examples/natmat
+   notebooks/national_mathematics
 
 .. toctree::
    :maxdepth: 2
@@ -33,6 +32,8 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    estimation_algorithms
    config
    datasets
+   cross_validation
+   utils
 
 .. toctree::
    :maxdepth: 2

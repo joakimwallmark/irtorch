@@ -2,7 +2,7 @@ import pytest
 import torch
 from utils import initialize_fit
 from irtorch.estimation_algorithms.vaeirt import VAEIRT
-from irtorch.models import NonparametricMonotoneNN
+from irtorch.models import MonotoneNN
 
 
 # The @pytest.fixture decorator is used to create fixture methods.
@@ -15,7 +15,7 @@ class TestVAIRT:
         if device == "cuda" and not torch.cuda.is_available():
             pytest.skip("GPU is not available.")
 
-        model = NonparametricMonotoneNN(
+        model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories,
             hidden_dim = [3]
@@ -38,7 +38,7 @@ class TestVAIRT:
     ):
         # same weights and biases every time
         torch.manual_seed(0)
-        model = NonparametricMonotoneNN(
+        model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories_small,
             hidden_dim = [3]
@@ -177,10 +177,8 @@ class TestVAIRT:
             iw_samples, latent_variables
         )
         std = torch.exp(0.5 * logvars)
-        # torch.manual_seed(0)
         z_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
             test_data[0:2, 0:2], logits, z_samples, means, logvars
         )
         assert loss > 0
-        # TODO: make better assertions here

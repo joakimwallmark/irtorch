@@ -4,8 +4,8 @@ import pytest
 import torch
 import numpy as np
 from irtorch.irt import IRT
-from irtorch.utils import PytorchIRTDataset
-from irtorch.helper_functions import get_item_categories
+from irtorch._internal_utils import PytorchIRTDataset
+from irtorch.utils import get_item_categories
 
 @pytest.fixture(
     scope="module",
@@ -93,9 +93,6 @@ def latent_variables(request):
 @pytest.fixture(scope="module")
 def z_scores(latent_variables):
     repeated_tensor = torch.randn(4, latent_variables)
-    # repeated_tensor = torch.tensor([[1.0], [2.0], [1.5]]).repeat(1, latent_variables)
-    # for i in range(latent_variables):
-    #     repeated_tensor[:, i] = repeated_tensor[:, i] ** (1+ (i * 0.5))  # Offset each column by a predictable amount
 
     return repeated_tensor
 

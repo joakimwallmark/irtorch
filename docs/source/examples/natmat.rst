@@ -1,2 +1,0 @@
-Swedish national mathematics test
-=========================================

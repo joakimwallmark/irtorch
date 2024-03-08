@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 import torch
+from torch.nn.functional import softmax
 import pytest
 from irtorch.irt_evaluator import IRTEvaluator, IRTScorer
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
@@ -48,6 +49,7 @@ def irt_evaluator(latent_variables):
     mock_model.modeled_item_responses = item_categories
     mock_model.model_missing = False
     mock_model.mc_correct = None
+    mock_model.latent_variables = latent_variables
 
     # Mock z_scores method based on input
     def z_scores_mock(input_tensor):
@@ -347,16 +349,71 @@ def test_residuals(irt_evaluator: IRTEvaluator):
     )), "Residuals are not correct"
 
     # overall
-    residuals = irt_evaluator.residuals(data=data, average_per="all")
+    residuals = irt_evaluator.residuals(data=data, average_over="everything")
     assert residuals.shape == ()  # We have 30 respondents
     assert torch.isclose(residuals, torch.tensor(0.6050)), "Residuals are not correct"
 
     # respondent level
-    residuals = irt_evaluator.residuals(data=data, average_per="respondent")
+    residuals = irt_evaluator.residuals(data=data, average_over="items")
     assert residuals.shape == (5,)  # We have 5 respondents
     assert torch.allclose(residuals, torch.tensor([0.5000, 0.6000, 0.2750, 0.9000, 0.7500])), "Residuals are not correct"
 
     # item level
-    residuals = irt_evaluator.residuals(data=data, average_per="item")
+    residuals = irt_evaluator.residuals(data=data, average_over="respondents")
     assert residuals.shape == (2,)  # We have 2 items
     assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"
+
+
+def test_information(irt_evaluator: IRTEvaluator):
+    def item_probabilities_mock(z):
+        logits = torch.tensor([[[1, 2, 3, 0], [4, 3, 2, 1]]]).expand(2, 2, 4) * z.sum(dim=1).reshape(-1, 1, 1)
+        return softmax(logits, dim=2)
+    
+    irt_evaluator.model.item_probabilities = MagicMock(
+        side_effect=item_probabilities_mock
+    )
+
+    def probability_gradients_mock(z):
+        return torch.tensor([
+            [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]],
+            [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]]
+        ])
+    
+    irt_evaluator.model.probability_gradients = MagicMock(
+        side_effect=probability_gradients_mock
+    )
+
+    input_z = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    information_matrices = irt_evaluator.information(input_z)
+    assert information_matrices.shape == (2, 2, 2, 2)
+    expected_output = torch.tensor([
+        [[[ 4184.934082,  4786.798340], [ 4786.798340,  5478.406738]], [[19931.039062, 21267.791016], [21267.791016, 22694.289062]]],
+        [[[646821568, 739235008], [739235008, 844860736]], [[2972079104, 3170238464], [3170238464, 3381610496]]]
+    ])
+    assert torch.allclose(information_matrices, expected_output)
+
+    # Test with degrees
+    if irt_evaluator.model.latent_variables == 2:
+        information_matrices = irt_evaluator.information(input_z, degrees=[45, 45])
+        assert information_matrices.shape == (2, 2)
+        expected_output = torch.tensor([
+            [ 9618.4677734, 42580.4531250],
+            [1485075968.0000000, 6347082752.0000000]]
+        )
+        assert torch.allclose(information_matrices, expected_output)
+
+    # Test with item=False
+    information_matrices = irt_evaluator.information(input_z, item=False)
+    assert information_matrices.shape == (2, 2, 2)
+    expected_output = torch.tensor([
+        [[24115.972656, 26054.589844], [26054.589844, 28172.695312]],
+        [[3618900480, 3909473536], [3909473536, 4226471168]]
+    ])
+    assert torch.allclose(information_matrices, expected_output)
+
+    # Test with item=False and degrees
+    if irt_evaluator.model.latent_variables == 2:
+        information_matrices = irt_evaluator.information(input_z, item=False, degrees=[0, 90])
+        assert information_matrices.shape == (2, )
+        expected_output = torch.tensor([24115.972656, 3618899968.000000])
+        assert torch.allclose(information_matrices, expected_output)

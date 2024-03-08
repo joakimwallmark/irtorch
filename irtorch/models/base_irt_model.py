@@ -3,7 +3,7 @@ import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
-from irtorch.helper_functions import linear_regression
+from irtorch._internal_utils import linear_regression
 
 logger = logging.getLogger('irtorch')
 
@@ -151,72 +151,6 @@ class BaseIRTModel(ABC, nn.Module):
         else:
             return expected_item_scores.sum(dim=1)
         
-    @torch.inference_mode(False)
-    def expected_item_score_slopes(
-        self,
-        z: torch.Tensor,
-        bit_scores: torch.Tensor = None,
-        rescale_by_item_score: bool = True,
-    ) -> torch.Tensor:
-        """
-        Computes the slope of the expected item scores, averaged over the sample in z. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median z scores for the other latent variables.
-
-        Parameters
-        ----------
-        z : torch.Tensor, optional
-            A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
-        bit_scores : torch.Tensor, optional
-            A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
-        rescale_by_item_score : bool, optional
-            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
-
-        Returns
-        -------
-        torch.Tensor
-            A tensor with the expected item score slopes.
-        """
-        if z.shape[0] < 2:
-            raise ValueError("z must have at least 2 rows.")
-        if bit_scores is not None and z.shape != bit_scores.shape:
-            raise ValueError("z and bit_scores must have the same shape.")
-        if z.requires_grad:
-            z.requires_grad_(False)
-
-        median, _ = torch.median(z, dim=0)
-        mean_slopes = torch.zeros(len(self.modeled_item_responses), z.shape[1])
-        if bit_scores is not None:
-            raise NotImplementedError("bit score slopes not implemented yet.")
-        #     item_z_directions = self.item_z_relationship_directions()
-        for latent_variable in range(z.shape[1]):
-            z_scores = median.repeat(z.shape[0], 1)
-            z_scores[:, latent_variable], sort_indices = z[:, latent_variable].sort()
-            z_scores.requires_grad_(True)
-            expected_item_sum_scores = self.expected_item_sum_score(z_scores, return_item_scores=True)
-            if not self.mc_correct and rescale_by_item_score:
-                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.modeled_item_responses) - 1)
-
-            if bit_scores is None:
-                # sum z_scores gradients per item
-                for i in range(expected_item_sum_scores.shape[1]):
-                    if z_scores.grad is not None:
-                        z_scores.grad.zero_()
-                    expected_item_sum_scores[:, i].sum().backward(retain_graph=True)
-                    mean_slopes[i, latent_variable] = z_scores.grad[:, latent_variable].mean()
-            # else: TODO for bit scores
-                # item_z_directions[:, latent_variable]
-                # unique_bit = bit_scores[:, latent_variable].unique(sorted=True)
-                # dy_dx = (expected_item_sum_scores[1:, :] - expected_item_sum_scores[:-1, :]) / (unique_bit[1:] - unique_bit[:-1]).view(-1, 1)
-            # else:
-            # unique_z = z[:, latent_variable].unique(sorted=True)
-            # z_scores = median.repeat(unique_z.shape[0], 1)
-            # z_scores[:, latent_variable] = unique_z
-            # expected_item_sum_scores = self.expected_item_sum_score(z_scores, return_item_scores=True)
-            # dy_dx = (expected_item_sum_scores[1:, :] - expected_item_sum_scores[:-1, :]) / (unique_z[1:] - unique_z[:-1]).view(-1, 1)
-            # mean_slopes[:, latent_variable] = torch.mean(dy_dx, dim=0)
-            
-
-        return mean_slopes
-
     def item_z_relationship_directions(self, z: torch.Tensor) -> torch.Tensor:
         """
         Get the relationships between each item and latent variable for a fitted model.
@@ -242,7 +176,7 @@ class BaseIRTModel(ABC, nn.Module):
     @torch.inference_mode()
     def sample_test_data(self, z: torch.Tensor) -> torch.Tensor:
         """
-        Sample test data given latent z scores.
+        Sample test data for the provided z scores.
 
         Parameters
         ----------
@@ -254,14 +188,9 @@ class BaseIRTModel(ABC, nn.Module):
         torch.Tensor
             The sampled test data.
         """
-        # TODO change to work with new item_probabilities method
         probs = self.item_probabilities(z)
-        # Initialize an empty tensor to hold the samples
-        test_data = torch.empty(z.shape[0], len(probs))
-        for item_index, item_probs in enumerate(probs):
-            dist = torch.distributions.Categorical(item_probs)
-            test_data[:, item_index] = dist.sample()
-        return test_data
+        dist = torch.distributions.Categorical(probs)
+        return dist.sample().float()
     
     @torch.inference_mode(False)
     def probability_gradients(self, z: torch.Tensor) -> torch.Tensor:
@@ -288,65 +217,3 @@ class BaseIRTModel(ABC, nn.Module):
         # vectorized version of jacobian
         gradients = torch.vmap(compute_jacobian)(z)
         return gradients
-    
-    def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
-        """
-        Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
-
-        Parameters
-        ----------
-        z : torch.Tensor
-            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
-        item : bool, optional
-            Whether to compute the information for each item (True) or for the test as a whole (False). Default is True.
-        degrees : list[int], optional
-            A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. Default is None.
-
-        Returns
-        -------
-        torch.Tensor
-            A tensor with the information for each z score. Dimensions depend on the 'item' and 'degrees' parameters.
-
-        Notes
-        -----
-        In the context of IRT, the Fisher information matrix measures the amount of information
-        that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\\mathbf{z}`.
-
-        The formula for the Fisher information matrix in the case of multiple parameters is:
-
-        .. math::
-
-            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
-
-        Where:
-
-        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        
-        For additional details, see :cite:t:`Chang2017`.
-        """
-        if degrees is not None and len(degrees) != self.latent_variables:
-            raise ValueError("There must be one degree for each latent variable.")
-
-        probabilities = self.item_probabilities(z.clone())
-        gradients = self.probability_gradients(z)
-        # squared gradient matrices for each latent variable
-        # Uses einstein summation with batch permutation ...
-        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
-        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
-        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
-
-        if degrees is not None:
-            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
-            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
-            information = torch.einsum('i,...ij,j->...', [cos_degrees, information_matrices, cos_degrees])
-        else:
-            information = information_matrices
-
-        if item:
-            return information
-        else:
-            return information.nansum(dim=1) # sum over items

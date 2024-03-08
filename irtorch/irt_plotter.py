@@ -9,7 +9,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
-from irtorch.helper_functions import output_to_item_entropy
+from irtorch._internal_utils import output_to_item_entropy
 
 pio.templates.default = "plotly_white"
 logger = logging.getLogger('irtorch')
@@ -363,6 +363,7 @@ class IRTPlotter:
         group_fit_data: int = None,
         group_fit_population_z: torch.Tensor = None,
         grayscale: bool = False,
+        plot_derivative: bool = False,
         **kwargs
     ) -> go.Figure:
         """
@@ -400,6 +401,8 @@ class IRTPlotter:
             Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
         grayscale : bool, optional
             Plot the item probability curves in grey scale. (default is False)
+        plot_derivative : bool, optional
+            Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         **kwargs : dict, optional
             Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
 
@@ -408,7 +411,6 @@ class IRTPlotter:
         go.Figure
             The Plotly Figure object for the plot.
         """
-        # TODO: Integrate over non-plotted dimensions for multidimensional models...
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
             raise TypeError("Cannot plot more than two latent variables in one plot.")
@@ -449,16 +451,22 @@ class IRTPlotter:
             z_grid[:, latent_indices[1]] = latent_z_2.flatten()
             z_grid[:, mask] = fixed_zs
             
-        prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
-
         if scale == "bit":
-            scores_to_plot, _ = self.scorer.bit_scores_from_z(
+            scores_to_plot, start_z = self.scorer.bit_scores_from_z(
                 z=z_grid,
                 one_dimensional=False,
                 **kwargs
             )
         else:
             scores_to_plot = z_grid
+
+        if plot_derivative and len(latent_variables) == 1:
+            prob_matrix = self.model.probability_gradients(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1], latent_variables[0] - 1]
+            if scale == "bit":
+                bit_z_gradients = self.scorer.bit_score_gradients(z_grid, independent_z=latent_variables[0], start_z=start_z, **kwargs)
+                prob_matrix = prob_matrix / bit_z_gradients[:, latent_variables[0] - 1].view(-1, 1)
+        else:
+            prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
 
         if len(latent_variables) == 1:
             if plot_group_fit:
@@ -507,7 +515,7 @@ class IRTPlotter:
     def plot_information(
         self,
         items: list[int] = None,
-        scale: str = "bit",
+        scale: str = "z",
         latent_variables: tuple[int] = (1,),
         degrees: list[int] = None,
         title: str = None,
@@ -581,22 +589,24 @@ class IRTPlotter:
         if z_grid.shape[0] > 2000:
             logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
-        if items is not None:
-            item_mask = torch.zeros(self.model.items, dtype=bool)
-            item_mask[[item - 1 for item in items]] = 1
-            information = self.model.information(z_grid, item=True, degrees=degrees)[:, item_mask].sum(dim=1)
-        else:
-            information = self.model.information(z_grid, item=False, degrees=degrees)
-
         if scale == "bit":
-            scores_to_plot = self.scorer.bit_scores_from_z(
+            scores_to_plot, start_z = self.scorer.bit_scores_from_z(
                 z=z_grid,
                 **kwargs
-            )[0][:, latent_indices]
+            )
+            scores_to_plot = scores_to_plot[:, latent_indices]
         else:
+            start_z = None
             scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
+
+        if items is not None:
+            item_mask = torch.zeros(self.model.items, dtype=bool)
+            item_mask[[item - 1 for item in items]] = 1
+            information = self.evaluator.information(z_grid, item=True, scale = scale, degrees=degrees, start_z = start_z)[:, item_mask].sum(dim=1)
+        else:
+            information = self.evaluator.information(z_grid, item=False, scale = scale, degrees=degrees, start_z = start_z)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()

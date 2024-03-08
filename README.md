@@ -8,12 +8,12 @@
 Check out our [documentation page](https://irtorch.readthedocs.io/en/latest/) for usage examples and API reference.
 
 ## Installation
-Install from Python Package Index (PyPI)
+Install from [Python Package Index (PyPI)](https://pypi.org/project/irtorch/)
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ irtorch
+pip install irtorch
 ```
 
-Install from GitHub
+Install from [GitHub](https://github.com/joakimwallmark/irtorch)
 ```bash
 pip install git+https://github.com/joakimwallmark/irtorch.git
 ```

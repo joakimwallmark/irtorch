@@ -12,7 +12,7 @@ To use the package in a cloud-based Jupyter notebook environment such as Google 
 
 .. code-block::
 
-    !pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ irtorch
+    !pip install irtorch
 
 3. Verify the installation by importing the package in another cell:
 
@@ -29,17 +29,15 @@ Ensure you have Python 3.10 or later installed on your system. If not, download 
 
 **Installing IRTorch**
 
-You can install IRTorch directly from the Python Package Index (PyPI) or from GitHub. Choose one of the following methods:
+You can install IRTorch directly from the Python Package Index (PyPI) or from GitHub.
 
 **Install from PyPI**
-
-.. TODO CHANGE BELOW TO NORMAL PYPI later
 
 Run the following command in your terminal or command prompt: 
 
 .. code-block:: bash
 
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ irtorch
+    pip install irtorch
 
 **Install from GitHub**
 
@@ -51,7 +49,7 @@ To install the latest version directly from GitHub, use:
 
 **Recommended Tools**
 
-For running and writing Python code, consider using an integrated development environment (IDE) such as `Visual Studio Code <https://code.visualstudio.com/>`__ or `PyCharm <https://www.jetbrains.com/pycharm/>`__. Both offer extensive support for Python and include features such as debugging, syntax highlighting, code completion and jupyter notebooks.
+When using the package installed on your local machine, consider using an integrated development environment (IDE) such as `Visual Studio Code <https://code.visualstudio.com/>`__ or `PyCharm <https://www.jetbrains.com/pycharm/>`__. Both offer extensive support for Python and include features such as debugging, syntax highlighting, code completion and jupyter notebooks.
 
 - Visual Studio Code: Follow this `tutorial <https://code.visualstudio.com/docs/python/python-tutorial>`__ to set up VSCode for Python development.
 - PyCharm: Refer to the `official documentation <https://www.jetbrains.com/help/pycharm/quick-start-guide.html>`__ for installation instructions and getting started.

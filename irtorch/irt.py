@@ -27,7 +27,7 @@ class IRT:
         - "1PL": One-parameter logistic model.
         - "2PL": Two-parameter logistic model.
         - "GPC": Generalized partial credit model.
-        - "nominal": Nominal response model.
+        - "NR": Nominal response model.
         - "MNN": Monotone neural network model.
         - "MMCNN": Monotone multiple choice neural network model.
         
@@ -96,7 +96,7 @@ class IRT:
                     # replace nan with -inf to get max
                     item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
-            if model in ["1PL", "2PL", "3PL", "GPC", "nominal"]:
+            if model in ["1PL", "2PL", "3PL", "GPC", "NR"]:
                 self.model = Parametric(
                     latent_variables=latent_variables,
                     item_categories=item_categories,

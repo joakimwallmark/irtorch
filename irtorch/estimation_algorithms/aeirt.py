@@ -55,7 +55,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             self.model.latent_variables = encoder.latent_variables
             self.encoder = encoder
         else:
-            if one_hot_encoded:
+            if self.one_hot_encoded:
                 input_dim = sum(self.model.modeled_item_responses)
             else:
                 input_dim = len(self.model.modeled_item_responses)

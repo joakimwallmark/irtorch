@@ -166,10 +166,10 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
         item_sum_scores = self.expected_item_sum_score(z)
-        item_z_mask = torch.zeros((len(self.items), self.latent_variables)).bool()
+        item_z_mask = torch.zeros(self.items, self.latent_variables)
         for item, _ in enumerate(self.modeled_item_responses):
             weights = linear_regression(z, item_sum_scores[:,item].reshape(-1, 1))[1:].reshape(-1)
-            item_z_mask[item, :] = weights >= 0
+            item_z_mask[item, :] = weights.sign().int()
         
         return item_z_mask.int()
 

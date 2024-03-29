@@ -9,7 +9,7 @@ def linear_regression(x, y):
     x : torch.Tensor
         Design matrix of shape (m, n), where m is the number of samples and n is the number of features.
     y : torch.Tensor
-        Target vector of shape (m, o), where m is the number of samples and o is the number response variables.
+        Target vector of shape (m, o), where m is the number of samples and o is the number response variables. If o > 1, this implies a multivariate linear regression.
 
     Returns
     -----------

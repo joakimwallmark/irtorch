@@ -103,7 +103,7 @@ class IRTScorer:
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
         eap_z_integration_points: int = None,
         bit_score_one_dimensional: bool = False,
         bit_score_population_z: torch.Tensor = None,
@@ -454,13 +454,13 @@ class IRTScorer:
             if train_z is None:
                 train_z = self.algorithm.training_z_scores
             # Which latent variables are inversely related to the test scores?
-            item_sum_scores = self.model.expected_item_sum_score(train_z)
-            test_weights = linear_regression(train_z, item_sum_scores.sum(dim=1).reshape(-1, 1))[1:]
+            item_sum_scores = self.model.expected_item_sum_score(train_z, return_item_scores=False)
+            test_weights = linear_regression(train_z, item_sum_scores.reshape(-1, 1))[1:]
             inverted_scale = torch.where(test_weights < 0, torch.tensor(-1), torch.tensor(1)).reshape(-1)
             
             # Which latent variables are positively related to the item scores?
             directions = self.model.item_z_relationship_directions(train_z)
-            item_z_postive = (inverted_scale * directions) >= 0 # Invert item relationship if overall test relationship is inverted
+            item_z_positive = (inverted_scale * directions) >= 0 # Invert item relationship if overall test relationship is inverted
 
         if guessing_probabilities is None:
             if start_all_incorrect:
@@ -470,9 +470,9 @@ class IRTScorer:
                 # Get minimum score in relation to each latent variable
                 min_sum_score = torch.zeros((len(items), self.model.latent_variables))
                 if self.model.model_missing:
-                    min_sum_score[~item_z_postive] = (torch.tensor(selected_item_categories) - 2).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_z_postive]
+                    min_sum_score[~item_z_positive] = (torch.tensor(selected_item_categories) - 2).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_z_positive]
                 else:
-                    min_sum_score[~item_z_postive] = (torch.tensor(selected_item_categories) - 1).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_z_postive]
+                    min_sum_score[~item_z_positive] = (torch.tensor(selected_item_categories) - 1).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_z_positive]
 
                 # get the minimum z scores based on the sum scores
                 starting_z = torch.zeros((1, self.model.latent_variables)).float()
@@ -501,7 +501,7 @@ class IRTScorer:
                 guessing_z = torch.zeros(random_data.shape[0], self.model.latent_variables)
                 for z in range(self.model.latent_variables):
                     random_data_z = random_data.clone()
-                    random_data_z[:, ~item_z_postive[:, z]] = selected_correct[~item_z_postive[:, z]].float() - 1
+                    random_data_z[:, ~item_z_positive[:, z]] = selected_correct[~item_z_positive[:, z]].float() - 1
                     logger.info("Approximating minimum bit score z from random guessing data for latent variable %s.", z+1)
                     guessing_z[:, z] = self.latent_scores(random_data_z, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)[:, z]
 

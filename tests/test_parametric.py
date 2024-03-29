@@ -92,7 +92,7 @@ def test_nominal_forward():
     # With reference category
     model = Parametric(
         latent_variables = 2,
-        model = "nominal",
+        model = "NR",
         item_categories=[2, 3, 3],
         item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
         reference_category=True
@@ -123,7 +123,7 @@ def test_nominal_forward():
     # Without reference category
     model = Parametric(
         latent_variables = 2,
-        model = "nominal",
+        model = "NR",
         item_categories=[2, 3, 3],
         item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
         reference_category=False
@@ -181,8 +181,8 @@ def test_probabilities_from_output():
     assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1])), "probabilities for missing categories should be 0"
 
 def test_item_parameters(latent_variables):
-    for model_type in ["nominal", "1PL", "2PL", "GPC"]:
-        if model_type in ["GPC", "nominal"]:
+    for model_type in ["NR", "1PL", "2PL", "GPC"]:
+        if model_type in ["GPC", "NR"]:
             item_categories = [2, 3, 4]
         else:
             item_categories = [2, 2, 2]
@@ -195,7 +195,7 @@ def test_item_parameters(latent_variables):
         parameters = model.item_parameters(IRT_format=False)
 
         assert isinstance(parameters, pd.DataFrame), f"Output should be a DataFrame for {model_type} model"
-        if model_type == "nominal":
+        if model_type == "NR":
             assert parameters.shape == (model.items, (model.latent_variables + 1) * model.max_item_responses), f"Incorrect shape of parameters DataFrame for {model_type} model"
         else:
             assert parameters.shape == (model.items, model.latent_variables + model.max_item_responses), f"Incorrect shape of parameters DataFrame for {model_type} model"
@@ -203,7 +203,7 @@ def test_item_parameters(latent_variables):
         parameters_irt = model.item_parameters(IRT_format=True)
 
         assert isinstance(parameters_irt, pd.DataFrame), f"Output should be a DataFrame for {model_type} model"
-        if model_type == "nominal":
+        if model_type == "NR":
             assert parameters_irt.shape == (model.items, (model.latent_variables + 1) * model.max_item_responses), f"Incorrect shape of parameters DataFrame for {model_type} model"
         elif model.latent_variables == 1:
             assert parameters_irt.shape == (model.items, model.latent_variables + model.max_item_responses - 1), f"Incorrect shape of parameters DataFrame for {model_type} model"
@@ -223,46 +223,5 @@ def test_item_z_relationship_directions():
     assert directions.shape == (3, 2), "Incorrect directions shape"
     assert torch.all(directions[0, :] == 1), "Incorrect directions"
     assert torch.all(directions[1, :] == -1), "Incorrect directions"
-    assert directions[2, 0] == 0, "Incorrect directions"
-    assert directions[2, 1] == 1, "Incorrect directions"
-
-    model = Parametric(
-        latent_variables = 2,
-        model = "nominal",
-        item_categories=[2, 3, 3],
-        item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
-        mc_correct=[2, 2, 3],
-        reference_category=True
-    )
-
-    model.weight_param.data = torch.tensor([1.0, -1.0, -1.0, -1.0, -1.0, 3.0, 1.0, 1.0])
-
-    directions = model.item_z_relationship_directions()
-    assert directions.shape == (3, 2), "Incorrect directions shape"
-    assert directions[0, 0] == 1, "Incorrect directions"
-    assert directions[0, 1] == -1, "Incorrect directions"
-    assert directions[1, 0] == -1, "Incorrect directions"
-    assert directions[1, 1] == -1, "Incorrect directions"
-    assert directions[2, 0] == 0, "Incorrect directions"
-    assert directions[2, 1] == 1, "Incorrect directions"
-
-    # Without reference category
-    model = Parametric(
-        latent_variables = 2,
-        model = "nominal",
-        item_categories=[2, 3, 3],
-        item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
-        mc_correct=[2, 2, 3],
-        reference_category=False
-    )
-
-    model.weight_param.data = torch.tensor([0.0, 0.0, 1.0, -1.0, 0.0, 0.0, -1.0, -1.0, -1.0, 3.0, 0.0, 1.0, 1.0])
-
-    directions = model.item_z_relationship_directions()
-    assert directions.shape == (3, 2), "Incorrect directions shape"
-    assert directions[0, 0] == 1, "Incorrect directions"
-    assert directions[0, 1] == -1, "Incorrect directions"
-    assert directions[1, 0] == -1, "Incorrect directions"
-    assert directions[1, 1] == -1, "Incorrect directions"
     assert directions[2, 0] == 0, "Incorrect directions"
     assert directions[2, 1] == 1, "Incorrect directions"

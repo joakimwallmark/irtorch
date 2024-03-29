@@ -18,7 +18,7 @@ class Parametric(BaseIRTModel):
     item_categories : list[int]
         Number of categories for each item. One integer for each item. Missing responses exluded.
     model : str
-        Type of parametric model. Can be "1PL", "2PL", "3PL", "GPC" or "nominal".
+        Type of parametric model. Can be "1PL", "2PL", "3PL", "GPC" or "NR".
     model_missing : bool, optional
         Whether to model missing item responses as separate item response categories. (Default: False)
     mc_correct : list[int], optional
@@ -46,8 +46,8 @@ class Parametric(BaseIRTModel):
                 )
             assert(item_z_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
             assert(torch.all(item_z_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
-        if model not in ["1PL", "2PL", "3PL", "GPC", "nominal"]:
-            raise ValueError("model_type must be one of '1PL', '2PL', '3PL', 'GPC', 'nominal'.")
+        if model not in ["1PL", "2PL", "3PL", "GPC", "NR"]:
+            raise ValueError("model_type must be one of '1PL', '2PL', '3PL', 'GPC', 'NR'.")
         if model in ["1PL", "2PL", "3PL"]:
             item_categories = [2] * len(item_categories)
 
@@ -64,7 +64,7 @@ class Parametric(BaseIRTModel):
                 else:
                     free_weights[item, 0:item_cat, :] = 1.0
             free_weights = free_weights.reshape(-1, latent_variables)
-        elif model == "nominal":
+        elif model == "NR":
             free_weights = torch.zeros(self.items, self.max_item_responses, latent_variables)
             for item, item_cat in enumerate(self.modeled_item_responses):
                 start_1 = 1 if reference_category else 0
@@ -82,15 +82,15 @@ class Parametric(BaseIRTModel):
 
         if model == "1PL":
             self.weight_param = nn.Parameter(torch.zeros(latent_variables))
-        elif model in ["2PL", "3PL", "nominal", "GPC"]:
+        elif model in ["2PL", "3PL", "NR", "GPC"]:
             self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
             if model == "3PL":
                 self.guessing_param = nn.Parameter(torch.zeros(self.items))
 
-        number_of_bias_parameters = sum(self.modeled_item_responses) if model == "nominal" and not reference_category else sum(self.modeled_item_responses) - self.items
+        number_of_bias_parameters = sum(self.modeled_item_responses) if model == "NR" and not reference_category else sum(self.modeled_item_responses) - self.items
         self.bias_param = nn.Parameter(torch.zeros(number_of_bias_parameters))
         first_category = torch.zeros(self.items, self.max_item_responses)
-        if model != "nominal" or reference_category:
+        if model != "NR" or reference_category:
             first_category[:, 0] = 1.0
         first_category = first_category.reshape(-1)
         missing_category = torch.zeros(self.items, self.max_item_responses)
@@ -135,13 +135,13 @@ class Parametric(BaseIRTModel):
             weighted_z = torch.matmul(z, weights.T).repeat_interleave(self.max_item_responses, dim=1)
             if self.model == "GPC":
                 weighted_z *= self.gpc_weight_multiplier
-        elif self.model == "nominal":
+        elif self.model == "NR":
             weights = torch.zeros(self.output_size, self.latent_variables, device=z.device)
             weights[self.free_weights] = self.weight_param
             weighted_z = torch.matmul(z, weights.T)
 
         output = weighted_z + bias
-        if self.model in ["GPC", "nominal"]:
+        if self.model in ["GPC", "NR"]:
             # stop gradients from flowing through the missing categories
             output[:, self.missing_category] = -torch.inf
 
@@ -221,7 +221,7 @@ class Parametric(BaseIRTModel):
         biases = biases.reshape(-1, self.max_item_responses)
         if self.model == "1PL":
             weights = self.weight_param.repeat(self.items, 1)
-        elif self.model == "nominal":
+        elif self.model == "NR":
             weights = torch.zeros(self.output_size, self.latent_variables)
             weights[self.free_weights] = self.weight_param
             weights = weights.reshape(-1, self.max_item_responses * self.latent_variables)
@@ -231,14 +231,14 @@ class Parametric(BaseIRTModel):
 
         weights_df = pd.DataFrame(weights.detach().numpy())
         if IRT_format and self.latent_variables == 1:
-            if self.model == "nominal":
+            if self.model == "NR":
                 weights_df.columns = [f"a{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
                 biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
             else:
                 weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
                 biases_df = pd.DataFrame(-(weights*biases).detach()[:, 1:].numpy())
         else:
-            if self.model == "nominal":
+            if self.model == "NR":
                 weights_df.columns = [f"w{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
             else:
                 weights_df.columns = [f"w{i+1}" for i in range(weights.shape[1])]
@@ -250,9 +250,14 @@ class Parametric(BaseIRTModel):
         return parameters
 
     @torch.inference_mode()
-    def item_z_relationship_directions(self, *args) -> torch.Tensor:
+    def item_z_relationship_directions(self, z:torch.Tensor = None) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.
+
+        Parameters
+        ----------
+        z : torch.Tensor, optional
+            Only needed for NR models. A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
 
         Returns
         -------
@@ -261,12 +266,10 @@ class Parametric(BaseIRTModel):
         """
         if self.model == "1PL":
             weights = self.weight_param.repeat(self.items, 1)
-        if self.model == "nominal":
-            model_weights = torch.zeros(self.output_size, self.latent_variables)
-            model_weights[self.free_weights] = self.weight_param
-            weights = torch.zeros(self.items, self.latent_variables)
-            for item in range(self.items):
-                weights[item] = model_weights[item * self.max_item_responses + self.mc_correct[item]-1]
+        if self.model == "NR":
+            if z is None:
+                raise ValueError("z must be provided to get item to z relationships for NR models.")
+            return super().item_z_relationship_directions(z)
         else:
             weights = torch.zeros(self.items, self.latent_variables)
             weights[self.free_weights] = self.weight_param

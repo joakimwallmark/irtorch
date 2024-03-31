@@ -100,6 +100,7 @@ class IRTScorer:
         self,
         data: torch.Tensor,
         scale: str = "bit",
+        standard_errors: bool = False,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -125,6 +126,8 @@ class IRTScorer:
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
             The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+        standard_errors : bool, optional
+            Whether to return standard errors for the latent scores. (default is False)
         z : torch.Tensor, optional
             For bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
@@ -153,13 +156,15 @@ class IRTScorer:
             The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         Returns
         -------
-        torch.Tensor
-            A 2D tensor of latent scores, with latent variables as columns.
+        torch.Tensor or tuple[torch.Tensor, torch.Tensor]
+            A 2D tensor of latent scores, with latent variables as columns. If standard_errors is True, returns a tuple with the latent scores and the standard errors.
         """
         if scale not in ["bit", "z"]:
             raise ValueError("Invalid scale. Choose either 'z' or 'bit'.")
         if z_estimation_method not in ["NN", "ML", "EAP", "MAP"]:
             raise ValueError("Invalid z_estimation_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
+        if standard_errors and (scale == "bit" or z_estimation_method != "ML"):
+            raise ValueError("Standard errors are only available for z scores with ML estimation.")
 
         data = data.contiguous()
         if data.dim() == 1:  # if we have only one observations
@@ -184,6 +189,10 @@ class IRTScorer:
                 z = self._eap_z_scores(data, eap_z_integration_points)
 
         if scale == "z":
+            if standard_errors:
+                fisher_info = self.information(z, item=False, scale = "z", degrees=None)
+                se = 1/torch.einsum('...ii->...i', fisher_info).sqrt()
+                return z, se
             return z
         elif scale == "bit":
             if bit_score_z_grid_method is None:
@@ -717,7 +726,6 @@ class IRTScorer:
 
         return gradients
 
-        
     @torch.inference_mode(False)
     def expected_item_score_slopes(
         self,
@@ -790,6 +798,83 @@ class IRTScorer:
                 mean_slopes = mean_slopes.mean(dim=0)
 
         return mean_slopes
+
+    def information(self, z: torch.Tensor, item: bool = True, scale: str = "z", degrees: list[int] = None, **kwargs) -> torch.Tensor:
+        """
+        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
+        item : bool, optional
+            Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
+        scale: str, optional
+            The grouping method scale, which can either be 'bit' or 'z'. (default is 'z')
+        degrees : list[int], optional
+            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
+            
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the information for each z score. Dimensions are:
+            
+            - By default: (z rows, items, FIM rows, FIM columns).
+            - If degrees are specified: (z rows, items).
+            - If item is False: (z rows, FIM rows, FIM columns).
+            - If degrees are specified and item is False: (z rows).
+
+        Notes
+        -----
+        In the context of IRT, the Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the latent variable(s)
+        :math:`\\mathbf{z}`.
+
+        The formula for the Fisher information matrix in the case of multiple parameters is:
+
+        .. math::
+
+            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+
+        Where:
+
+        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        
+        For additional details, see :cite:t:`Chang2017`.
+        """
+        if degrees is not None and len(degrees) != self.model.latent_variables:
+            raise ValueError("There must be one degree for each latent variable.")
+
+        probabilities = self.model.item_probabilities(z.clone())
+        gradients = self.model.probability_gradients(z).detach()
+        if scale == "bit":
+            bit_z_gradients = self.bit_score_gradients(z, one_dimensional=False, **kwargs)
+            # we divide by diagonal of the bit score gradients (the gradients in the direction of the bit score corresponding z scores)
+            bit_z_gradients_diag = torch.einsum('...ii->...i', bit_z_gradients)
+            gradients = (gradients.permute(1, 2, 0, 3) / bit_z_gradients_diag).permute(2, 0, 1, 3)
+
+        # squared gradient matrices for each latent variable
+        # Uses einstein summation with batch permutation ...
+        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
+        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
+        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
+
+        if degrees is not None and z.shape[1] > 1:
+            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
+            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
+            information = torch.einsum('i,...ij,j->...', cos_degrees, information_matrices, cos_degrees)
+        else:
+            information = information_matrices
+
+        if item:
+            return information
+        else:
+            return information.nansum(dim=1) # sum over items
 
     def _inverted_scales(self, train_z):
         """

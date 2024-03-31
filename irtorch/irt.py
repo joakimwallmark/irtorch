@@ -583,26 +583,27 @@ class IRT:
         
         For additional details, see :cite:t:`Chang2017`.
         """
-        return self.evaluator.information(z, item, degrees)
+        return self.scorer.information(z, item, degrees)
 
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "z",
+        scale: str = "bit",
+        standard_errors: bool = False,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
         eap_z_integration_points: int = None,
         bit_score_one_dimensional: bool = False,
         bit_score_population_z: torch.Tensor = None,
         bit_score_grid_points: int = 300,
         bit_score_z_grid_method: str = None,
-        bit_score_start_z: torch.tensor = None,
+        bit_score_start_z: torch.Tensor = None,
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None
-    ) -> torch.Tensor:
+    ):
         """
         Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
         ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
@@ -613,15 +614,17 @@ class IRT:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'bit' or 'z'. (default is 'z')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+        standard_errors : bool, optional
+            Whether to return standard errors for the latent scores. (default is False)
         z : torch.Tensor, optional
-            For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            For bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
             Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        ml_map_device : str, optional
-            For ML and MAP. The device to use for the LBFGS optimizer. (default is "cuda" if available else "cpu")
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
         eap_z_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         bit_score_one_dimensional: bool, optional
@@ -642,12 +645,13 @@ class IRT:
             The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         Returns
         -------
-        torch.Tensor
-            A 2D tensor of latent scores, with latent variables as columns.
+        torch.Tensor or tuple[torch.Tensor, torch.Tensor]
+            A 2D tensor of latent scores, with latent variables as columns. If standard_errors is True, returns a tuple with the latent scores and the standard errors.
         """
         return self.scorer.latent_scores(
             data,
             scale,
+            standard_errors,
             z,
             z_estimation_method,
             ml_map_device,

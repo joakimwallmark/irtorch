@@ -604,9 +604,9 @@ class IRTPlotter:
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
-            information = self.evaluator.information(z_grid, item=True, scale = scale, degrees=degrees, start_z = start_z)[:, item_mask].sum(dim=1)
+            information = self.scorer.information(z_grid, item=True, scale = scale, degrees=degrees, start_z = start_z)[:, item_mask].sum(dim=1)
         else:
-            information = self.evaluator.information(z_grid, item=False, scale = scale, degrees=degrees, start_z = start_z)
+            information = self.scorer.information(z_grid, item=False, scale = scale, degrees=degrees, start_z = start_z)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()

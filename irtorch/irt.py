@@ -332,9 +332,9 @@ class IRT:
             start_z_guessing_iterations=start_z_guessing_iterations,
         )
 
-    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
+    def expected_scores(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
-        Computes the model expected item scores/sum scores for each respondent.
+        Computes the model expected item scores/test scores for each respondent.
 
         Parameters
         ----------
@@ -348,14 +348,17 @@ class IRT:
         torch.Tensor
             A tensor with the expected scores for each respondent.
         """
-        return self.model.expected_item_sum_score(z, return_item_scores).detach()
+        with torch.no_grad():
+            return self.model.expected_scores(z, return_item_scores).detach()
     
     def expected_item_score_slopes(
         self,
-        z: torch.Tensor = None,
+        z: torch.Tensor,
+        scale: str = 'z',
         bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
-    ):
+        **kwargs
+    ) -> torch.Tensor:
         """
         Computes the slope of the expected item scores, averaged over the sample in z. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median z scores for the other latent variables.
 
@@ -363,10 +366,16 @@ class IRT:
         ----------
         z : torch.Tensor, optional
             A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
-        bit_scores : torch.Tensor, optional
-            A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
+        scale : str, optional
+            The latent trait scale to differentiate with respect to. Can be 'bit' or 'z'. 
+            'bit' is only a linear approximation for multidimensional models since multiple z scores can lead to the same bit scores, 
+            and thus there are no unique derivatives of the item scores with respect to the bit scores for multidimensional models. (default is 'z')
+        bit_scores: torch.Tensor, optional
+            A 2D tensor with bit scores corresponding to the z scores. If not provided, computes the bit scores from the z scores. (default is None)
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
+        **kwargs
+            Additional keyword arguments for the bit_score_gradients method.
 
         Returns
         -------
@@ -375,7 +384,7 @@ class IRT:
         """
         if z is None:
             z = self.algorithm.training_z_scores
-        return self.model.expected_item_score_slopes(z, bit_scores, rescale_by_item_score)
+        return self.scorer.expected_item_score_slopes(z, scale, bit_scores, rescale_by_item_score, **kwargs)
 
     def bit_score_starting_z(
         self,
@@ -539,6 +548,104 @@ class IRT:
         else:
             raise ValueError("Item parameters are only available for parametric models.")
 
+    def infit(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        level: str = "item",
+    ):
+        """
+        Calculate person or item infit statistics. Infit helps identifying items that do not behave as expected according to the model
+        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
+        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        level: str = "item", optional
+            Specifies whether to compute item or respondent infit statistics. Can be 'item' or 'respondent'. (default is 'item')
+
+        Returns
+        -------
+        torch.Tensor
+            The infit statistics.
+
+        Notes
+        -----
+        Infit is computed as follows:
+
+        .. math::
+            \\begin{align}
+            \\text{Item j infit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
+            \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}}
+            \\end{align}
+
+        Where:
+
+        - :math:`J` is the number of items,
+        - :math:`n` is the number of respondents,
+        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
+        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
+        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
+        
+        """
+        return self.evaluator.infit(data, z, z_estimation_method, level)
+
+    def outfit(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        level: str = "item",
+    ):
+        """
+        Calculate person or item outfit statistics. Outfit helps identifying items that do not behave as expected according to the model
+        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
+        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        level: str = "item", optional
+            Specifies whether to compute item or respondent outfit statistics. Can be 'item' or 'respondent'. (default is 'item')
+
+        Returns
+        -------
+        torch.Tensor
+            The outfit statistics.
+
+        Notes
+        -----
+        Outfit is computed as follows:
+
+        .. math::
+            \\begin{align}
+            \\text{Item j outfit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
+            \\text{Respondent i outfit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
+            \\end{align}
+
+        Where:
+
+        - :math:`J` is the number of items,
+        - :math:`n` is the number of respondents,
+        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
+        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
+        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
+        
+        """
+        return self.evaluator.outfit(data, z, z_estimation_method, level)
+
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """
         Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
@@ -588,7 +695,7 @@ class IRT:
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "bit",
+        scale: str = "z",
         standard_errors: bool = False,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
@@ -614,7 +721,7 @@ class IRT:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'z')
         standard_errors : bool, optional
             Whether to return standard errors for the latent scores. (default is False)
         z : torch.Tensor, optional

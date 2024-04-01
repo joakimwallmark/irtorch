@@ -604,9 +604,9 @@ class IRTPlotter:
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
-            information = self.scorer.information(z_grid, item=True, scale = scale, degrees=degrees, start_z = start_z)[:, item_mask].sum(dim=1)
+            information = self.scorer.information(z_grid, item=True, scale = scale, degrees=degrees, start_z = start_z, **kwargs)[:, item_mask].sum(dim=1)
         else:
-            information = self.scorer.information(z_grid, item=False, scale = scale, degrees=degrees, start_z = start_z)
+            information = self.scorer.information(z_grid, item=False, scale = scale, degrees=degrees, start_z = start_z, **kwargs)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
@@ -614,11 +614,11 @@ class IRTPlotter:
             if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
                 start_idx = min_indices[0].item()  # get the first index
                 scores_to_plot = scores_to_plot[:start_idx]
-                information = information[:start_idx]
+                information = information.detach_().squeeze_()[:start_idx]
             else:
                 start_idx = min_indices[-1].item()  # get the last index
                 scores_to_plot = scores_to_plot[start_idx:]
-                information = information[start_idx:]
+                information = information.detach_().squeeze_()[start_idx:]
                 
             return self._2d_line_plot(
                 x = scores_to_plot,
@@ -716,9 +716,9 @@ class IRTPlotter:
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
-            sum_scores = self.model.expected_item_sum_score(z_grid, return_item_scores=True)[:, [item - 1 for item in items]].sum(dim=1)
+            sum_scores = self.model.expected_scores(z_grid, return_item_scores=True)[:, [item - 1 for item in items]].sum(dim=1)
         else:
-            sum_scores = self.model.expected_item_sum_score(z_grid, return_item_scores=False)
+            sum_scores = self.model.expected_scores(z_grid, return_item_scores=False)
 
         if scale == "bit":
             scores_to_plot = self.scorer.bit_scores_from_z(

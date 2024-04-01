@@ -99,7 +99,7 @@ class IRTScorer:
     def latent_scores(
         self,
         data: torch.Tensor,
-        scale: str = "bit",
+        scale: str = "z",
         standard_errors: bool = False,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
@@ -125,7 +125,7 @@ class IRTScorer:
         data : torch.Tensor
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
-            The scoring method to use. Can be 'bit' or 'z'. (default is 'bit')
+            The scoring method to use. Can be 'bit' or 'z'. (default is 'z')
         standard_errors : bool, optional
             Whether to return standard errors for the latent scores. (default is False)
         z : torch.Tensor, optional
@@ -463,7 +463,7 @@ class IRTScorer:
             if train_z is None:
                 train_z = self.algorithm.training_z_scores
             # Which latent variables are inversely related to the test scores?
-            item_sum_scores = self.model.expected_item_sum_score(train_z, return_item_scores=False)
+            item_sum_scores = self.model.expected_scores(train_z, return_item_scores=False)
             test_weights = linear_regression(train_z, item_sum_scores.reshape(-1, 1))[1:]
             inverted_scale = torch.where(test_weights < 0, torch.tensor(-1), torch.tensor(1)).reshape(-1)
             
@@ -764,7 +764,7 @@ class IRTScorer:
             z.requires_grad_(False)
 
         if scale == 'bit' and self.model.latent_variables > 1:
-            expected_item_sum_scores = self.model.expected_item_sum_score(z, return_item_scores=True).detach()
+            expected_item_sum_scores = self.model.expected_scores(z, return_item_scores=True).detach()
             if not self.model.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
             if bit_scores is None:
@@ -778,7 +778,7 @@ class IRTScorer:
                 z_scores = median.repeat(z.shape[0], 1)
                 z_scores[:, latent_variable], _ = z[:, latent_variable].sort()
                 z_scores.requires_grad_(True)
-                expected_item_sum_scores = self.model.expected_item_sum_score(z_scores, return_item_scores=True)
+                expected_item_sum_scores = self.model.expected_scores(z_scores, return_item_scores=True)
                 if not self.model.mc_correct and rescale_by_item_score:
                     expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
 
@@ -898,7 +898,7 @@ class IRTScorer:
         The method then performs a linear regression between the latent variables 
         and the scores, and inverts the scales based on the linear weights.
         """
-        scores = self.model.expected_item_sum_score(train_z).sum(dim=1).reshape(-1, 1)
+        scores = self.model.expected_scores(train_z).sum(dim=1).reshape(-1, 1)
         linear_weights = linear_regression(train_z, scores)[1:]
         inverted_scale = torch.where(linear_weights < 0, torch.tensor(-1), torch.tensor(1)).reshape(1, -1)
         return inverted_scale

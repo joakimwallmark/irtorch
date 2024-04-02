@@ -362,3 +362,40 @@ def test_residuals(irt_evaluator: IRTEvaluator):
     residuals = irt_evaluator.residuals(data=data, average_over="respondents")
     assert residuals.shape == (2,)  # We have 2 items
     assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"
+
+def test_infit_outfit(irt_evaluator: IRTEvaluator):
+    data = torch.tensor([[0, 2], [1, 1]]).float()
+    z = torch.randn(2, irt_evaluator.model.latent_variables)
+
+    def item_probabilities_mock(z):
+        return torch.tensor([[[0.55, 0.45, 0.0], [0.2, 0.35, 0.45]], [[0.15, 0.85, 0.0], [0.6, 0.05, 0.35]]])
+
+    
+    irt_evaluator.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
+    
+    def expected_scores_mock(z, **kwargs):
+        return torch.tensor(([0.45, 0.35 + 2 * 0.45], [0.85, 0.05+2 * 0.35]))
+
+    irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock)
+
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    assert torch.allclose(infit, torch.tensor([0.6000000, 0.4237288])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.4973261, 0.5139347])), "Outfit is incorrect"
+
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    assert torch.allclose(infit, torch.tensor([0.9161677, 0.0837438])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.8878143, 0.1234465])), "Outfit is incorrect"
+
+    def expected_scores_mock_mc(z, **kwargs):
+        return torch.tensor(([0.55, 0.45], [0.15, 0.35]))
+
+    irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock_mc)
+
+    irt_evaluator.model.mc_correct = [1, 3]
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    assert torch.allclose(infit, torch.tensor([0.6000000, 0.8947369])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.4973262, 0.8803419])), "Outfit is incorrect"
+
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    assert torch.allclose(infit, torch.tensor([1.0202020, 0.4084507])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([1.0202019, 0.3574660])), "Outfit is incorrect"

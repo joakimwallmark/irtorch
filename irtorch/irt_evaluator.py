@@ -239,7 +239,7 @@ class IRTEvaluator:
         return accuracy.mean(dim=dim)
 
     @torch.inference_mode()
-    def infit(
+    def infit_outfit(
         self,
         data: torch.Tensor = None,
         z: torch.Tensor = None,
@@ -247,7 +247,7 @@ class IRTEvaluator:
         level: str = "item",
     ):
         """
-        Calculate person or item infit statistics. Infit helps identifying items that do not behave as expected according to the model
+        Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
         or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
         to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
 
@@ -260,7 +260,7 @@ class IRTEvaluator:
         z_estimation_method : str, optional
             Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         level: str = "item", optional
-            Specifies whether to compute item or respondent infit statistics. Can be 'item' or 'respondent'. (default is 'item')
+            Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
 
         Returns
         -------
@@ -269,76 +269,12 @@ class IRTEvaluator:
 
         Notes
         -----
-        Infit is computed as follows:
+        Infit and outift are computed as follows:
 
         .. math::
             \\begin{align}
             \\text{Item j infit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
-            \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}}
-            \\end{align}
-
-        Where:
-
-        - :math:`J` is the number of items,
-        - :math:`n` is the number of respondents,
-        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
-        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
-        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
-        
-        """
-        raise NotImplementedError("Infit statistics are not yet implemented.")
-        # data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
-
-        # expected_scores = self.model.expected_scores(z, return_item_scores=True)
-        # if self.model.mc_correct is not None:
-        #     observed_scores = (data == torch.tensor(self.model.mc_correct) - 1).int()
-        # else:
-        #     observed_scores = data
-        # variance = 5 # TODO
-        # infit = (expected_scores - observed_scores) ** 2 / variance
-
-        # if level == "item":
-        #     infit = infit.mean(dim=0)
-        # elif level == "respondent":
-        #     infit = infit.mean(dim=1)
-        
-        # return infit
-    
-    @torch.inference_mode()
-    def outfit(
-        self,
-        data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        level: str = "item",
-    ):
-        """
-        Calculate person or item outfit statistics. Outfit helps identifying items that do not behave as expected according to the model
-        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
-        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
-
-        Parameters
-        ----------
-        data : torch.Tensor
-            The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        level: str = "item", optional
-            Specifies whether to compute item or respondent outfit statistics. Can be 'item' or 'respondent'. (default is 'item')
-
-        Returns
-        -------
-        torch.Tensor
-            The outfit statistics.
-
-        Notes
-        -----
-        Outfit is computed as follows:
-
-        .. math::
-            \\begin{align}
+            \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
             \\text{Item j outfit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
             \\text{Respondent i outfit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
             \\end{align}
@@ -352,7 +288,36 @@ class IRTEvaluator:
         - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
         
         """
-        raise NotImplementedError("Outfit statistics are not yet implemented.")
+        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+
+        expected_scores = self.model.expected_scores(z, return_item_scores=True)
+        probabilities = self.model.item_probabilities(z)
+        observed_scores = data
+        if self.model.mc_correct is not None:
+            score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
+            score_indices.scatter_(1, (torch.tensor(self.model.mc_correct) - 1 + self.model.model_missing).unsqueeze(1), 1)
+            score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
+            correct_probabilities = (probabilities*score_indices.int()).sum(dim=2)
+            variance = correct_probabilities * (1-correct_probabilities)
+            possible_scores = torch.zeros_like(probabilities)
+            possible_scores[:, :, 1] = 1
+            observed_scores = (data == torch.tensor(self.model.mc_correct) - 1).int()
+        else:
+            possible_scores = torch.arange(0, probabilities.shape[2]).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
+            variance = ((possible_scores-expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
+
+        mse = (observed_scores - expected_scores) ** 2
+        wmse = mse / variance
+        wmse[mse == 0] = 0 # if error is 0, set to 0 in case of 0 variance to avoid nans
+
+        if level == "item":
+            infit = mse.sum(dim=0) / variance.sum(dim=0)
+            outfit = wmse.mean(dim=0)
+        elif level == "respondent":
+            infit = mse.sum(dim=1) / variance.sum(dim=1)
+            outfit = wmse.mean(dim=1)
+        
+        return infit, outfit
 
     @torch.inference_mode()
     def log_likelihood(

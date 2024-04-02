@@ -548,7 +548,7 @@ class IRT:
         else:
             raise ValueError("Item parameters are only available for parametric models.")
 
-    def infit(
+    def infit_outfit(
         self,
         data: torch.Tensor = None,
         z: torch.Tensor = None,
@@ -556,7 +556,7 @@ class IRT:
         level: str = "item",
     ):
         """
-        Calculate person or item infit statistics. Infit helps identifying items that do not behave as expected according to the model
+        Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
         or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
         to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
 
@@ -569,21 +569,23 @@ class IRT:
         z_estimation_method : str, optional
             Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         level: str = "item", optional
-            Specifies whether to compute item or respondent infit statistics. Can be 'item' or 'respondent'. (default is 'item')
+            Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
 
         Returns
         -------
-        torch.Tensor
-            The infit statistics.
+        tuple[torch.Tensor, torch.Tensor]
+            A tuple with the infit and outfit statistics. The first tensor holds the infit statistics and the second tensor holds the outfit statistics.
 
         Notes
         -----
-        Infit is computed as follows:
+        Infit and outift are computed as follows :cite:p:`vanderLinden1997`:
 
         .. math::
             \\begin{align}
-            \\text{Item j infit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
-            \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}}
+            \\text{Item j infit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
+            \\text{Respondent i infit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
+            \\text{Item j outfit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
+            \\text{Respondent i outfit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
             \\end{align}
 
         Where:
@@ -595,56 +597,7 @@ class IRT:
         - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
         
         """
-        return self.evaluator.infit(data, z, z_estimation_method, level)
-
-    def outfit(
-        self,
-        data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
-        level: str = "item",
-    ):
-        """
-        Calculate person or item outfit statistics. Outfit helps identifying items that do not behave as expected according to the model
-        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
-        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
-
-        Parameters
-        ----------
-        data : torch.Tensor
-            The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        level: str = "item", optional
-            Specifies whether to compute item or respondent outfit statistics. Can be 'item' or 'respondent'. (default is 'item')
-
-        Returns
-        -------
-        torch.Tensor
-            The outfit statistics.
-
-        Notes
-        -----
-        Outfit is computed as follows:
-
-        .. math::
-            \\begin{align}
-            \\text{Item j outfit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
-            \\text{Respondent i outfit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
-            \\end{align}
-
-        Where:
-
-        - :math:`J` is the number of items,
-        - :math:`n` is the number of respondents,
-        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
-        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
-        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
-        
-        """
-        return self.evaluator.outfit(data, z, z_estimation_method, level)
+        return self.evaluator.infit_outfit(data, z, z_estimation_method, level)
 
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """

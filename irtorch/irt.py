@@ -27,7 +27,7 @@ class IRT:
         - "1PL": One-parameter logistic model.
         - "2PL": Two-parameter logistic model.
         - "GPC": Generalized partial credit model.
-        - "nominal": Nominal response model.
+        - "NR": Nominal response model.
         - "MNN": Monotone neural network model.
         - "MMCNN": Monotone multiple choice neural network model.
         
@@ -96,7 +96,7 @@ class IRT:
                     # replace nan with -inf to get max
                     item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
-            if model in ["1PL", "2PL", "3PL", "GPC", "nominal"]:
+            if model in ["1PL", "2PL", "3PL", "GPC", "NR"]:
                 self.model = Parametric(
                     latent_variables=latent_variables,
                     item_categories=item_categories,
@@ -332,9 +332,9 @@ class IRT:
             start_z_guessing_iterations=start_z_guessing_iterations,
         )
 
-    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
+    def expected_scores(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
-        Computes the model expected item scores/sum scores for each respondent.
+        Computes the model expected item scores/test scores for each respondent.
 
         Parameters
         ----------
@@ -348,14 +348,17 @@ class IRT:
         torch.Tensor
             A tensor with the expected scores for each respondent.
         """
-        return self.model.expected_item_sum_score(z, return_item_scores).detach()
+        with torch.no_grad():
+            return self.model.expected_scores(z, return_item_scores).detach()
     
     def expected_item_score_slopes(
         self,
-        z: torch.Tensor = None,
+        z: torch.Tensor,
+        scale: str = 'z',
         bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
-    ):
+        **kwargs
+    ) -> torch.Tensor:
         """
         Computes the slope of the expected item scores, averaged over the sample in z. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median z scores for the other latent variables.
 
@@ -363,10 +366,16 @@ class IRT:
         ----------
         z : torch.Tensor, optional
             A 2D tensor with latent z scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training z scores. (default is None)
-        bit_scores : torch.Tensor, optional
-            A 2D tensor with bit scores corresponding to each z score in z. If provided, slopes will be computed on the bit scales. (default is None)
+        scale : str, optional
+            The latent trait scale to differentiate with respect to. Can be 'bit' or 'z'. 
+            'bit' is only a linear approximation for multidimensional models since multiple z scores can lead to the same bit scores, 
+            and thus there are no unique derivatives of the item scores with respect to the bit scores for multidimensional models. (default is 'z')
+        bit_scores: torch.Tensor, optional
+            A 2D tensor with bit scores corresponding to the z scores. If not provided, computes the bit scores from the z scores. (default is None)
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
+        **kwargs
+            Additional keyword arguments for the bit_score_gradients method.
 
         Returns
         -------
@@ -375,7 +384,7 @@ class IRT:
         """
         if z is None:
             z = self.algorithm.training_z_scores
-        return self.model.expected_item_score_slopes(z, bit_scores, rescale_by_item_score)
+        return self.scorer.expected_item_score_slopes(z, scale, bit_scores, rescale_by_item_score, **kwargs)
 
     def bit_score_starting_z(
         self,
@@ -539,6 +548,57 @@ class IRT:
         else:
             raise ValueError("Item parameters are only available for parametric models.")
 
+    def infit_outfit(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        level: str = "item",
+    ):
+        """
+        Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
+        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
+        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        level: str = "item", optional
+            Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            A tuple with the infit and outfit statistics. The first tensor holds the infit statistics and the second tensor holds the outfit statistics.
+
+        Notes
+        -----
+        Infit and outift are computed as follows :cite:p:`vanderLinden1997`:
+
+        .. math::
+            \\begin{align}
+            \\text{Item j infit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
+            \\text{Respondent i infit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
+            \\text{Item j outfit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
+            \\text{Respondent i outfit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
+            \\end{align}
+
+        Where:
+
+        - :math:`J` is the number of items,
+        - :math:`n` is the number of respondents,
+        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
+        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
+        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
+        
+        """
+        return self.evaluator.infit_outfit(data, z, z_estimation_method, level)
+
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         """
         Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
@@ -583,26 +643,27 @@ class IRT:
         
         For additional details, see :cite:t:`Chang2017`.
         """
-        return self.evaluator.information(z, item, degrees)
+        return self.scorer.information(z, item, degrees)
 
     def latent_scores(
         self,
         data: torch.Tensor,
         scale: str = "z",
+        standard_errors: bool = False,
         z: torch.Tensor = None,
         z_estimation_method: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
         eap_z_integration_points: int = None,
         bit_score_one_dimensional: bool = False,
         bit_score_population_z: torch.Tensor = None,
         bit_score_grid_points: int = 300,
         bit_score_z_grid_method: str = None,
-        bit_score_start_z: torch.tensor = None,
+        bit_score_start_z: torch.Tensor = None,
         bit_score_start_z_guessing_probabilities: list[float] = None,
         bit_score_start_z_guessing_iterations: int = 10000,
         bit_score_items: list[int] = None
-    ) -> torch.Tensor:
+    ):
         """
         Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
         ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
@@ -614,14 +675,16 @@ class IRT:
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         scale : str, optional
             The scoring method to use. Can be 'bit' or 'z'. (default is 'z')
+        standard_errors : bool, optional
+            Whether to return standard errors for the latent scores. (default is False)
         z : torch.Tensor, optional
-            For computing bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            For bit scores. A 2D tensor containing the pre-estimated z scores for each respondent in the data. If not provided, will be estimated using z_estimation_method. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         z_estimation_method : str, optional
             Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        ml_map_device : str, optional
-            For ML and MAP. The device to use for the LBFGS optimizer. (default is "cuda" if available else "cpu")
+        ml_map_device: str, optional
+            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
         eap_z_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         bit_score_one_dimensional: bool, optional
@@ -642,12 +705,13 @@ class IRT:
             The item indices for the items to use to compute the bit scores. (default is 'None' and uses all items)
         Returns
         -------
-        torch.Tensor
-            A 2D tensor of latent scores, with latent variables as columns.
+        torch.Tensor or tuple[torch.Tensor, torch.Tensor]
+            A 2D tensor of latent scores, with latent variables as columns. If standard_errors is True, returns a tuple with the latent scores and the standard errors.
         """
         return self.scorer.latent_scores(
             data,
             scale,
+            standard_errors,
             z,
             z_estimation_method,
             ml_map_device,

@@ -73,13 +73,15 @@ def testdynamic_print(capsys):
     assert captured_output.out == "\rHello World! "
 
 def test_linear_regression():
-    x = torch.tensor([[1.], [2.], [5.], [5.]], dtype=torch.float32)
-    y = 2 + 2*x
+    x = torch.tensor([[1., 2.], [2., 2.5], [5., 3.], [5., 3.5]], dtype=torch.float32)
+    y = (2 + 2*x[:, 0] + 3*x[:, 1]).reshape(-1, 1)
+    # y = 2 + 2*x
 
     coefficients = linear_regression(x, y)
 
-    assert coefficients[0].item() == pytest.approx(2.0, abs=1e-5)  # Close to bias term 0
-    assert coefficients[1].item() == pytest.approx(2.0, abs=1e-5)  # Close to weight 2 for the feature
+    assert coefficients[0].item() == pytest.approx(2.0, abs=1e-3)  # Close to bias term 0
+    assert coefficients[1].item() == pytest.approx(2.0, abs=1e-3)  # Close to weight 2 for the feature
+    assert coefficients[2].item() == pytest.approx(3.0, abs=1e-3)  # Close to weight 2 for the feature
 
 def test_conditional_scores_distribution():
     probabilities = torch.tensor([

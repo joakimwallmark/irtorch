@@ -7,16 +7,19 @@ def interp(x_new, x, y):
     """
     Linear interpolation function with simple linear extrapolation at edges
 
-    Args:
-        x_new: torch.Tensor
-            The x-coordinates at which to evaluate the interpolated values.
-        x: torch.Tensor
-            The x-coordinates of the data points.
-        y: torch.Tensor
-            The y-coordinates of the data points.
+    Parameters
+    ----------
+    x_new : torch.Tensor
+        The x-coordinates at which to evaluate the interpolated values.
+    x : torch.Tensor
+        The x-coordinates of the data points.
+    y : torch.Tensor
+        The y-coordinates of the data points.
 
     Returns
-        torch.Tensor: The interpolated values at x_new.
+    -------
+    torch.Tensor
+        The interpolated values at x_new.
     """
 
     x_new = x_new.float()
@@ -62,11 +65,15 @@ def quantile_transform(tensor):
     """
     Transforms each column of a 2D tensor to follow a standard normal distribution.
 
-    Args:
-        tensor (torch.Tensor): A 2D tensor.
+    Parameters
+    ----------
+        tensor : torch.Tensor
+            A 2D tensor.
 
     Returns
-        torch.Tensor: A tensor of the same shape as the input, but with each column transformed to follow a standard normal distribution.
+    -------
+    torch.Tensor
+        A tensor of the same shape as the input, but with each column transformed to follow a standard normal distribution.
     """
     normal = torch.distributions.Normal(0, 1)
 

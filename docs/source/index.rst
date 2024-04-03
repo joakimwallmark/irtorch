@@ -22,6 +22,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    :caption: Examples 🚀
 
    notebooks/national_mathematics
+   notebooks/swedish_sat
 
 .. toctree::
    :maxdepth: 2

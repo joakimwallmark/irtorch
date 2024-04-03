@@ -13,7 +13,8 @@ class MonotoneNN(BaseIRTModel):
     Nonparametric Monotone Neural Network IRT model.
     The model is a feedforward neural network with a separate monotone nonparametric latent variable weight function for each item or item category.
 
-    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity.
+    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice Neural Network (MMCNN) model.
+    
     If mc_correct is not specified, the item response categories are treated as ordered, and the latent variable effect for an item response category is the cumulative sum of the effects for the lower categories.
 
     Parameters

@@ -120,9 +120,9 @@ class BaseIRTModel(ABC, nn.Module):
         reshaped_output = output.reshape(-1, self.max_item_responses)
         return -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
 
-    def expected_item_sum_score(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
+    def expected_scores(self, z: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
-        Computes the model expected item scores/sum scores for each respondent.
+        Computes the model expected item scores/test scores for each respondent.
 
         Parameters
         ----------
@@ -165,11 +165,11 @@ class BaseIRTModel(ABC, nn.Module):
         torch.Tensor
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
-        item_sum_scores = self.expected_item_sum_score(z)
-        item_z_mask = torch.zeros((len(self.items), self.latent_variables)).bool()
+        item_sum_scores = self.expected_scores(z)
+        item_z_mask = torch.zeros(self.items, self.latent_variables)
         for item, _ in enumerate(self.modeled_item_responses):
             weights = linear_regression(z, item_sum_scores[:,item].reshape(-1, 1))[1:].reshape(-1)
-            item_z_mask[item, :] = weights >= 0
+            item_z_mask[item, :] = weights.sign().int()
         
         return item_z_mask.int()
 

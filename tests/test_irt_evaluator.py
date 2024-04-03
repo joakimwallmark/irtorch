@@ -363,57 +363,39 @@ def test_residuals(irt_evaluator: IRTEvaluator):
     assert residuals.shape == (2,)  # We have 2 items
     assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"
 
+def test_infit_outfit(irt_evaluator: IRTEvaluator):
+    data = torch.tensor([[0, 2], [1, 1]]).float()
+    z = torch.randn(2, irt_evaluator.model.latent_variables)
 
-def test_information(irt_evaluator: IRTEvaluator):
     def item_probabilities_mock(z):
-        logits = torch.tensor([[[1, 2, 3, 0], [4, 3, 2, 1]]]).expand(2, 2, 4) * z.sum(dim=1).reshape(-1, 1, 1)
-        return softmax(logits, dim=2)
+        return torch.tensor([[[0.55, 0.45, 0.0], [0.2, 0.35, 0.45]], [[0.15, 0.85, 0.0], [0.6, 0.05, 0.35]]])
+
     
-    irt_evaluator.model.item_probabilities = MagicMock(
-        side_effect=item_probabilities_mock
-    )
-
-    def probability_gradients_mock(z):
-        return torch.tensor([
-            [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]],
-            [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]]
-        ])
+    irt_evaluator.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     
-    irt_evaluator.model.probability_gradients = MagicMock(
-        side_effect=probability_gradients_mock
-    )
+    def expected_scores_mock(z, **kwargs):
+        return torch.tensor(([0.45, 0.35 + 2 * 0.45], [0.85, 0.05+2 * 0.35]))
 
-    input_z = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    information_matrices = irt_evaluator.information(input_z)
-    assert information_matrices.shape == (2, 2, 2, 2)
-    expected_output = torch.tensor([
-        [[[ 4184.934082,  4786.798340], [ 4786.798340,  5478.406738]], [[19931.039062, 21267.791016], [21267.791016, 22694.289062]]],
-        [[[646821568, 739235008], [739235008, 844860736]], [[2972079104, 3170238464], [3170238464, 3381610496]]]
-    ])
-    assert torch.allclose(information_matrices, expected_output)
+    irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock)
 
-    # Test with degrees
-    if irt_evaluator.model.latent_variables == 2:
-        information_matrices = irt_evaluator.information(input_z, degrees=[45, 45])
-        assert information_matrices.shape == (2, 2)
-        expected_output = torch.tensor([
-            [ 9618.4677734, 42580.4531250],
-            [1485075968.0000000, 6347082752.0000000]]
-        )
-        assert torch.allclose(information_matrices, expected_output)
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    assert torch.allclose(infit, torch.tensor([0.6000000, 0.4237288])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.4973261, 0.5139347])), "Outfit is incorrect"
 
-    # Test with item=False
-    information_matrices = irt_evaluator.information(input_z, item=False)
-    assert information_matrices.shape == (2, 2, 2)
-    expected_output = torch.tensor([
-        [[24115.972656, 26054.589844], [26054.589844, 28172.695312]],
-        [[3618900480, 3909473536], [3909473536, 4226471168]]
-    ])
-    assert torch.allclose(information_matrices, expected_output)
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    assert torch.allclose(infit, torch.tensor([0.9161677, 0.0837438])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.8878143, 0.1234465])), "Outfit is incorrect"
 
-    # Test with item=False and degrees
-    if irt_evaluator.model.latent_variables == 2:
-        information_matrices = irt_evaluator.information(input_z, item=False, degrees=[0, 90])
-        assert information_matrices.shape == (2, )
-        expected_output = torch.tensor([24115.972656, 3618899968.000000])
-        assert torch.allclose(information_matrices, expected_output)
+    def expected_scores_mock_mc(z, **kwargs):
+        return torch.tensor(([0.55, 0.45], [0.15, 0.35]))
+
+    irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock_mc)
+
+    irt_evaluator.model.mc_correct = [1, 3]
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    assert torch.allclose(infit, torch.tensor([0.6000000, 0.8947369])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.4973262, 0.8803419])), "Outfit is incorrect"
+
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    assert torch.allclose(infit, torch.tensor([1.0202020, 0.4084507])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([1.0202019, 0.3574660])), "Outfit is incorrect"

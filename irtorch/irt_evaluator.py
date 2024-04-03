@@ -111,7 +111,7 @@ class IRTEvaluator:
             model_probs = probabilities[expanded_respondents, torch.arange(probabilities.size(1)), data.int()]
             residuals = 1 - model_probs
         else:
-            residuals = data - self.model.expected_item_sum_score(z, return_item_scores=True)
+            residuals = data - self.model.expected_scores(z, return_item_scores=True)
 
         if average_over == "items":
             return residuals.mean(dim=1)
@@ -239,6 +239,90 @@ class IRTEvaluator:
         return accuracy.mean(dim=dim)
 
     @torch.inference_mode()
+    def infit_outfit(
+        self,
+        data: torch.Tensor = None,
+        z: torch.Tensor = None,
+        z_estimation_method: str = "ML",
+        level: str = "item",
+    ):
+        """
+        Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
+        or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
+        to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        z: torch.Tensor, optional
+            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
+        z_estimation_method : str, optional
+            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        level: str = "item", optional
+            Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
+
+        Returns
+        -------
+        torch.Tensor
+            The infit statistics.
+
+        Notes
+        -----
+        Infit and outift are computed as follows:
+
+        .. math::
+            \\begin{align}
+            \\text{Item j infit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
+            \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
+            \\text{Item j outfit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
+            \\text{Respondent i outfit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
+            \\end{align}
+
+        Where:
+
+        - :math:`J` is the number of items,
+        - :math:`n` is the number of respondents,
+        - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
+        - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
+        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
+        
+        """
+        if level not in ["item", "respondent"]:
+            raise ValueError("Invalid level. Choose either 'item' or 'respondent'.")
+
+        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+
+        expected_scores = self.model.expected_scores(z, return_item_scores=True)
+        probabilities = self.model.item_probabilities(z)
+        observed_scores = data
+        if self.model.mc_correct is not None:
+            score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
+            score_indices.scatter_(1, (torch.tensor(self.model.mc_correct) - 1 + self.model.model_missing).unsqueeze(1), 1)
+            score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
+            correct_probabilities = (probabilities*score_indices.int()).sum(dim=2)
+            variance = correct_probabilities * (1-correct_probabilities)
+            possible_scores = torch.zeros_like(probabilities)
+            possible_scores[:, :, 1] = 1
+            observed_scores = (data == torch.tensor(self.model.mc_correct) - 1).int()
+        else:
+            possible_scores = torch.arange(0, probabilities.shape[2]).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
+            variance = ((possible_scores-expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
+
+        mse = (observed_scores - expected_scores) ** 2
+        wmse = mse / variance
+        wmse[mse == 0] = 0 # if error is 0, set to 0 in case of 0 variance to avoid nans
+
+        if level == "item":
+            infit = mse.sum(dim=0) / variance.sum(dim=0)
+            outfit = wmse.mean(dim=0)
+        elif level == "respondent":
+            infit = mse.sum(dim=1) / variance.sum(dim=1)
+            outfit = wmse.mean(dim=1)
+        
+        return infit, outfit
+
+    @torch.inference_mode()
     def log_likelihood(
         self,
         data: torch.Tensor = None,
@@ -292,86 +376,6 @@ class IRTEvaluator:
             return likelihoods.view(z.shape[0], -1).sum(dim=dim)
         
         return likelihoods
-
-    def information(self, z: torch.Tensor, item: bool = True, scale: str = "z", degrees: list[int] = None, **kwargs) -> torch.Tensor:
-        """
-        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
-
-        Parameters
-        ----------
-        z : torch.Tensor
-            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
-        item : bool, optional
-            Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
-        scale: str, optional
-            The grouping method scale, which can either be 'bit' or 'z'. (default is 'z')
-        degrees : list[int], optional
-            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None)
-        **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
-            
-        Returns
-        -------
-        torch.Tensor
-            A tensor with the information for each z score. Dimensions are:
-            
-            - By default: (z rows, items, FIM rows, FIM columns).
-            - If degrees are specified: (z rows, items).
-            - If item is False: (z rows, FIM rows, FIM columns).
-            - If degrees are specified and item is False: (z rows).
-
-        Notes
-        -----
-        In the context of IRT, the Fisher information matrix measures the amount of information
-        that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\\mathbf{z}`.
-
-        The formula for the Fisher information matrix in the case of multiple parameters is:
-
-        .. math::
-
-            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
-
-        Where:
-
-        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        
-        For additional details, see :cite:t:`Chang2017`.
-        """
-        if degrees is not None and len(degrees) != self.model.latent_variables:
-            raise ValueError("There must be one degree for each latent variable.")
-
-        probabilities = self.model.item_probabilities(z.clone())
-        gradients = self.model.probability_gradients(z).detach()
-        if scale == "bit":
-            bit_z_gradients = self.scorer.bit_score_gradients(z, one_dimensional=False, **kwargs)
-            # we divide by diagonal of the bit score gradients (the gradients in the direction of the bit score corresponding z scores)
-            bit_z_gradients_diag = torch.einsum('...ii->...i', bit_z_gradients)
-            gradients = (gradients.permute(1, 2, 0, 3) / bit_z_gradients_diag).permute(2, 0, 1, 3)
-
-        # squared gradient matrices for each latent variable
-        # Uses einstein summation with batch permutation ...
-        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
-        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
-        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
-
-        if degrees is not None and z.shape[1] > 1:
-            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
-            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
-            information = torch.einsum('i,...ij,j->...', cos_degrees, information_matrices, cos_degrees)
-        else:
-            information = information_matrices
-            if self.model.latent_variables == 1:
-                information.squeeze_()
-
-        if item:
-            return information
-        else:
-            return information.nansum(dim=1) # sum over items
-
 
     @torch.inference_mode()
     def group_fit_log_likelihood(

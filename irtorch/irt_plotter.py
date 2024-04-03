@@ -921,12 +921,14 @@ class IRTPlotter:
 
         # Plot each response category
         for i in range(prob_matrix.shape[1]):
+            response_text = f"Option {i+1}" if self.model.mc_correct is not None else f"{i}"
+            response_to_show = i+1 if self.model.mc_correct is not None else i
             color = colors[i % len(colors)]  # Ensure color wraps around if more categories than colors
             fig.add_trace(go.Scatter(
                 x=latent_scores,
                 y=prob_matrix[:, i],
                 mode='lines',
-                name=f'Response {i}',
+                name=response_text,
                 line=dict(color=color)
             ))
 
@@ -935,7 +937,7 @@ class IRTPlotter:
                 fig.add_trace(go.Scatter(
                     x=latent_group_means,
                     y=group_probs_data[:, i],
-                    mode='markers', name=f'Data {i}',
+                    mode='markers', name=f'Data {response_to_show}',
                     marker=dict(symbol='circle-open', color=color)
                 ))
                 # Adding scatter plot for group model predictions
@@ -943,15 +945,16 @@ class IRTPlotter:
                     x=latent_group_means,
                     y=group_probs_model[:, i],
                     mode='markers',
-                    name=f'Model {i}',
+                    name=f'Model {response_to_show}',
                     marker=dict(symbol='circle', color=color)
                 ))
 
+        legend_title = "Item response" if self.model.mc_correct is not None else "Score"
         fig.update_layout(
             title=title,
             xaxis_title=x_label,
             yaxis_title=y_label,
-            legend_title="Item responses",
+            legend_title=legend_title,
         )
 
         return fig

@@ -288,6 +288,9 @@ class IRTEvaluator:
         - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
         
         """
+        if level not in ["item", "respondent"]:
+            raise ValueError("Invalid level. Choose either 'item' or 'respondent'.")
+
         data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
 
         expected_scores = self.model.expected_scores(z, return_item_scores=True)

@@ -36,9 +36,9 @@ def swedish_national_mathematics_1() -> torch.Tensor:
         raise RuntimeError("Failed to load data") from e
     return data
 
-def swedish_sat_verbal_2022() -> tuple[torch.Tensor, list[int]]:
+def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the Swedish SAT Verbal 2022 dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
+    Load the verbal part of the Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
 
     Returns
     -------
@@ -60,9 +60,9 @@ def swedish_sat_verbal_2022() -> tuple[torch.Tensor, list[int]]:
 
     return data - 1, correct_category
 
-def swedish_sat_quantitative_2022() -> tuple[torch.Tensor, list[int]]:
+def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the Swedish SAT Quantitative 2022 dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
+    Load the quantitative part Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
 
     Returns
     -------
@@ -84,34 +84,34 @@ def swedish_sat_quantitative_2022() -> tuple[torch.Tensor, list[int]]:
 
     return data - 1, correct_category
 
-def swedish_sat_2022() -> tuple[torch.Tensor, list[int]]:
+def swedish_sat() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the full Swedish SAT 2022 dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data. The first 80 items are from the quantitative test, and the last 80 items are from the verbal test. 
+    Load the full Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data. The first 80 items are from the quantitative test, and the last 80 items are from the verbal test. 
 
     Returns
     -------
     tuple (torch.Tensor, list[int])
         A tuple containing the loaded dataset and the correct item responses.
     """
-    data_quant, correct_quant = swedish_sat_quantitative_2022()
-    data_verb, correct_verb = swedish_sat_verbal_2022()
+    data_quant, correct_quant = swedish_sat_quantitative()
+    data_verb, correct_verb = swedish_sat_verbal()
     data = torch.cat((data_quant, data_verb), dim=1)
     # concatenate the correct item responses
     correct_category = correct_quant + correct_verb
 
     return data, correct_category
 
-def swedish_sat_2022_binary() -> torch.Tensor:
+def swedish_sat_binary() -> torch.Tensor:
     """
-    Load the full Swedish SAT 2022 dataset coded as incorrect/correct. 
+    Load the full Swedish SAT dataset coded as incorrect/correct. 
 
     Returns
     -------
     torch.Tensor
         A tuple containing the loaded dataset.
     """
-    data_quant, correct_quant = swedish_sat_quantitative_2022()
-    data_verb, correct_verb = swedish_sat_verbal_2022()
+    data_quant, correct_quant = swedish_sat_quantitative()
+    data_verb, correct_verb = swedish_sat_verbal()
     data = torch.cat((data_quant, data_verb), dim=1)
     # concatenate the correct item responses
     correct_category = correct_quant + correct_verb

@@ -82,6 +82,25 @@ def irt_scorer(z_scores, latent_variables):
 
     return IRTScorer(mock_model, mock_algorithm)
 
+from unittest.mock import patch
+from irtorch.irt_scorer import GaussianMixtureModel
+
+@pytest.mark.parametrize("cv_n_components", [[1], [1, 2, 3]])
+def test_cv_gaussian_mixture_model(irt_scorer: IRTScorer, cv_n_components):
+    data = torch.randn(100, irt_scorer.model.latent_variables)
+
+    with patch.object(GaussianMixtureModel, "fit") as mock_fit, patch.object(GaussianMixtureModel, "__call__") as mock_call:
+        mock_fit.return_value = None
+        mock_call.return_value = torch.tensor(1.0)
+
+        gmm = irt_scorer._cv_gaussian_mixture_model(data, cv_n_components)
+
+    assert isinstance(gmm, GaussianMixtureModel)
+    assert gmm.n_components == cv_n_components[0]
+    assert gmm.n_features == data.shape[1]
+    mock_fit.assert_called()
+    if len(cv_n_components) > 1:
+        assert mock_call.call_count == len(cv_n_components) * 5  # 5-fold cross-validation
 
 @pytest.mark.parametrize("one_dimensional", [True, False])
 @pytest.mark.parametrize("bit_score_z_grid_method", ["NN", "ML"])

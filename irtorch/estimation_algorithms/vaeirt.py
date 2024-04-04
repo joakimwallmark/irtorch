@@ -1,7 +1,6 @@
 import logging
 import torch
 from torch.distributions import Normal
-from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.estimation_algorithms.encoders import BaseEncoder
@@ -46,7 +45,6 @@ class VAEIRT(AEIRT):
         iw_samples: int = 1,
         anneal: bool = True,
         annealing_epochs: int = 5,
-        summary_writer: SummaryWriter = None,
     ):
         self.iw_samples = iw_samples
         self.annealing_epochs = annealing_epochs
@@ -77,7 +75,6 @@ class VAEIRT(AEIRT):
             model=model,
             encoder=encoder,
             one_hot_encoded=one_hot_encoded,
-            summary_writer=summary_writer,
         )
 
     def fit(

@@ -1,7 +1,6 @@
 import logging
 import torch
 import pandas as pd
-from torch.utils.tensorboard import SummaryWriter
 from plotly import graph_objects as go
 from irtorch.models import BaseIRTModel
 from irtorch.models import Parametric
@@ -83,7 +82,6 @@ class IRT:
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
         batch_normalization_encoder: bool = True,
-        summary_writer: SummaryWriter = None,
     ):
         if isinstance(model, BaseIRTModel):
             self.latent_variables = model.latent_variables
@@ -128,7 +126,6 @@ class IRT:
                 hidden_layers_encoder=hidden_layers_encoder,
                 nonlinear_encoder=nonlinear_encoder,
                 batch_normalization_encoder=batch_normalization_encoder,
-                summary_writer = summary_writer
             )
         elif estimation_algorithm == "VAE":
             self.algorithm = VAEIRT(
@@ -138,7 +135,6 @@ class IRT:
                 hidden_layers_encoder=hidden_layers_encoder,
                 nonlinear_encoder=nonlinear_encoder,
                 batch_normalization_encoder=batch_normalization_encoder,
-                summary_writer = summary_writer
             )
 
         self.scorer = IRTScorer(self.model, self.algorithm)
@@ -825,7 +821,7 @@ class IRT:
             - 'data' averages over the z scores from the population data.
             - 'encoder sampling' samples z scores from the encoder. Only available for VariationalAutoencoderIRT models
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
-            - 'gmm' for an sklearn gaussian mixture model.
+            - 'gmm' for a gaussian mixture model.
 
         population_data : torch.Tensor, optional
             The population data used for approximating sum score probabilities. Default is None and uses the training data.

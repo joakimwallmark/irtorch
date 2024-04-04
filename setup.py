@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name="irtorch",
-    version="0.0.2",
+    version="0.0.3",
     description="IRTorch: An item response theory package for python.",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -19,18 +19,16 @@ setup(
         "irtorch": [
             "datasets/national_mathematics/*.pt",
             "datasets/big_five/*.pt",
-            # "datasets/swedish_sat/*.pt",
-            # "datasets/swedish_sat/*.txt",
+            "datasets/swedish_sat/*.pt",
+            "datasets/swedish_sat/*.txt",
         ],
     },
     install_requires=[
         "torch>=2.1.1,<3.0.0",
         "factor_analyzer>=0.4.1",
-        "tensorboard>=2.15.1,<3.0.0",
         "numpy>=1.24.1,<2.0.0",
         "pandas>=2.2.0,<3.0.0",
         "plotly>=5.19.0,<6.0.0",
-        "scikit-learn>=1.2.2,<2.0.0",
     ],
     zip_safe=False,
 )

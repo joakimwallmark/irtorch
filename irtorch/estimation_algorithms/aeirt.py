@@ -2,7 +2,6 @@ import logging
 import copy
 import torch
 from torch import nn
-from torch.utils.tensorboard import SummaryWriter
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
@@ -38,11 +37,9 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
         batch_normalization_encoder: bool = True,
-        summary_writer: SummaryWriter = None,
     ):
         super().__init__(model = model, one_hot_encoded=one_hot_encoded)
         self.imputation_method = "zero"
-        self.summary_writer = summary_writer
         self.batch_normalization = batch_normalization_encoder
 
         if encoder is not None and self.model is not None:
@@ -234,9 +231,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             self.optimizer.load_state_dict(best_model_state['optimizer'])
             logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
-        if self.summary_writer is not None:
-            self.summary_writer.close()
-
     def _train_step(self, epoch):
         """
         Perform a training step for the model.
@@ -257,12 +251,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             self.optimizer.zero_grad()
             batch_loss = self._train_batch(batch)
             batch_loss.backward()
-
-            # After the backward pass, log the gradients and the parameters
-            if self.summary_writer is not None:
-                for name, param in self.model.named_parameters():
-                    self.summary_writer.add_histogram(f'{name}', param, epoch)
-                    self.summary_writer.add_histogram(f'{name}.grad', param.grad, epoch)
 
             self.optimizer.step()
             loss += batch_loss.item()

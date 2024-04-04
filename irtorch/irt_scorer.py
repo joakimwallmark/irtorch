@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.estimation_algorithms.base_irt_algorithm import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.aeirt import AEIRT
 from irtorch.quantile_mv_normal import QuantileMVNormal
-from irtorch.gaussian_mixture_torch import GaussianMixtureTorch
+from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import output_to_item_entropy, random_guessing_data, linear_regression, dynamic_print
 from irtorch.outlier_detector import OutlierDetector
 from irtorch.utils import one_hot_encode_test_data
@@ -34,8 +34,8 @@ class IRTScorer:
         self,
         z_scores: torch.Tensor,
         approximation: str = "qmvn",
-        cv_n_components: list[int] = None,
-    ):
+        cv_n_components: list[int] = [2, 3, 4, 5, 10],
+    ) -> None:
         """
         Approximate the latent space density.
 
@@ -46,10 +46,10 @@ class IRTScorer:
         approximation : str, optional
             The approximation method to use. (default is 'qmvn')
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
-            - 'gmm' for an sklearn gaussian mixture model.
+            - 'gmm' for a gaussian mixture model.
 
         cv_n_components: int, optional
-            The number of guassian components to use for 'gmm'. The best performing number . (default is 5)
+            The number of components to use for cross-validation in the Gaussian Mixture Model. (default is [2, 3, 4, 5, 10])
 
         Returns
         -------
@@ -58,14 +58,44 @@ class IRTScorer:
         """
         if approximation == "gmm":
             cv_n_components = [2, 3, 4, 5, 10] if cv_n_components is None else cv_n_components
-            self.latent_density = GaussianMixtureTorch()
-            self.latent_density.fit(z_scores, cv_n_components)
+            self.latent_density = self._cv_gaussian_mixture_model(z_scores, cv_n_components)
         elif approximation == "qmvn":
             self.latent_density = QuantileMVNormal()
             self.latent_density.fit(z_scores)
         else:
             raise ValueError("Invalid approximation method. Choose either 'qmvn' or 'gmm'.")
 
+    def _cv_gaussian_mixture_model(self, data: torch.Tensor, cv_n_components: list[int]) -> GaussianMixtureModel:
+        if len(cv_n_components) > 1:
+            logger.info("Performing cross-validation for Gaussian Mixture Model components...")
+            n_folds = 5
+            average_log_likelihood = torch.zeros(len(cv_n_components))
+            for comp_ind, components in enumerate(cv_n_components):
+                log_likelihoods = torch.zeros(n_folds)
+                data_chunks = data.chunk(n_folds)
+                for i, data_val in enumerate(data_chunks):
+                    train_chunks = [x for j, x in enumerate(data_chunks) if j != i]
+                    data_train = torch.cat(train_chunks, dim=0)
+
+                    gmm = GaussianMixtureModel(n_components=components, n_features=data.shape[1])
+                    gmm.fit(data_train)
+
+                    # Compute the log likelihood on the validation data
+                    log_likelihoods[i] = gmm(data_val)
+
+                # Compute the average log likelihood over the folds
+                average_log_likelihood[comp_ind] = log_likelihoods.mean()
+
+            # Select the number of components that maximizes the average log likelihood
+            optimal_n_components = cv_n_components[average_log_likelihood.argmax()]
+            logger.info("Fitting Gaussian Mixture Model for latent trait density.")
+            gmm = GaussianMixtureModel(n_components=optimal_n_components, n_features=data.shape[1])
+        else:
+            logger.info("Fitting Gaussian Mixture Model for latent trait density.")
+            gmm = GaussianMixtureModel(n_components=cv_n_components[0], n_features=data.shape[1])
+
+        gmm.fit(data)
+        return gmm
 
     @torch.inference_mode()
     def min_max_z_for_integration(

@@ -2,7 +2,8 @@ import logging
 import torch
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
-from irtorch.irt_scorer import QuantileMVNormal, GaussianMixtureTorch
+from irtorch.quantile_mv_normal import QuantileMVNormal
+from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch.irt_scorer import IRTScorer
 from irtorch._internal_utils import (
     impute_missing,
@@ -591,7 +592,7 @@ class IRTEvaluator:
             - 'data' averages over the z scores from the population data.
             - 'encoder sampling' samples z scores from the encoder. Only available for VariationalAutoencoderIRT models
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
-            - 'gmm' for an sklearn gaussian mixture model.
+            - 'gmm' for a gaussian mixture model.
         population_data : torch.Tensor, optional
             The population data used for approximating sum score probabilities. Default is None and uses the training data.
         trapezoidal_segments : int, optional
@@ -693,7 +694,7 @@ class IRTEvaluator:
             )
             and (
                 latent_density_method != "gmm"
-                or not isinstance(self.scorer.latent_density, GaussianMixtureTorch)
+                or not isinstance(self.scorer.latent_density, GaussianMixtureModel)
             )
         ):
             self.scorer.approximate_latent_density(

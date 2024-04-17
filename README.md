@@ -28,13 +28,11 @@ Wallmark, J. (2024). IRTorch: Item response theory with Python (Version X.X) [So
 Or use the following BibTeX entry:
 
 ```bibtex
-@misc{irtorch2024,
+@misc{irtorch,
+  title = {{IRTorch}: Item response theory with Python},
   author = {Wallmark, Joakim},
-  title = {IRTorch: Item response theory with Python},
   year = {2024},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/joakimwallmark/irtorch}},
-  version = {X.X}
+  note = {Version X.X},
+  url = {https://github.com/joakimwallmark/irtorch}
 }
 ```

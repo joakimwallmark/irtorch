@@ -28,7 +28,7 @@ Wallmark, J. (2024). IRTorch: Item response theory with Python (Version X.X) [So
 Or use the following BibTeX entry:
 
 ```bibtex
-@misc{irtorch,
+@manual{irtorch,
   title = {{IRTorch}: Item response theory with Python},
   author = {Wallmark, Joakim},
   year = {2024},

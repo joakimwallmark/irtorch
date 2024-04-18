@@ -15,28 +15,28 @@ def test_swedish_national_mathematics_1():
 def test_swedish_sat_verbal():
     data, correct_category = swedish_sat_verbal()
     assert data.dtype == torch.float32
-    assert data.shape == (38068, 80)
+    assert data.shape == (5000, 80)
     assert len(correct_category) == 80
     assert all([isinstance(x, int) for x in correct_category])
 
 def test_swedish_sat_quantitative():
     data, correct_category = swedish_sat_quantitative()
     assert data.dtype == torch.float32
-    assert data.shape == (38068, 80)
+    assert data.shape == (5000, 80)
     assert len(correct_category) == 80
     assert all([isinstance(x, int) for x in correct_category])
 
 def test_swedish_sat():
     data, correct_category = swedish_sat()
     assert data.dtype == torch.float32
-    assert data.shape == (38068, 160)
+    assert data.shape == (5000, 160)
     assert len(correct_category) == 160
     assert all([isinstance(x, int) for x in correct_category])
 
 def test_swedish_sat_binary():
     data = swedish_sat_binary()
     assert data.dtype == torch.float32
-    assert data.shape == (38068, 160)
+    assert data.shape == (5000, 160)
     assert data[~data.isnan()].max() == 1.0
     assert data[~data.isnan()].min() == 0.0
 

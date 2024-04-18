@@ -38,7 +38,7 @@ def swedish_national_mathematics_1() -> torch.Tensor:
 
 def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the verbal part of the Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
+    Load a sample from the verbal part of the Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
 
     Returns
     -------
@@ -62,7 +62,7 @@ def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
 
 def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the quantitative part Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
+    Load a sample from the quantitative part Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data.
 
     Returns
     -------
@@ -86,7 +86,7 @@ def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
 
 def swedish_sat() -> tuple[torch.Tensor, list[int]]:
     """
-    Load the full Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data. The first 80 items are from the quantitative test, and the last 80 items are from the verbal test. 
+    Load a sample from Swedish SAT dataset and the correct item responses. The correct item responses start from one, and thus a 1 corresponds to a response of 0 in the data. The first 80 items are from the quantitative test, and the last 80 items are from the verbal test. 
 
     Returns
     -------
@@ -103,7 +103,7 @@ def swedish_sat() -> tuple[torch.Tensor, list[int]]:
 
 def swedish_sat_binary() -> torch.Tensor:
     """
-    Load the full Swedish SAT dataset coded as incorrect/correct. 
+    Load a sample from Swedish SAT dataset coded as incorrect/correct. 
 
     Returns
     -------

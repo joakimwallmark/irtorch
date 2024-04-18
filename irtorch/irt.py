@@ -764,7 +764,7 @@ class IRT:
         average_over: str = "none",
     ) -> torch.Tensor:
         """
-        Calculate the residuals of the model for the supplied data. 
+        Compute model residuals using the supplied data.  
         
         For multiple choice models, the residuals are computed as 1 - the probability of the selected response option.
         For other models, the residuals are computed as the difference between the observed and model expected item scores.

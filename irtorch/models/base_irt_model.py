@@ -58,7 +58,6 @@ class BaseIRTModel(ABC, nn.Module):
             Output tensor.
         """
 
-    @abstractmethod
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
         Compute probabilities from the output tensor from the forward method.
@@ -73,6 +72,8 @@ class BaseIRTModel(ABC, nn.Module):
         torch.Tensor
             3D tensor with dimensions (respondents, items, item categories)
         """
+        reshaped_output = output.reshape(-1, self.max_item_responses)
+        return F.softmax(reshaped_output, dim=1).reshape(output.shape[0], self.items, self.max_item_responses)
 
     def item_probabilities(self, z: torch.Tensor) -> torch.Tensor:
         """

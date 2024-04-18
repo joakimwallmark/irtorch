@@ -57,15 +57,15 @@ def model(device, latent_variables, data, data_type, fitting_algorithm):
         mc_correct=correct_cat
     )
     # check if file exists
-    file_path = f"tests/models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt"
+    file_path = f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt"
     if os.path.isfile(file_path):
-        model.load_model(f"tests/models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
+        model.load_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
     else:
         model.fit(
             train_data=data,
             device=device
         )
-        model.save_model(f"tests/models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
+        model.save_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
 
     return model
 

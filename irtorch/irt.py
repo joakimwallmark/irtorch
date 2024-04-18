@@ -2,9 +2,7 @@ import logging
 import torch
 import pandas as pd
 from plotly import graph_objects as go
-from irtorch.models import BaseIRTModel
-from irtorch.models import Parametric
-from irtorch.models import MonotoneNN
+from irtorch.models import BaseIRTModel, MonotoneNN, OneParameterLogistic, TwoParameterLogistic, GeneralizedPartialCredit, NominalResponse
 from irtorch.estimation_algorithms import AEIRT, VAEIRT
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
@@ -31,7 +29,7 @@ class IRT:
         - "MMCNN": Monotone multiple choice neural network model.
         
         Default is None and uses either MNN or MMCNN depending on whether mc_correct is provided or not. 
-        An instantiated model can also be provided, see :class:`irtorch.models.parametric.Parametric` and :class:`irtorch.models.monotone_nn.MonotoneNN` for model specific details.
+        An instantiated model inheriting :class:`irtorch.models.BaseIRTModel` can also be provided, see :doc:`irt_models` for model specific details.
     estimation_algorithm : str, optional
         The estimation algorithm to use. Available options are
 
@@ -94,15 +92,32 @@ class IRT:
                     # replace nan with -inf to get max
                     item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
-            if model in ["1PL", "2PL", "3PL", "GPC", "NR"]:
-                self.model = Parametric(
+            if model == "1PL":
+                self.model = OneParameterLogistic(
+                    latent_variables=latent_variables,
+                    items=len(item_categories),
+                    item_z_relationships=item_z_relationships
+                )
+            elif model == "2PL":
+                self.model = TwoParameterLogistic(
+                    latent_variables=latent_variables,
+                    items=len(item_categories),
+                    item_z_relationships=item_z_relationships
+                )
+            elif model == "GPC":
+                self.model = GeneralizedPartialCredit(
                     latent_variables=latent_variables,
                     item_categories=item_categories,
-                    model=model,
+                    item_z_relationships=item_z_relationships
+                )
+            elif model == "NR":
+                self.model = NominalResponse(
+                    latent_variables=latent_variables,
+                    item_categories=item_categories,
+                    item_z_relationships=item_z_relationships,
                     model_missing=model_missing,
                     mc_correct=mc_correct,
-                    item_z_relationships=item_z_relationships,
-                    reference_category=nominal_reference_category,
+                    reference_category=nominal_reference_category
                 )
             elif model in ["MMCNN", "MNN"] or model is None:
                 if hidden_layers_decoder is None:  # 1 layer with 2x number of categories as neurons is default
@@ -525,24 +540,24 @@ class IRT:
             **kwargs
         )
 
-    def item_parameters(self, IRT_format = False) -> pd.DataFrame:
+    def item_parameters(self, irt_format = False) -> pd.DataFrame:
         """
         For parametric models, get the item parameters for a fitted model.
 
         Parameters
         ----------
-        IRT_format : bool, optional
-            Only for unidimensional models. Whether to return the item parameters in traditional IRT format. Otherwise returns weights and biases. (default is False)
+        irt_format : bool, optional
+            Only for unidimensional parametric models. Whether to return the item parameters in traditional IRT format. Otherwise returns weights and biases. (default is False)
 
         Returns
         -------
         pd.DataFrame
             A dataframe with the item parameters.
         """
-        if isinstance(self.model, Parametric):
-            return self.model.item_parameters(IRT_format)
+        if hasattr(self.model, 'item_parameters'):
+            return self.model.item_parameters(irt_format)
         else:
-            raise ValueError("Item parameters are only available for parametric models.")
+            raise AttributeError("item_parameters method is not available for the chosen IRT model.")
 
     def infit_outfit(
         self,
@@ -764,7 +779,7 @@ class IRT:
         average_over: str = "none",
     ) -> torch.Tensor:
         """
-        Calculate the residuals of the model for the supplied data. 
+        Compute model residuals using the supplied data.  
         
         For multiple choice models, the residuals are computed as 1 - the probability of the selected response option.
         For other models, the residuals are computed as the difference between the observed and model expected item scores.

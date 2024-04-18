@@ -1,3 +1,6 @@
 from .base_irt_model import BaseIRTModel
 from .monotone_nn import MonotoneNN
-from .parametric import Parametric
+from .two_parameter_logistic import TwoParameterLogistic
+from .one_parameter_logistic import OneParameterLogistic
+from .generalized_partial_credit import GeneralizedPartialCredit
+from .nominal_response import NominalResponse

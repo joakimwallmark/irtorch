@@ -35,7 +35,7 @@
 #     )
     
 #     # Save models for other tests
-#     # model.save_model(f"tests/models/{model_type}_latent_variables{latent_variables}_{data_type}_{device}.pt")
+#     # model.save_model(f"tests/fitted_models/{model_type}_latent_variables{latent_variables}_{data_type}_{device}.pt")
 
 #     for name, param in model.model.state_dict().items():
 #         if 'free' not in name and 'missing_categories' not in name and not re.match(r'negation_dim\d+\.weight', name):

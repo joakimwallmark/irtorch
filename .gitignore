@@ -131,7 +131,7 @@ dmypy.json
 
 data.csv
 
-tests/models
+tests/fitted_models
 notebooks/old
 runs/
 *test.ipynb

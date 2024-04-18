@@ -1,12 +1,21 @@
 IRT models
 ==================
 
-.. autoclass:: irtorch.models.parametric.Parametric
+.. autoclass:: irtorch.models.OneParameterLogistic
     :show-inheritance:
 
-.. autoclass:: irtorch.models.monotone_nn.MonotoneNN
+.. autoclass:: irtorch.models.TwoParameterLogistic
     :show-inheritance:
 
-.. autoclass:: irtorch.models.base_irt_model.BaseIRTModel
+.. autoclass:: irtorch.models.GeneralizedPartialCredit
+    :show-inheritance:
+
+.. autoclass:: irtorch.models.NominalResponse
+    :show-inheritance:
+
+.. autoclass:: irtorch.models.MonotoneNN
+    :show-inheritance:
+
+.. autoclass:: irtorch.models.BaseIRTModel
     :show-inheritance:
     :members:

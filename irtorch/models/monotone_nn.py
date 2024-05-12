@@ -9,7 +9,7 @@ from irtorch.activation_functions import BoundedELU
 logger = logging.getLogger('irtorch')
 
 class MonotoneNN(BaseIRTModel):
-    """
+    r"""
     Nonparametric Monotone Neural Network IRT model.
     The model is a feedforward neural network with a separate monotone nonparametric latent variable weight function for each item or item category.
 
@@ -41,25 +41,25 @@ class MonotoneNN(BaseIRTModel):
 
     Notes
     -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \\ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
 
     .. math::
 
-        P(X_j=x | \\mathbf{z}) = \\frac{
-            \\exp(z_{jx}(\\mathbf{z}))
+        P(X_j=x | \mathbf{z}) = \frac{
+            \exp(z_{jx}(\mathbf{z}))
         }{
-            \\sum_{m=0}^{M_j}
-                \\exp(z_{jm}(\\mathbf{z}))
+            \sum_{m=0}^{M_j}
+                \exp(z_{jm}(\mathbf{z}))
         },
 
     where:
 
-    - :math:`\\mathbf{z}` is a vector of latent variables.
+    - :math:`\mathbf{z}` is a vector of latent variables.
     - When mc_correct is not specified: 
-        - :math:`z_{jm}(\\mathbf{z}) = \\sum_{c=0}^{m}\\text{monotone}_{jc}(\\mathbf{z}) - b_{jm}`.
+        - :math:`z_{jm}(\mathbf{z}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{z}) + b_{jm}`.
     - When mc_correct is specified:
-        - :math:`z_{jm}(\\mathbf{z}) = \\text{monotone}_{jm}(\\mathbf{z}) - b_{jm}` for all incorrect response options, and :math:`z_{jm}(\\mathbf{z}) = \\sum_{c=0}^{M_j}\\text{monotone}_{jc}(\\mathbf{z}) - b_{jm}` for the correct response option.
-    - :math:`\\text{monotone}_{jm}(\\mathbf{z})` is a monotonic neural network with ELU based activation functions as per :cite:t:`Runje2023`.
+        - :math:`z_{jm}(\mathbf{z}) = \text{monotone}_{jm}(\mathbf{z}) + b_{jm}` for all incorrect response options, and :math:`z_{jm}(\mathbf{z}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{z}) + b_{jm}` for the correct response option.
+    - :math:`\text{monotone}_{jm}(\mathbf{z})` is a monotonic neural network with ELU based activation functions as per :cite:t:`Runje2023`.
     """
     def __init__(
         self,

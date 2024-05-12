@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
 from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms import BaseIRTAlgorithm
+from irtorch.estimation_algorithms import BaseIRTAlgorithm, AEIRT, VAEIRT, MMLIRT
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_evaluator import IRTEvaluator
 from irtorch._internal_utils import output_to_item_entropy
@@ -428,7 +428,10 @@ class IRTPlotter:
         mask = torch.ones(model_dim, dtype=bool)
         mask[latent_indices] = 0
         if fixed_zs is None:
-            fixed_zs = self.algorithm.training_z_scores[:, mask].median(dim=0).values
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                fixed_zs = self.algorithm.training_z_scores[:, mask].median(dim=0).values
+            elif isinstance(self.algorithm, MMLIRT):
+                fixed_zs = torch.zeros(model_dim)
 
         elif len(fixed_zs) is not model_dim - len(latent_variables):
             raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")
@@ -775,18 +778,27 @@ class IRTPlotter:
         mask = torch.ones(self.model.latent_variables, dtype=bool)
         mask[latent_indices] = 0
         if fixed_zs is None:
-            fixed_zs = self.algorithm.training_z_scores[:, mask].median(dim=0).values
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                fixed_zs = self.algorithm.training_z_scores[:, mask].median(dim=0).values
+            elif isinstance(self.algorithm, MMLIRT):
+                fixed_zs = torch.zeros(self.model.latent_variables)
         
         if z_range is None:
-            z_range = (
-                self.algorithm.training_z_scores[:, latent_variables[0] - 1].min().item(),
-                self.algorithm.training_z_scores[:, latent_variables[0] - 1].max().item()
-            )
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                z_range = (
+                    self.algorithm.training_z_scores[:, latent_variables[0] - 1].min().item(),
+                    self.algorithm.training_z_scores[:, latent_variables[0] - 1].max().item()
+                )
+            elif isinstance(self.algorithm, MMLIRT):
+                z_range = (-3, 3)
         if second_z_range is None and len(latent_indices) > 1:
-            second_z_range = (
-                self.algorithm.training_z_scores[:, latent_variables[1] - 1].min().item(),
-                self.algorithm.training_z_scores[:, latent_variables[1] - 1].max().item()
-            )
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                second_z_range = (
+                    self.algorithm.training_z_scores[:, latent_variables[1] - 1].min().item(),
+                    self.algorithm.training_z_scores[:, latent_variables[1] - 1].max().item()
+                )
+            elif isinstance(self.algorithm, MMLIRT):
+                second_z_range = (-3, 3)
 
         latent_z_1 = torch.linspace(z_range[0], z_range[1], steps=steps)
         if len(latent_indices) == 1:

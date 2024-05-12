@@ -109,7 +109,7 @@ class BaseIRTModel(ABC, nn.Module):
         output: torch.Tensor
             A 2D tensor with output. Columns are item response categories and rows are respondents
         loss_reduction: str, optional 
-            The reduction argument for torch.nn.CrossEntropyLoss. (default is 'sum')
+            The reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
         
         Returns
         -------

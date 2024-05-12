@@ -1,13 +1,13 @@
 import logging
-import torch
 import pandas as pd
+import torch
+from torch.distributions import MultivariateNormal
 from plotly import graph_objects as go
 from irtorch.models import BaseIRTModel, MonotoneNN, OneParameterLogistic, TwoParameterLogistic, GeneralizedPartialCredit, NominalResponse
-from irtorch.estimation_algorithms import AEIRT, VAEIRT
+from irtorch.estimation_algorithms import AEIRT, VAEIRT, MMLIRT
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
-from irtorch.estimation_algorithms.encoders import BaseEncoder
 
 logger = logging.getLogger('irtorch')
 
@@ -35,6 +35,7 @@ class IRT:
 
         - "AE" for autoencoder. This is the default. 
         - "VAE" for variational autoencoder.
+        - "MML" for marginal maximum likelihood. 
 
     latent_variables : int, optional
         The number of latent variables to use for the model. (default is 1)
@@ -50,18 +51,16 @@ class IRT:
         List of correct answers for multiple choice questions. If provided also sets one_hot_encoded to True. (default is None)
     nominal_reference_category : bool, optional
         Whether to use a reference category for nominal models. If True, removes the model parameters for one response category per item. (default is False)
-
-    encoder : BaseEncoder, optional
-        The encoder to use for the AE or VAE. Overrides the one_hot_encoded, hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder arguments.
-        If not provided, creates an instance of class StandardEncoder or VariationalEncoder for AE and VAE respectively. (default is None)
-    one_hot_encoded : bool, optional
-        Whether the model fitting algorithm uses one-hot encoded data. (default is False for all models except for MMC)
     hidden_layers_encoder : list[int], optional
-        List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-    nonlinear_encoder : torch.nn.Module, optional
-        The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-    batch_normalization_encoder : bool, optional
-        Whether to use batch normalization for the encoder. (default is True)
+        For MNN and MMCNN models. A list with the number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
+        
+    **kwargs
+        Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective estimation algorithm.
+        Currently supported algorithms are:
+
+        - Autoencoder :class:`irtorch.estimation_algorithms.ae.AEIRT`
+        - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAEIRT`
+        - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MMLIRT`
     """
     def __init__(
         self,
@@ -74,12 +73,8 @@ class IRT:
         model_missing: bool = False,
         mc_correct: list[int] = None,
         nominal_reference_category: bool = False,
-        encoder: BaseEncoder = None,
-        one_hot_encoded: bool = False,
         hidden_layers_decoder: list[int] = None,
-        hidden_layers_encoder: list[int] = None,
-        nonlinear_encoder = torch.nn.ELU(),
-        batch_normalization_encoder: bool = True,
+        **kwargs
     ):
         if isinstance(model, BaseIRTModel):
             self.latent_variables = model.latent_variables
@@ -136,20 +131,17 @@ class IRT:
         if estimation_algorithm == "AE":
             self.algorithm = AEIRT(
                 model=self.model,
-                encoder=encoder,
-                one_hot_encoded=one_hot_encoded,
-                hidden_layers_encoder=hidden_layers_encoder,
-                nonlinear_encoder=nonlinear_encoder,
-                batch_normalization_encoder=batch_normalization_encoder,
+                **kwargs
             )
         elif estimation_algorithm == "VAE":
             self.algorithm = VAEIRT(
                 model=self.model,
-                encoder=encoder,
-                one_hot_encoded=one_hot_encoded,
-                hidden_layers_encoder=hidden_layers_encoder,
-                nonlinear_encoder=nonlinear_encoder,
-                batch_normalization_encoder=batch_normalization_encoder,
+                **kwargs
+            )
+        elif estimation_algorithm == "MML":
+            self.algorithm = MMLIRT(
+                model=self.model,
+                **kwargs
             )
 
         self.scorer = IRTScorer(self.model, self.algorithm)
@@ -169,11 +161,12 @@ class IRT:
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         **kwargs
-            Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective fit estimation algorithm for details.
+            Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective estimation algorithm.
             Currently supported algorithms are:
 
-            - 'AEIRT': See :class:`irtorch.estimation_algorithms.aeirt.AEIRT`
-            - 'VAEIRT': See :class:`irtorch.estimation_algorithms.vaeirt.VAEIRT`
+            - Autoencoder :class:`irtorch.estimation_algorithms.ae.AEIRT`
+            - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAEIRT`
+            - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MMLIRT`
         """
         self.algorithm.fit(
             train_data=train_data,
@@ -286,11 +279,11 @@ class IRT:
         start_z_guessing_probabilities: list[float] = None,
         start_z_guessing_iterations: int = 10000,
     ) -> torch.Tensor:
-        """
+        r"""
         Computes the gradients of the bit scores with respect to the input z scores using the central difference method: 
         .. math ::
 
-            f^{\\prime}(z) \\approx \\frac{f(z+h)-f(z-h)}{2 h}
+            f^{\prime}(z) \approx \frac{f(z+h)-f(z-h)}{2 h}
 
         Parameters
         ----------
@@ -394,7 +387,14 @@ class IRT:
             A tensor with the expected item score slopes.
         """
         if z is None:
-            z = self.algorithm.training_z_scores
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                logger.info("Using traning data z scores as population z scores.")
+                z = self.algorithm.training_z_scores
+            elif isinstance(self.algorithm, MMLIRT):
+                logger.info("Sampling from multivariate normal as population z scores.")
+                mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
+                z = mvn.sample((4000,)).to(dtype=torch.float32)
+        
         return self.scorer.expected_item_score_slopes(z, scale, bit_scores, rescale_by_item_score, **kwargs)
 
     def bit_score_starting_z(
@@ -566,7 +566,7 @@ class IRT:
         z_estimation_method: str = "ML",
         level: str = "item",
     ):
-        """
+        r"""
         Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
         or respondents with unusual response patterns. Items that do not behave as expectedly can be reviewed for possible revision or removal 
         to improve the overall test quality and reliability. Respondents with unusual response patterns can be reviewed for possible cheating or other issues.
@@ -592,12 +592,12 @@ class IRT:
         Infit and outift are computed as follows :cite:p:`vanderLinden1997`:
 
         .. math::
-            \\begin{align}
-            \\text{Item j infit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
-            \\text{Respondent i infit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
-            \\text{Item j outfit} &= \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
-            \\text{Respondent i outfit} &= \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
-            \\end{align}
+            \begin{align}
+            \text{Item j infit} &= \frac{\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\sum_{i=1}^{n} W_{ij}} \\
+            \text{Respondent i infit} &= \frac{\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\sum_{j=1}^{J} W_{ij}} \\
+            \text{Item j outfit} &= \frac{\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\
+            \text{Respondent i outfit} &= \frac{\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
+            \end{align}
 
         Where:
 
@@ -605,13 +605,13 @@ class IRT:
         - :math:`n` is the number of respondents,
         - :math:`O_{ij}` is the observed score on the :math:`j`-th item from the :math:`i`-th respondent.
         - :math:`E_{ij}` is the expected score on the :math:`j`-th item from the :math:`i`-th respondent, calculated from the IRT model.
-        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
+        - :math:`W_{ij}` is the weight on the :math:`j`-th item from the :math:`j`-th respondent. This is the variance of the item score :math:`W_{ij}=\sum^{M_j}_{m=0}(m-E_{ij})^2P_{ijk}` where :math:`M_j` is the maximum item score and :math:`P_{ijk}` is the model probability of a score :math:`k` on the :math:`j`-th item from the :math:`i`-th respondent.
         
         """
         return self.evaluator.infit_outfit(data, z, z_estimation_method, level)
 
     def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
-        """
+        r"""
         Calculate the Fisher information matrix for the z scores (or the information in the direction supplied by degrees).
 
         Parameters
@@ -637,20 +637,20 @@ class IRT:
         -----
         In the context of IRT, the Fisher information matrix measures the amount of information
         that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\\mathbf{z}`.
+        :math:`\mathbf{z}`.
 
         The formula for the Fisher information matrix in the case of multiple parameters is:
 
         .. math::
 
-            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+            I(\mathbf{z}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right) \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}\right]
 
         Where:
 
-        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`I(\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{z}`.
+        - :math:`\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
+        - :math:`\frac{\partial^2 \log f(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
         
         For additional details, see :cite:t:`Chang2017`.
         """

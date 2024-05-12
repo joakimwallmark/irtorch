@@ -2,7 +2,7 @@ import logging
 import torch
 from torch.distributions import Normal
 from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms.aeirt import AEIRT
+from irtorch.estimation_algorithms.ae import AEIRT
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
 from irtorch.utils import decode_one_hot_test_data
@@ -54,7 +54,7 @@ class VAEIRT(AEIRT):
         if encoder is not None:
             self.encoder = encoder
         else:
-            if one_hot_encoded:
+            if one_hot_encoded or model.mc_correct is not None:
                 input_dim = sum(model.modeled_item_responses)
             else:
                 input_dim = len(model.modeled_item_responses)

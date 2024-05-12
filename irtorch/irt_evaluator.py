@@ -1,7 +1,8 @@
 import logging
 import torch
+from torch.distributions import MultivariateNormal
 from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT
+from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT, AEIRT, MMLIRT
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch.irt_scorer import IRTScorer
@@ -654,7 +655,12 @@ class IRTEvaluator:
         lbfgs_learning_rate: float = 0.3,
     ):
         if population_data is None:
-            z_scores = self.algorithm.training_z_scores
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                z_scores = self.algorithm.training_z_scores
+            elif isinstance(self.algorithm, MMLIRT):
+                logger.info("Sampling from multivariate normal as population z scores.")
+                mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
+                z_scores = mvn.sample((4000,)).to(dtype=torch.float32)
         else:
             z_scores = self.scorer.latent_scores(population_data, scale="z", z_estimation_method="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
 

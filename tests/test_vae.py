@@ -1,7 +1,7 @@
 import pytest
 import torch
 from utils import initialize_fit
-from irtorch.estimation_algorithms.vaeirt import VAEIRT
+from irtorch.estimation_algorithms.vae import VAEIRT
 from irtorch.models import MonotoneNN
 
 

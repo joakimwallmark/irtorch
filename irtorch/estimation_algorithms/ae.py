@@ -105,7 +105,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 1000)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.08)
+            The initial learning rate for the optimizer. (default is 0.04)
         learning_rate_update_patience : int, optional
             The number of epochs to wait before reducing the learning rate. (default is 4)
         learning_rate_updates_before_stopping : int, optional
@@ -149,7 +149,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
 
         # Reduce learning rate when loss stops decreasing ("min")
         # we multiply the learning rate by the factor
-        # patience: We need to improvement after 5 epochs for it to trigger
+        # patience: We need no improvement after x epochs for it to trigger
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
         )
@@ -186,8 +186,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         best_loss = float('inf')
         prev_lr = [group['lr'] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
-            # logger.info("-----------\nEpoch: %s\n-----------", epoch)
-            
             if hasattr(self, "anneal"):
                 if self.anneal:
                     self.annealing_factor = min(1.0, epoch / self.annealing_epochs)
@@ -212,7 +210,6 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
                 best_model_state = { 'state_dict': copy.deepcopy(self.state_dict()),
                                     'optimizer': copy.deepcopy(self.optimizer.state_dict()) }
             
-            # Break if the learning rate has been updated 3 times
             if lr_update_count >= learning_rate_updates_before_stopping:
                 logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                 break
@@ -303,7 +300,7 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
         batch_loss = -self.model.log_likelihood(batch, batch_logits) / batch.shape[0]
         return batch_loss
 
-    @torch.inference_mode()  # decorator applies with torch.inference_mode(): to entire function
+    @torch.inference_mode()
     def _validation_step(self):
         """
         Perform a validation step.

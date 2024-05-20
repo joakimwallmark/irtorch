@@ -41,6 +41,7 @@ class MML(BaseIRTAlgorithm):
         self.imputation_method = "zero"
         self.covariance_matrix = None
         self.training_z_scores = None
+        self.optimizer = None
         self.training_history = {
             "train_loss": [],
         }
@@ -86,8 +87,6 @@ class MML(BaseIRTAlgorithm):
         """
         super().fit(model = model, train_data = train_data)
 
-        self.covariance_matrix = torch.eye(model.latent_variables)
-
         self.imputation_method = imputation_method
 
         self.training_history = {
@@ -109,6 +108,8 @@ class MML(BaseIRTAlgorithm):
             if covariance_matrix.shape[0] != model.latent_variables or covariance_matrix.shape[1] != model.latent_variables:
                 raise ValueError("Covariance matrix must have the same dimensions as the latent variables.")
             self.covariance_matrix = covariance_matrix
+        else:
+            self.covariance_matrix = torch.eye(model.latent_variables)
 
         self.optimizer = torch.optim.Adam(
             list(model.parameters()), lr=learning_rate, amsgrad=True

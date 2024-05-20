@@ -13,9 +13,7 @@ class AE(BaseIRTAlgorithm):
     """
     Autoencoder neural network for fitting IRT models.
     """
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         super().__init__()
         self.imputation_method = "zero"
         self.one_hot_encoded = True
@@ -186,7 +184,7 @@ class AE(BaseIRTAlgorithm):
                 else:
                     self.annealing_factor = 1.0
 
-            train_loss = self._train_step(model, epoch)
+            train_loss = self._train_step(model)
 
             if validation_data is not None:
                 validation_loss = self._validation_step(model)
@@ -226,7 +224,7 @@ class AE(BaseIRTAlgorithm):
             self.optimizer.load_state_dict(best_model_state["optimizer"])
             logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
-    def _train_step(self, model: BaseIRTModel, epoch):
+    def _train_step(self, model: BaseIRTModel):
         """
         Perform a training step for the model.
 
@@ -243,7 +241,7 @@ class AE(BaseIRTAlgorithm):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
             if batch.shape[0] < 4 and self.batch_normalization:
                 continue
-            batch = self._impute_missing(batch, mask)
+            batch = self._impute_missing(model, batch, mask)
             self.optimizer.zero_grad()
             batch_loss = self._train_batch(model, batch)
             batch_loss.backward()
@@ -256,7 +254,7 @@ class AE(BaseIRTAlgorithm):
         self.training_history["train_loss"].append(loss)
         return loss
 
-    def _impute_missing(self, batch, missing_mask):
+    def _impute_missing(self, model: BaseIRTModel, batch, missing_mask):
         if torch.sum(missing_mask) > 0:
             if self.imputation_method == "zero":
                 imputed_batch = batch

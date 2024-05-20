@@ -18,6 +18,39 @@ def get_item_categories(data: torch.Tensor):
     """
     return [int(data[~data.isnan().any(dim=1)][:, col].max()) + 1 for col in range(data.shape[1])]
 
+def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputation_method: str = "zero"):
+    """
+    Deal with missing values so that the data can be used for fitting.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        The data to fix.
+    model_missing : bool, optional
+        Whether the model can handle missing values. If True, missing values are encoded as -1. If False, missing values are imputed. (default is False)
+    imputation_method : str, optional
+        The method to use for imputing missing values. The default is "zero".
+
+    Returns
+    -------
+    torch.Tensor
+        The data with missing values imputed.
+    """
+    if data.isnan().any():
+        data[data.isnan()] = -1
+
+    if model_missing:
+        data = data + 1 # handled in z_scores for nn
+    else:
+        if imputation_method == "zero":
+            data[data == -1] = 0
+        else:
+            # self._impute_missing(data, data.isnan())
+            # see also helper_function impute_missing
+            raise NotImplementedError("Imputation methods not implemented yet")
+
+    return data
+
 def split_data(data, train_ratio=0.8, shuffle=True):
     """
     Splits a tensor into training and testing datasets.

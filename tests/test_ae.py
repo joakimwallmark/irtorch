@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 from utils import initialize_fit
 import torch
-from irtorch.estimation_algorithms import AEIRT
+from irtorch.estimation_algorithms import AE
 from irtorch.models import MonotoneNN
 
 
@@ -21,7 +21,7 @@ class TestAEIRT:
             item_categories = item_categories,
             hidden_dim = [3]
         )
-        algorithm = AEIRT(
+        algorithm = AE(
             model=model,
             hidden_layers_encoder=[20],  # 1 hidden layer with 20 neurons
             nonlinear_encoder=torch.nn.ELU()
@@ -34,27 +34,27 @@ class TestAEIRT:
         initialize_fit(algorithm)
         return algorithm
 
-    def test_forward(self, algorithm: AEIRT, test_data):
+    def test_forward(self, algorithm: AE, test_data):
         output = algorithm.forward(test_data)
         assert output.shape == (120, algorithm.model.max_item_responses * algorithm.model.items)
 
-    def test_latent_scores(self, algorithm: AEIRT, test_data):
+    def test_latent_scores(self, algorithm: AE, test_data):
         output = algorithm.z_scores(test_data.to(next(algorithm.parameters()).device))
         assert output.shape == (120, algorithm.model.latent_variables)
 
-    def test__train_step(self, algorithm: AEIRT):
+    def test__train_step(self, algorithm: AE):
         previous_loss = float("inf")
         for epoch in range(2):
             loss = algorithm._train_step(epoch)
             assert loss <= previous_loss  # Loss should decrease
             previous_loss = loss
 
-    def test__validation_step(self, algorithm: AEIRT):
+    def test__validation_step(self, algorithm: AE):
         log_likelihood = algorithm._validation_step()
         assert isinstance(log_likelihood, float)
         assert log_likelihood > 0
 
-    def test__impute_missing_zero(self, algorithm: AEIRT):
+    def test__impute_missing_zero(self, algorithm: AE):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)
@@ -86,7 +86,7 @@ class TestAEIRT:
         assert torch.equal(imputed_data, data)
 
     # The following is a test for the fit function of the AEIRTNeuralNet class
-    def test_fit(self, algorithm: AEIRT, test_data):
+    def test_fit(self, algorithm: AE, test_data):
         # Mock the inner functions that would be called during training
         with patch.object(
             algorithm, "_train_step", return_value=torch.tensor(0.5)

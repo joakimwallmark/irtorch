@@ -1,4 +1,4 @@
 from .base_irt_algorithm import BaseIRTAlgorithm
-from .ae import AEIRT
-from .vae import VAEIRT
-from .mml import MMLIRT
+from .ae import AE
+from .vae import VAE
+from .mml import MML

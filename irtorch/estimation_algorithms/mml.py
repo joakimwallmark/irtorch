@@ -1,28 +1,19 @@
 import logging
 import copy
 import torch
-from torch import nn
-from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from torch.distributions import MultivariateNormal
+from irtorch.models import BaseIRTModel
 from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
-from irtorch.utils import one_hot_encode_test_data, decode_one_hot_test_data
+from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
 logger = logging.getLogger("irtorch")
 
-class MMLIRT(BaseIRTAlgorithm, nn.Module):
+class MML(BaseIRTAlgorithm):
     r"""
     Marginal Maximum Likelihood (MML) for fitting IRT models. 
     Uses a multivariate normal distribution for the latent variables and Gradient Descent to optimize the model parameters.
     This method is generally effecive for models with a small number of latent variables. More than 3 is not supported.
     Note that this method runs much faster on a GPU.
-
-    Parameters
-    ----------
-    model : BaseIRTModel
-        The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
-    one_hot_encoded : bool, optional
-        Whether the model uses one-hot encoded data. (default is False)
 
     Notes
     -----
@@ -45,25 +36,18 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
     """
     def __init__(
         self,
-        model: BaseIRTModel,
-        one_hot_encoded: bool = False,
     ):
-        super().__init__(model = model, one_hot_encoded=one_hot_encoded)
+        super().__init__()
         self.imputation_method = "zero"
-        self.covariance_matrix = torch.eye(self.model.latent_variables)
+        self.covariance_matrix = None
         self.training_z_scores = None
         self.training_history = {
             "train_loss": [],
         }
 
-        # always set to eval mode by default
-        self.model.eval()
-
-    def forward(self, latent_variables):
-        return self.model(latent_variables)
-
     def fit(
         self,
+        model: BaseIRTModel,
         train_data: torch.Tensor,
         max_epochs: int = 1000,
         quadrature_points: int = None,
@@ -79,6 +63,8 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
 
         Parameters
         ----------
+        model : BaseIRTModel
+            The model to fit. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         max_epochs : int, optional
@@ -98,34 +84,34 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         imputation_method : str, optional
             The method to use for imputing missing data. (default is "zero")
         """
-        super().fit(train_data)
-        self.imputation_method = imputation_method
+        super().fit(model = model, train_data = train_data)
 
-        if self.one_hot_encoded:
-            train_data = one_hot_encode_test_data(train_data, self.model.item_categories, encode_missing=self.model.model_missing)
+        self.covariance_matrix = torch.eye(model.latent_variables)
+
+        self.imputation_method = imputation_method
 
         self.training_history = {
             "train_loss": [],
         }
 
         if quadrature_points is None:
-            if self.model.latent_variables > 3:
+            if model.latent_variables > 3:
                 raise ValueError("MML is not implemented for models with more than 3 latent variables because of large integration grid.")
             quadrature_points = {
                 1: 20,
                 2: 8,
                 3: 5
-            }.get(self.model.latent_variables, 20)
+            }.get(model.latent_variables, 20)
 
         latent_grid = torch.linspace(-3, 3, quadrature_points).view(-1, 1)
-        latent_grid = latent_grid.expand(-1, self.model.latent_variables).contiguous()
+        latent_grid = latent_grid.expand(-1, model.latent_variables).contiguous()
         if covariance_matrix is not None:
-            if covariance_matrix.shape[0] != self.model.latent_variables or covariance_matrix.shape[1] != self.model.latent_variables:
+            if covariance_matrix.shape[0] != model.latent_variables or covariance_matrix.shape[1] != model.latent_variables:
                 raise ValueError("Covariance matrix must have the same dimensions as the latent variables.")
             self.covariance_matrix = covariance_matrix
 
         self.optimizer = torch.optim.Adam(
-            [{"params": self.parameters()}], lr=learning_rate, amsgrad=True
+            list(model.parameters()), lr=learning_rate, amsgrad=True
         )
 
         # Reduce learning rate when loss stops decreasing ("min")
@@ -135,12 +121,13 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
             self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
         )
 
-        self.to(device)
+        model.to(device)
         normal_dist = MultivariateNormal(
-            loc=torch.zeros(self.model.latent_variables).to(device),
+            loc=torch.zeros(model.latent_variables).to(device),
             covariance_matrix=self.covariance_matrix.to(device)
         )
         self._training_loop(
+            model,
             train_data.to(device),
             max_epochs,
             latent_grid.to(device),
@@ -148,16 +135,12 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
             scheduler,
             learning_rate_updates_before_stopping
         )
-        self.to("cpu")
-        self.eval()
-
-        # store the latent z scores of the training data
-        # used for more efficient computation when using other methods
-        if not self.one_hot_encoded:
-            train_data = self.fix_missing_values(train_data)
+        model.to("cpu")
+        model.eval()
 
     def _training_loop(
         self,
+        model: BaseIRTModel,
         train_data: torch.Tensor,
         max_epochs: int,
         latent_grid: torch.Tensor,
@@ -170,6 +153,8 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
 
         Parameters
         ----------
+        model : BaseIRTModel
+            The model to train.
         train_data : torch.Tensor
             The training data.
         max_epochs : int
@@ -185,8 +170,7 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         """
         lr_update_count = 0
         irt_dataset = PytorchIRTDataset(data=train_data)
-        train_data = self._impute_missing(irt_dataset.data, irt_dataset.mask)
-        train_data = decode_one_hot_test_data(train_data, self.model.modeled_item_responses) if self.one_hot_encoded else train_data
+        train_data = self._impute_missing(model, irt_dataset.data, irt_dataset.mask)
         if latent_grid.size(1) > 1:
             columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
             latent_combos = torch.cartesian_prod(*columns)
@@ -202,6 +186,7 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
             train_loss = self._train_step(
+                model,
                 train_data_rep,
                 latent_combos_rep,
                 log_weights_rep,
@@ -215,7 +200,7 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
             if current_loss < best_loss:
                 best_loss = current_loss
                 best_epoch = epoch
-                best_model_state = { "state_dict": copy.deepcopy(self.state_dict()),
+                best_model_state = { "state_dict": copy.deepcopy(model.state_dict()),
                                     "optimizer": copy.deepcopy(self.optimizer.state_dict()) }
             
 
@@ -233,12 +218,13 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
 
         # Load the best model state
         if best_model_state is not None:
-            self.load_state_dict(best_model_state["state_dict"])
+            model.load_state_dict(best_model_state["state_dict"])
             self.optimizer.load_state_dict(best_model_state["optimizer"])
             logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
     def _train_step(
         self,
+        model: BaseIRTModel,
         train_data: torch.Tensor,
         latent_grid: torch.Tensor,
         log_weights: torch.Tensor,
@@ -263,22 +249,17 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         float
             The loss after the training step.
         """
-        self.train()
+        model.train()
 
         self.optimizer.zero_grad()
-        logits = self(latent_grid)
-        ll = self.model.log_likelihood(train_data, logits, loss_reduction="none")
-        ll = ll.view(-1, self.model.items).sum(dim=1) # sum over items
+        logits = model(latent_grid)
+        ll = model.log_likelihood(train_data, logits, loss_reduction="none")
+        ll = ll.view(-1, model.items).sum(dim=1) # sum over items
         
         log_sums = (log_weights + ll).view(number_of_weights, -1)
         constant = log_sums.max(dim=0)[0] # for logexpsum trick (one constant per respondent)
         exp_log_sums = (log_sums-constant).exp()
         loss = -(exp_log_sums.sum(dim=0).log() + constant).sum()
-
-        # log_sums = (log_weights + ll).view(number_of_weights, -1)
-        # constant = log_sums.max() # for logexpsum trick
-        # exp_log_sums = (log_sums-constant).exp()
-        # loss = -(exp_log_sums.sum(dim=0).log() + constant).sum()
 
         loss.backward()
         self.optimizer.step()
@@ -286,13 +267,13 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         self.training_history["train_loss"].append(loss.item())
         return loss.item()
 
-    def _impute_missing(self, data, missing_mask):
+    def _impute_missing(self, model: BaseIRTModel, data, missing_mask):
         if torch.sum(missing_mask) > 0:
             if self.imputation_method == "zero":
                 imputed_data = data
                 imputed_data = imputed_data.masked_fill(missing_mask.bool(), 0)
             elif self.imputation_method == "prior":
-                imputed_data = self._impute_missing_with_prior(data, missing_mask)
+                imputed_data = self._impute_missing_with_prior(model, data, missing_mask)
             elif self.imputation_method == "mean":
                 raise NotImplementedError("Mean imputation not implemented")
             else:
@@ -304,38 +285,15 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         return data
 
     @torch.inference_mode()
-    def _impute_missing_with_prior(self, batch, missing_mask):
-        # get the decoder logits for the prior mean person
-        prior_logits = self.model(
-            torch.zeros(1, self.model.latent_variables).to(next(self.parameters()).device)
-        )
-        prior_mean_scores = self._mean_scores(prior_logits)
-        batch[missing_mask.bool()] = prior_mean_scores.repeat(batch.shape[0], 1).to(
-            next(self.parameters()).device
-        )[missing_mask.bool()]
+    def _impute_missing_with_prior(self, model: BaseIRTModel, batch, missing_mask):
+        raise NotImplementedError("Imputation method 'prior' not implemented for mml.")
+        # prior_logits = model(
+        #     torch.zeros(1, model.latent_variables).to(next(model.parameters()).device)
+        # )
+        # prior_mean_scores = self._mean_scores(prior_logits)
+        # batch[missing_mask.bool()] = prior_mean_scores.repeat(batch.shape[0], 1).to(
+        #     next(self.parameters()).device
+        # )[missing_mask.bool()]
 
-        return batch
+        # return batch
 
-    @torch.inference_mode()
-    def _batch_fit_measures(self, batch: torch.Tensor):
-        """
-        Calculate the fit measures for a batch.
-
-        Parameters
-        ----------
-        batch : torch.Tensor
-            The batch of data.
-
-        Returns
-        -------
-        tuple
-            The loss, log likelihood, and accuracy for the batch.
-        """
-        output = self(batch)
-        if self.one_hot_encoded:
-            # for running with loss_function
-            batch = decode_one_hot_test_data(batch, self.model.modeled_item_responses)
-        # negative ce is log likelihood
-        log_likelihood = self.model.log_likelihood(batch, output)
-        loss = -log_likelihood / batch.shape[0]
-        return loss, log_likelihood

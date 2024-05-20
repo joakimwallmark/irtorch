@@ -2,7 +2,7 @@ import logging
 import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAEIRT, AEIRT, MMLIRT
+from irtorch.estimation_algorithms import BaseIRTAlgorithm, VAE, AE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch.irt_scorer import IRTScorer
@@ -639,7 +639,7 @@ class IRTEvaluator:
                 f"Invalid latent density method. Must be one of {valid_methods}."
             )
         if latent_density_method == "encoder sampling" and not isinstance(
-            self.algorithm, VAEIRT
+            self.algorithm, VAE
         ):
             raise ValueError(
                 "Encoder sampling is only available for variational autoencoder models."
@@ -655,9 +655,9 @@ class IRTEvaluator:
         lbfgs_learning_rate: float = 0.3,
     ):
         if population_data is None:
-            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+            if isinstance(self.algorithm, (AE, VAE)):
                 z_scores = self.algorithm.training_z_scores
-            elif isinstance(self.algorithm, MMLIRT):
+            elif isinstance(self.algorithm, MML):
                 logger.info("Sampling from multivariate normal as population z scores.")
                 mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
                 z_scores = mvn.sample((4000,)).to(dtype=torch.float32)

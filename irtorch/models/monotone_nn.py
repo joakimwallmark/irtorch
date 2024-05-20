@@ -19,10 +19,12 @@ class MonotoneNN(BaseIRTModel):
 
     Parameters
     ----------
-    latent_variables : int
-        Number of latent variables.
-    item_categories : list[int]
-        Number of categories for each item. One integer for each item. Missing responses exluded.
+    latent_variables : int, optional
+        Number of latent variables. (default is 1)
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    item_categories : list[int], optional
+        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
     hidden_dim : list[int]
         Number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
     model_missing : bool, optional
@@ -63,9 +65,10 @@ class MonotoneNN(BaseIRTModel):
     """
     def __init__(
         self,
-        latent_variables: int,
-        item_categories: list[int],
-        hidden_dim: list[int],
+        latent_variables: int = 1,
+        data: torch.Tensor = None,
+        item_categories: list[int] = None,
+        hidden_dim: list[int] = None,
         model_missing: bool = False,
         mc_correct: list[int] = None,
         item_z_relationships: torch.Tensor = None,
@@ -73,6 +76,13 @@ class MonotoneNN(BaseIRTModel):
         negative_latent_variable_item_relationships: bool = True,
         use_bounded_activation: bool = True
     ):
+        if item_categories is None:
+            if data is None:
+                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+            else:
+                # replace nan with -inf to get max
+                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+                
         super().__init__(latent_variables, item_categories, mc_correct, model_missing)
         if item_z_relationships is not None:
             if item_z_relationships.shape != (len(item_categories), latent_variables):

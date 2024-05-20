@@ -1,9 +1,14 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
 from irtorch._internal_utils import linear_regression
+
+if TYPE_CHECKING:
+    from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
 logger = logging.getLogger("irtorch")
 
@@ -40,6 +45,7 @@ class BaseIRTModel(ABC, nn.Module):
         self.items = len(item_categories)
         self.mc_correct = mc_correct
         self.model_missing = model_missing
+        self.algorithm = None
 
 
     @abstractmethod
@@ -57,6 +63,27 @@ class BaseIRTModel(ABC, nn.Module):
         output : torch.Tensor
             Output tensor.
         """
+
+    def fit(
+        self,
+        train_data: torch.Tensor,
+        algorithm: BaseIRTAlgorithm,
+        **kwargs
+    ) -> None:
+        """
+        Train the model.
+
+        Parameters
+        ----------
+        train_data : torch.Tensor
+            The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
+        algorithm : BaseIRTAlgorithm
+            The algorithm to use for training the model. Needs to inherit irtorch.estimation_algorithms.BaseIRTAlgorithm.
+        **kwargs
+            Additional keyword arguments to pass to the algorithm's fit method.
+        """
+        algorithm.fit(self, train_data=train_data, **kwargs)
+        self.algorithm = algorithm
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """

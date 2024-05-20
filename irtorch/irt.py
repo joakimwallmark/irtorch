@@ -4,7 +4,7 @@ import torch
 from torch.distributions import MultivariateNormal
 from plotly import graph_objects as go
 from irtorch.models import BaseIRTModel, MonotoneNN, OneParameterLogistic, TwoParameterLogistic, GeneralizedPartialCredit, NominalResponse
-from irtorch.estimation_algorithms import AEIRT, VAEIRT, MMLIRT
+from irtorch.estimation_algorithms import AE, VAE, MML
 from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
@@ -58,9 +58,9 @@ class IRT:
         Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective estimation algorithm.
         Currently supported algorithms are:
 
-        - Autoencoder :class:`irtorch.estimation_algorithms.ae.AEIRT`
-        - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAEIRT`
-        - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MMLIRT`
+        - Autoencoder :class:`irtorch.estimation_algorithms.ae.AE`
+        - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAE`
+        - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MML`
     """
     def __init__(
         self,
@@ -129,17 +129,17 @@ class IRT:
                 )
 
         if estimation_algorithm == "AE":
-            self.algorithm = AEIRT(
+            self.algorithm = AE(
                 model=self.model,
                 **kwargs
             )
         elif estimation_algorithm == "VAE":
-            self.algorithm = VAEIRT(
+            self.algorithm = VAE(
                 model=self.model,
                 **kwargs
             )
         elif estimation_algorithm == "MML":
-            self.algorithm = MMLIRT(
+            self.algorithm = MML(
                 model=self.model,
                 **kwargs
             )
@@ -154,7 +154,7 @@ class IRT:
         **kwargs
     ) -> None:
         """
-        Train the autoencoder model.
+        Train the model.
 
         Parameters
         ----------
@@ -164,9 +164,9 @@ class IRT:
             Additional keyword arguments to pass to the estimation algorithm. For details, see the documentation for each respective estimation algorithm.
             Currently supported algorithms are:
 
-            - Autoencoder :class:`irtorch.estimation_algorithms.ae.AEIRT`
-            - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAEIRT`
-            - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MMLIRT`
+            - Autoencoder :class:`irtorch.estimation_algorithms.ae.AE`
+            - Variational autoencoder :class:`irtorch.estimation_algorithms.vae.VAE`
+            - Marginal maximum likelihood :class:`irtorch.estimation_algorithms.mml.MML`
         """
         self.algorithm.fit(
             train_data=train_data,
@@ -387,10 +387,10 @@ class IRT:
             A tensor with the expected item score slopes.
         """
         if z is None:
-            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+            if isinstance(self.algorithm, (AE, VAE)):
                 logger.info("Using traning data z scores as population z scores.")
                 z = self.algorithm.training_z_scores
-            elif isinstance(self.algorithm, MMLIRT):
+            elif isinstance(self.algorithm, MML):
                 logger.info("Sampling from multivariate normal as population z scores.")
                 mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
                 z = mvn.sample((4000,)).to(dtype=torch.float32)
@@ -869,7 +869,7 @@ class IRT:
             "training_z_scores": self.algorithm.training_z_scores,
             "training_history": self.algorithm.training_history,
         }
-        if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
+        if isinstance(self.algorithm, AE) or isinstance(self.algorithm, VAE):
             to_save["encoder_state_dict"] = self.algorithm.encoder.state_dict()
         torch.save(to_save, path)
 
@@ -890,7 +890,7 @@ class IRT:
             self.algorithm.training_z_scores = checkpoint["training_z_scores"]
         if "training_history" in checkpoint:
             self.algorithm.training_history = checkpoint["training_history"]
-        if isinstance(self.algorithm, AEIRT) or isinstance(self.algorithm, VAEIRT):
+        if isinstance(self.algorithm, AE) or isinstance(self.algorithm, VAE):
             self.algorithm.encoder.load_state_dict(checkpoint["encoder_state_dict"])
 
     def plot_training_history(self) -> go.Figure:

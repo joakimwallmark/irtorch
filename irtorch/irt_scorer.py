@@ -3,7 +3,7 @@ import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.estimation_algorithms.base_irt_algorithm import BaseIRTAlgorithm
-from irtorch.estimation_algorithms import AEIRT, VAEIRT, MMLIRT
+from irtorch.estimation_algorithms import AE, VAE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import output_to_item_entropy, random_guessing_data, linear_regression, dynamic_print
@@ -116,12 +116,12 @@ class IRTScorer:
             A tuple with 1D tensors, containing the min and max integration z scores of each latent variable.
         """
         if z is None:
-            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+            if isinstance(self.algorithm, (AE, VAE)):
                 z = self.algorithm.training_z_scores
                 z_min = z.min(dim=0)[0]
                 z_max = z.max(dim=0)[0]
                 z_stds = z.std(dim=0)
-            elif isinstance(self.algorithm, MMLIRT):
+            elif isinstance(self.algorithm, MML):
                 z_min = torch.full((self.model.latent_variables,), -3)
                 z_max = torch.full((self.model.latent_variables,), 3)
                 z_stds = torch.ones(self.model.latent_variables)
@@ -203,8 +203,8 @@ class IRTScorer:
             raise ValueError("Invalid z_estimation_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
         if standard_errors and (scale == "bit" or z_estimation_method != "ML"):
             raise ValueError("Standard errors are only available for z scores with ML estimation.")
-        if isinstance(self.algorithm, MMLIRT) and z_estimation_method == "NN":
-            raise ValueError("NN estimation is not available for MMLIRT models.")
+        if isinstance(self.algorithm, MML) and z_estimation_method == "NN":
+            raise ValueError("NN estimation is not available for MML estimated models.")
 
         data = data.contiguous()
         if data.dim() == 1:  # if we have only one observations
@@ -214,15 +214,15 @@ class IRTScorer:
             logger.info("%s estimation of z scores.", z_estimation_method)
             if self.algorithm.one_hot_encoded and z_estimation_method in ["NN", "ML", "MAP"]:
                 one_hot_data = one_hot_encode_test_data(data, self.model.item_categories, encode_missing=self.model.model_missing)
-                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
-                    z = self.algorithm.z_scores(one_hot_data).clone()
-                if isinstance(self.algorithm, MMLIRT):
+                if isinstance(self.algorithm, (AE, VAE)):
+                    z = self.model.algorithm.z_scores(one_hot_data).clone()
+                if isinstance(self.algorithm, MML):
                     z = torch.zeros(one_hot_data.shape[0], self.model.latent_variables).float() # 0 as a starting point for ML/MAP
             
             data = self.algorithm.fix_missing_values(data)
             if not self.algorithm.one_hot_encoded and z_estimation_method in ["NN", "ML", "MAP"]:
-                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
-                    z = self.algorithm.z_scores(data).clone()
+                if isinstance(self.model.algorithm, (AE, VAE)):
+                    z = self.model.algorithm.z_scores(data).clone()
                 else:
                     z = torch.zeros(data.shape[0], self.model.latent_variables).float()
             if z_estimation_method in ["ML", "MAP"]:
@@ -282,18 +282,18 @@ class IRTScorer:
             A torch.Tensor with the z scores. The columns are latent variables and rows are respondents.
         """
         try:
-            if isinstance(self.algorithm, (AEIRT, VAEIRT)) and self.algorithm.training_z_scores is None:
+            if isinstance(self.algorithm, (AE, VAE)) and self.algorithm.training_z_scores is None:
                 raise ValueError("Please fit the model before computing latent scores.")
                 
             if z_estimation_method == "MAP": # Approximate prior
-                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                if isinstance(self.algorithm, (AE, VAE)):
                     train_z_scores = self.algorithm.training_z_scores
                     # Center the data and compute the covariance matrix.
                     mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
                     cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
                     # Create prior (multivariate normal distribution).
                     prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
-                elif isinstance(self.algorithm, MMLIRT):
+                elif isinstance(self.algorithm, MML):
                     prior_density = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
 
             # Ensure decoder parameters gradients are not updated
@@ -382,12 +382,12 @@ class IRTScorer:
                 4: 5
             }.get(self.model.latent_variables, 15)
 
-        if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+        if isinstance(self.algorithm, (AE, VAE)):
             if self.algorithm.training_z_scores is None:
                 raise ValueError("Please fit the model before computing latent scores.")
             train_z_scores = self.algorithm.training_z_scores
             z_grid = self._z_grid(train_z_scores, grid_size=grid_points)
-        elif isinstance(self.algorithm, MMLIRT):
+        elif isinstance(self.algorithm, MML):
             grid_values = torch.linspace(-3, 3, grid_points).view(-1, 1)
             grid_values = grid_values.expand(-1, self.model.latent_variables).contiguous()
             columns = [grid_values[:, i] for i in range(grid_values.size(1))]
@@ -511,9 +511,9 @@ class IRTScorer:
 
         if not start_all_incorrect:
             if train_z is None:
-                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                if isinstance(self.algorithm, (AE, VAE)):
                     train_z = self.algorithm.training_z_scores
-                elif isinstance(self.algorithm, MMLIRT):
+                elif isinstance(self.algorithm, MML):
                     mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
                     train_z = mvn.sample((4000,)).to(dtype=torch.float32)
 
@@ -638,10 +638,10 @@ class IRTScorer:
                 logger.info("Estimating population z scores needed for bit score computation.")
                 population_z = self.latent_scores(self.algorithm.train_data, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
-                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                if isinstance(self.algorithm, (AE, VAE)):
                     logger.info("Using traning data z scores as population z scores for bit score computation.")
                     population_z = self.algorithm.training_z_scores
-                elif isinstance(self.algorithm, MMLIRT):
+                elif isinstance(self.algorithm, MML):
                     logger.info("Sampling from multivariate normal as population z scores for bit score computation.")
                     mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
                     population_z = mvn.sample((4000,)).to(dtype=torch.float32)
@@ -750,9 +750,9 @@ class IRTScorer:
                 guessing_iterations=start_z_guessing_iterations,
             )
 
-        if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+        if isinstance(self.algorithm, (AE, VAE)):
             q1_q3 = torch.quantile(self.algorithm.training_z_scores, torch.tensor([0.25, 0.75]), dim=0)
-        elif isinstance(self.algorithm, MMLIRT):
+        elif isinstance(self.algorithm, MML):
             q1_q3 = torch.tensor([-0.6745, 0.6745]).unsqueeze(1).expand(-1, self.model.latent_variables)
         
         iqr = q1_q3[1] - q1_q3[0]

@@ -3,7 +3,7 @@ import torch
 from torch.nn.functional import softmax
 import pytest
 from irtorch.irt_evaluator import IRTEvaluator, IRTScorer
-from irtorch.estimation_algorithms import AEIRT
+from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
 from irtorch.quantile_mv_normal import QuantileMVNormal
 
@@ -12,7 +12,7 @@ from irtorch.quantile_mv_normal import QuantileMVNormal
 def irt_evaluator(latent_variables):
     # Create a mock instance of AEIRTNeuralNet
     item_categories = [2, 3]
-    mock_algorithm = MagicMock(spec=AEIRT)
+    mock_algorithm = MagicMock(spec=AE)
     mock_algorithm.one_hot_encoded = False
     mock_algorithm.train_data = torch.cat(
         [

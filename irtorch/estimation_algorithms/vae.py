@@ -2,23 +2,23 @@ import logging
 import torch
 from torch.distributions import Normal
 from irtorch.models import BaseIRTModel
-from irtorch.estimation_algorithms.ae import AEIRT
+from irtorch.estimation_algorithms.ae import AE
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
 from irtorch.utils import decode_one_hot_test_data
 
 logger = logging.getLogger("irtorch")
 
-class VAEIRT(AEIRT):
+class VAE(AE):
     """
     Variational autoencoder neural network for fitting IRT models.
 
     Parameters
     ----------
     model : BaseIRTModel
-        The model to fit. Needs to inherit irtorch.models.BaseIRTModel.
+        The model to fit. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
     encoder : BaseEncoder, optional
-        The encoder instance to use. Needs to inherit irtorch.models.BaseEncoder. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
+        The encoder instance to use. Needs to inherit :class:`irtorch.models.encoders.BaseEncoder`. Overrides hidden_layers_encoder, nonlinear_encoder and batch_normalization_encoder if provided. (default is None)
     one_hot_encoded : bool, optional
         Whether the model uses one-hot encoded data. (default is False)
     hidden_layers_encoder : list[int], optional
@@ -288,6 +288,23 @@ class VAEIRT(AEIRT):
         )
         loss = (log_lik_stochastic + self.annealing_factor * kl_loss) / batch.shape[0]
         return loss, log_likelihood
+
+    def _impute_missing(self, batch, missing_mask):
+        if torch.sum(missing_mask) > 0:
+            if self.imputation_method == "zero":
+                imputed_batch = batch
+                imputed_batch = imputed_batch.masked_fill(missing_mask.bool(), 0)
+            elif self.imputation_method == "prior":
+                imputed_batch = self._impute_missing_with_prior(batch, missing_mask)
+            elif self.imputation_method == "mean":
+                raise NotImplementedError("Mean imputation not implemented")
+            else:
+                raise ValueError(
+                    f"Imputation method {self.imputation_method} not implmented"
+                )
+            return imputed_batch
+
+        return batch
 
     @torch.inference_mode()
     def _impute_missing_with_prior(self, batch, missing_mask):

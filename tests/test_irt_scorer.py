@@ -3,7 +3,7 @@ import torch
 from torch.nn.functional import softmax
 import pytest
 from irtorch.irt_scorer import IRTScorer
-from irtorch.estimation_algorithms import AEIRT
+from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
 
 class ConcreteIRTModel(BaseIRTModel):
@@ -24,7 +24,7 @@ def base_irt_model(latent_variables):
 def irt_scorer(z_scores, latent_variables):
     # Create a mock instance of AEIRTNeuralNet
     item_categories = [2, 3]
-    mock_algorithm = MagicMock(spec=AEIRT)
+    mock_algorithm = MagicMock(spec=AE)
     mock_algorithm.one_hot_encoded = False
     mock_algorithm.training_z_scores = z_scores.clone().detach()
     mock_algorithm.train_data = torch.tensor([[1, 2], [0, 0], [1, 2], [1, 1]]).float()

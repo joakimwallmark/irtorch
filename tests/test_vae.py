@@ -1,7 +1,7 @@
 import pytest
 import torch
 from utils import initialize_fit
-from irtorch.estimation_algorithms.vae import VAEIRT
+from irtorch.estimation_algorithms.vae import VAE
 from irtorch.models import MonotoneNN
 
 
@@ -20,7 +20,7 @@ class TestVAIRT:
             item_categories = item_categories,
             hidden_dim = [3]
         )
-        algorithm = VAEIRT(
+        algorithm = VAE(
             model=model,
             hidden_layers_encoder=[20],  # 1 hidden layer with 20 neurons
             nonlinear_encoder=torch.nn.ELU()
@@ -43,7 +43,7 @@ class TestVAIRT:
             item_categories = item_categories_small,
             hidden_dim = [3]
         )
-        algorithm = VAEIRT(
+        algorithm = VAE(
             model=model,
             hidden_layers_encoder=[20],  # 1 hidden layer with 20 neurons
             nonlinear_encoder=torch.nn.ELU()
@@ -55,7 +55,7 @@ class TestVAIRT:
         initialize_fit(algorithm)
         return algorithm
 
-    def test_forward(self, algorithm: VAEIRT, test_data):
+    def test_forward(self, algorithm: VAE, test_data):
         algorithm.iw_samples = 1
         output = algorithm(test_data)
         assert len(output) == 4
@@ -95,11 +95,11 @@ class TestVAIRT:
             algorithm.model.latent_variables,
         )
 
-    def test_latent_scores(self, algorithm: VAEIRT, test_data):
+    def test_latent_scores(self, algorithm: VAE, test_data):
         output = algorithm.z_scores(test_data)
         assert output.shape == (120, algorithm.model.latent_variables)
 
-    def test__impute_missing_with_prior(self, algorithm: VAEIRT):
+    def test__impute_missing_with_prior(self, algorithm: VAE):
         a, b = 5, 5
         data = torch.full((a, b), 5).float()
         missing_mask = torch.tensor(
@@ -124,7 +124,7 @@ class TestVAIRT:
         ):
             assert replaced
 
-    def test__mean_scores(self, algorithm: VAEIRT):
+    def test__mean_scores(self, algorithm: VAE):
         logits = torch.tensor(
             [
                 [
@@ -158,7 +158,7 @@ class TestVAIRT:
     @pytest.mark.parametrize("iw_samples", [1, 3])
     def test__loss_function(
         self,
-        algorithm_small_data: VAEIRT,
+        algorithm_small_data: VAE,
         test_data,
         iw_samples,
         latent_variables,

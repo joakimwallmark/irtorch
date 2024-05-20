@@ -3,7 +3,7 @@ from unittest.mock import patch
 from utils import initialize_fit
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch.estimation_algorithms import MMLIRT
+from irtorch.estimation_algorithms import MML
 from irtorch.models import MonotoneNN
 
 
@@ -11,7 +11,7 @@ from irtorch.models import MonotoneNN
 # This method is called once per test method that uses it, and its return value is passed to the test method as an argument.
 # pytest.fixture with params creates two fixtures, one for the CPU and one for the GPU.
 # The ids parameter is used to give the tests meaningful names
-class TestMMLIRT:
+class TestMML:
     @pytest.fixture()
     def algorithm(self, device, latent_variables, item_categories):
         if device == "cuda" and not torch.cuda.is_available():
@@ -22,18 +22,18 @@ class TestMMLIRT:
             item_categories = item_categories,
             hidden_dim = [3]
         )
-        algorithm = MMLIRT(model=model)
+        algorithm = MML(model=model)
 
         algorithm.imputation_method = "zero"
 
         initialize_fit(algorithm)
         return algorithm
 
-    def test_forward(self, algorithm: MMLIRT, test_data):
+    def test_forward(self, algorithm: MML, test_data):
         output = algorithm.forward(test_data)
         assert output.shape == (120, algorithm.model.max_item_responses * algorithm.model.items)
 
-    def test__train_step(self, algorithm: MMLIRT, test_data: torch.Tensor, device):
+    def test__train_step(self, algorithm: MML, test_data: torch.Tensor, device):
         previous_loss = float("inf")
         latent_grid = torch.linspace(-3, 3, 5).view(-1, 1)
         latent_grid = latent_grid.expand(-1, algorithm.model.latent_variables).contiguous().to(device)
@@ -64,7 +64,7 @@ class TestMMLIRT:
             assert loss <= previous_loss  # Loss should decrease
             previous_loss = loss
 
-    def test__impute_missing_zero(self, algorithm: MMLIRT):
+    def test__impute_missing_zero(self, algorithm: MML):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)
@@ -95,8 +95,8 @@ class TestMMLIRT:
         imputed_data = algorithm._impute_missing(data, no_missing_mask)
         assert torch.equal(imputed_data, data)
 
-    # The following is a test for the fit function of the MMLIRTNeuralNet class
-    def test_fit(self, algorithm: MMLIRT, test_data):
+    # The following is a test for the fit function of the MML class
+    def test_fit(self, algorithm: MML, test_data):
         # Mock the inner functions that would be called during training
         with patch.object(
             algorithm, "_train_step", return_value=torch.tensor(0.5)

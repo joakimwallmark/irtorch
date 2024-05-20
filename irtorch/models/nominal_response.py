@@ -9,10 +9,12 @@ class NominalResponse(BaseIRTModel):
 
     Parameters
     ----------
-    latent_variables : int
-        Number of latent variables.
-    item_categories : list[int]
-        Number of categories for each item. One integer for each item. Missing responses exluded.
+    latent_variables : int, optional
+        Number of latent variables. (default is 1)
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    item_categories : list[int], optional
+        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
     item_z_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     model_missing : bool, optional
@@ -24,13 +26,21 @@ class NominalResponse(BaseIRTModel):
     """
     def __init__(
         self,
-        latent_variables: int,
-        item_categories: list[int],
+        latent_variables: int = 1,
+        data: torch.Tensor = None,
+        item_categories: list[int] = None,
         item_z_relationships: torch.Tensor = None,
         model_missing: bool = False,
         mc_correct: list[int] = None,
         reference_category: bool = False
     ):
+        if item_categories is None:
+            if data is None:
+                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+            else:
+                # replace nan with -inf to get max
+                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+
         super().__init__(latent_variables=latent_variables, item_categories=item_categories, model_missing=model_missing, mc_correct=mc_correct)
         if item_z_relationships is not None:
             if item_z_relationships.shape != (len(item_categories), latent_variables):

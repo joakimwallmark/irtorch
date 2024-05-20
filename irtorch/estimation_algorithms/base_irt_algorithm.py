@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 from irtorch.models import BaseIRTModel
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class BaseIRTAlgorithm(ABC):
     """

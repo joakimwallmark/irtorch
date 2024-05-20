@@ -2,7 +2,7 @@ import logging
 from importlib import resources
 import torch
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 def swedish_national_mathematics_2() -> torch.Tensor:
     """
@@ -14,7 +14,7 @@ def swedish_national_mathematics_2() -> torch.Tensor:
         The loaded dataset.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_2.pt'
+        file_path = resources.files("irtorch") / "datasets" / "national_mathematics" / "mathematics_2.pt"
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
@@ -30,7 +30,7 @@ def swedish_national_mathematics_1() -> torch.Tensor:
         The loaded dataset.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'national_mathematics' / 'mathematics_1.pt'
+        file_path = resources.files("irtorch") / "datasets" / "national_mathematics" / "mathematics_1.pt"
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
@@ -46,13 +46,13 @@ def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
         A tuple containing the loaded dataset and the correct item responses.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'swedish_sat' / 'swesat22b_nominal_verb.pt'
+        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_verb.pt"
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
     try:
-        with resources.files('irtorch').joinpath('datasets/swedish_sat/swesat22b_verb_correct.txt').open('r', encoding='utf-8') as file:
+        with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_verb_correct.txt").open("r", encoding="utf-8") as file:
             correct_category = file.read().replace("\n", "")
             correct_category = [int(char) for char in correct_category if char.isdigit()]
     except Exception as e:
@@ -70,13 +70,13 @@ def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
         A tuple containing the loaded dataset and the correct item responses.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'swedish_sat' / 'swesat22b_nominal_quant.pt'
+        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_quant.pt"
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
     try:
-        with resources.files('irtorch').joinpath('datasets/swedish_sat/swesat22b_quant_correct.txt').open('r', encoding='utf-8') as file:
+        with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_quant_correct.txt").open("r", encoding="utf-8") as file:
             correct_category = file.read().replace("\n", "")
             correct_category = [int(char) for char in correct_category if char.isdigit()]
     except Exception as e:
@@ -131,10 +131,10 @@ def big_five() -> torch.Tensor:
         The loaded dataset.
     """
     try:
-        file_path = resources.files('irtorch') / 'datasets' / 'big_five' / 'big_five.pt'
+        file_path = resources.files("irtorch") / "datasets" / "big_five" / "big_five.pt"
         data = torch.load(file_path)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
-    data[data == 0] = float('nan')
+    data[data == 0] = float("nan")
     return data - 1

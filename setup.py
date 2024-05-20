@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
-with open('README.md', 'r', encoding='utf-8') as f:
+with open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
     name="irtorch",
-    version="0.0.4",
+    version="0.0.5",
     description="IRTorch: An item response theory package for python.",
     long_description=long_description,
     long_description_content_type="text/markdown",

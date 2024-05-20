@@ -1,11 +1,15 @@
 Estimation algorithms
 =====================
 
-.. autoclass:: irtorch.estimation_algorithms.aeirt.AEIRT
+.. autoclass:: irtorch.estimation_algorithms.ae.AEIRT
     :members:
     :show-inheritance:
 
-.. autoclass:: irtorch.estimation_algorithms.vaeirt.VAEIRT
+.. autoclass:: irtorch.estimation_algorithms.mml.MMLIRT
+    :members:
+    :show-inheritance:
+
+.. autoclass:: irtorch.estimation_algorithms.vae.VAEIRT
     :members:
     :show-inheritance:
 

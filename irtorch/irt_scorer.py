@@ -3,14 +3,14 @@ import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.estimation_algorithms.base_irt_algorithm import BaseIRTAlgorithm
-from irtorch.estimation_algorithms.aeirt import AEIRT
+from irtorch.estimation_algorithms import AEIRT, VAEIRT, MMLIRT
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import output_to_item_entropy, random_guessing_data, linear_regression, dynamic_print
 from irtorch.outlier_detector import OutlierDetector
 from irtorch.utils import one_hot_encode_test_data
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class IRTScorer:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm):
@@ -34,7 +34,7 @@ class IRTScorer:
         self,
         z_scores: torch.Tensor,
         approximation: str = "qmvn",
-        cv_n_components: list[int] = [2, 3, 4, 5, 10],
+        cv_n_components: list[int] = None,
     ) -> None:
         """
         Approximate the latent space density.
@@ -48,8 +48,8 @@ class IRTScorer:
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
             - 'gmm' for a gaussian mixture model.
 
-        cv_n_components: int, optional
-            The number of components to use for cross-validation in the Gaussian Mixture Model. (default is [2, 3, 4, 5, 10])
+        cv_n_components: list[int], optional
+            The number of components to use for cross-validation with Gaussian Mixture Models. (default is [2, 3, 4, 5, 10])
 
         Returns
         -------
@@ -116,11 +116,19 @@ class IRTScorer:
             A tuple with 1D tensors, containing the min and max integration z scores of each latent variable.
         """
         if z is None:
-            z = self.algorithm.training_z_scores
-
-        z_min = z.min(dim=0)[0]
-        z_max = z.max(dim=0)[0]
-        z_stds = z.std(dim=0)
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                z = self.algorithm.training_z_scores
+                z_min = z.min(dim=0)[0]
+                z_max = z.max(dim=0)[0]
+                z_stds = z.std(dim=0)
+            elif isinstance(self.algorithm, MMLIRT):
+                z_min = torch.full((self.model.latent_variables,), -3)
+                z_max = torch.full((self.model.latent_variables,), 3)
+                z_stds = torch.ones(self.model.latent_variables)
+        else:
+            z_min = z.min(dim=0)[0]
+            z_max = z.max(dim=0)[0]
+            z_stds = z.std(dim=0)
 
         return z_min - z_stds, z_max + z_stds
 
@@ -195,24 +203,28 @@ class IRTScorer:
             raise ValueError("Invalid z_estimation_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
         if standard_errors and (scale == "bit" or z_estimation_method != "ML"):
             raise ValueError("Standard errors are only available for z scores with ML estimation.")
+        if isinstance(self.algorithm, MMLIRT) and z_estimation_method == "NN":
+            raise ValueError("NN estimation is not available for MMLIRT models.")
 
         data = data.contiguous()
         if data.dim() == 1:  # if we have only one observations
             data = data.view(1, -1)
 
         if z is None:
+            logger.info("%s estimation of z scores.", z_estimation_method)
             if self.algorithm.one_hot_encoded and z_estimation_method in ["NN", "ML", "MAP"]:
                 one_hot_data = one_hot_encode_test_data(data, self.model.item_categories, encode_missing=self.model.model_missing)
-                if isinstance(self.algorithm, AEIRT):
+                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
                     z = self.algorithm.z_scores(one_hot_data).clone()
-                else:
-                    z = torch.zeros(one_hot_data.shape[0], self.model.latent_variables).float()
+                if isinstance(self.algorithm, MMLIRT):
+                    z = torch.zeros(one_hot_data.shape[0], self.model.latent_variables).float() # 0 as a starting point for ML/MAP
             
             data = self.algorithm.fix_missing_values(data)
-
-            logger.info("%s estimation of z scores.", z_estimation_method)
             if not self.algorithm.one_hot_encoded and z_estimation_method in ["NN", "ML", "MAP"]:
-                z = self.algorithm.z_scores(data).clone()
+                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                    z = self.algorithm.z_scores(data).clone()
+                else:
+                    z = torch.zeros(data.shape[0], self.model.latent_variables).float()
             if z_estimation_method in ["ML", "MAP"]:
                 z = self._ml_map_z_scores(data, z, z_estimation_method, learning_rate=lbfgs_learning_rate, device=ml_map_device)
             elif z_estimation_method == "EAP":
@@ -221,7 +233,7 @@ class IRTScorer:
         if scale == "z":
             if standard_errors:
                 fisher_info = self.information(z, item=False, scale = "z", degrees=None)
-                se = 1/torch.einsum('...ii->...i', fisher_info).sqrt()
+                se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
                 return z, se
             return z
         elif scale == "bit":
@@ -241,8 +253,8 @@ class IRTScorer:
 
     @torch.inference_mode(False)
     def _ml_map_z_scores(
-        self, 
-        data: torch.Tensor, 
+        self,
+        data: torch.Tensor,
         encoder_z_scores:torch.Tensor = None,
         z_estimation_method: str = "ML",
         learning_rate: float = 0.3,
@@ -270,16 +282,19 @@ class IRTScorer:
             A torch.Tensor with the z scores. The columns are latent variables and rows are respondents.
         """
         try:
-            if self.algorithm.training_z_scores is None:
+            if isinstance(self.algorithm, (AEIRT, VAEIRT)) and self.algorithm.training_z_scores is None:
                 raise ValueError("Please fit the model before computing latent scores.")
                 
             if z_estimation_method == "MAP": # Approximate prior
-                train_z_scores = self.algorithm.training_z_scores
-                # Center the data and compute the covariance matrix.
-                mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
-                cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
-                # Create prior (multivariate normal distribution).
-                prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
+                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                    train_z_scores = self.algorithm.training_z_scores
+                    # Center the data and compute the covariance matrix.
+                    mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
+                    cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
+                    # Create prior (multivariate normal distribution).
+                    prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
+                elif isinstance(self.algorithm, MMLIRT):
+                    prior_density = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
 
             # Ensure decoder parameters gradients are not updated
             self.model.requires_grad_(False)
@@ -323,7 +338,7 @@ class IRTScorer:
                     loss = loss.item()
 
                 denominator = data.numel()
-                dynamic_print(f'Iteration {i+1}: Current Loss = {loss}')
+                dynamic_print(f"Iteration {i+1}: Current Loss = {loss}")
                 if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
                     logger.info("Converged at iteration %s.", i+1)
                     break
@@ -356,23 +371,28 @@ class IRTScorer:
         torch.Tensor
             A torch.Tensor with the z scores. The columns are latent variables and rows are respondents.
         """
-        if self.algorithm.training_z_scores is None:
-            raise ValueError("Please fit the model before computing latent scores.")
-
+        if self.model.latent_variables > 4:
+            raise ValueError("EAP is not implemented for more than 4 latent variables because of large integration grid.")
         # Get grid for integration.
-        train_z_scores = self.algorithm.training_z_scores
         if grid_points is None:
-            if train_z_scores.shape[1] > 4:
-                raise ValueError("EAP is not implemented for more than 4 latent variables because of large integration grid.")
             grid_points = {
                 1: 200,
                 2: 15,
                 3: 7,
                 4: 5
-            }.get(train_z_scores.shape[1], 100)
-            
-        z_grid = self._z_grid(train_z_scores, grid_size=grid_points)
-        
+            }.get(self.model.latent_variables, 15)
+
+        if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+            if self.algorithm.training_z_scores is None:
+                raise ValueError("Please fit the model before computing latent scores.")
+            train_z_scores = self.algorithm.training_z_scores
+            z_grid = self._z_grid(train_z_scores, grid_size=grid_points)
+        elif isinstance(self.algorithm, MMLIRT):
+            grid_values = torch.linspace(-3, 3, grid_points).view(-1, 1)
+            grid_values = grid_values.expand(-1, self.model.latent_variables).contiguous()
+            columns = [grid_values[:, i] for i in range(grid_values.size(1))]
+            z_grid = torch.cartesian_prod(*columns)
+
         # Center the data and compute the covariance matrix.
         mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
         cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
@@ -491,7 +511,12 @@ class IRTScorer:
 
         if not start_all_incorrect:
             if train_z is None:
-                train_z = self.algorithm.training_z_scores
+                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                    train_z = self.algorithm.training_z_scores
+                elif isinstance(self.algorithm, MMLIRT):
+                    mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
+                    train_z = mvn.sample((4000,)).to(dtype=torch.float32)
+
             # Which latent variables are inversely related to the test scores?
             item_sum_scores = self.model.expected_scores(train_z, return_item_scores=False)
             test_weights = linear_regression(train_z, item_sum_scores.reshape(-1, 1))[1:]
@@ -613,8 +638,13 @@ class IRTScorer:
                 logger.info("Estimating population z scores needed for bit score computation.")
                 population_z = self.latent_scores(self.algorithm.train_data, scale="z", z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
             else:
-                logger.info("Using traning data z scores as population z scores for bit score computation.")
-                population_z = self.algorithm.training_z_scores
+                if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+                    logger.info("Using traning data z scores as population z scores for bit score computation.")
+                    population_z = self.algorithm.training_z_scores
+                elif isinstance(self.algorithm, MMLIRT):
+                    logger.info("Sampling from multivariate normal as population z scores for bit score computation.")
+                    mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.algorithm.covariance_matrix)
+                    population_z = mvn.sample((4000,)).to(dtype=torch.float32)
 
         if start_z is None:
             start_z = self.bit_score_starting_z(
@@ -669,11 +699,11 @@ class IRTScorer:
         start_z_guessing_probabilities: list[float] = None,
         start_z_guessing_iterations: int = 10000,
     ) -> torch.Tensor:
-        """
+        r"""
         Computes the gradients of the bit scores with respect to the input z scores using the central difference method: 
         .. math ::
 
-            f^{\\prime}(z) \\approx \\frac{f(z+h)-f(z-h)}{2 h}
+            f^{\prime}(z) \approx \frac{f(z+h)-f(z-h)}{2 h}
 
         Parameters
         ----------
@@ -720,7 +750,11 @@ class IRTScorer:
                 guessing_iterations=start_z_guessing_iterations,
             )
 
-        q1_q3 = torch.quantile(self.algorithm.training_z_scores, torch.tensor([0.25, 0.75]), dim=0)
+        if isinstance(self.algorithm, (AEIRT, VAEIRT)):
+            q1_q3 = torch.quantile(self.algorithm.training_z_scores, torch.tensor([0.25, 0.75]), dim=0)
+        elif isinstance(self.algorithm, MMLIRT):
+            q1_q3 = torch.tensor([-0.6745, 0.6745]).unsqueeze(1).expand(-1, self.model.latent_variables)
+        
         iqr = q1_q3[1] - q1_q3[0]
         lower_bound = q1_q3[0] - 1.5 * iqr
         upper_bound = q1_q3[1] + 1.5 * iqr
@@ -760,7 +794,7 @@ class IRTScorer:
     def expected_item_score_slopes(
         self,
         z: torch.Tensor,
-        scale: str = 'z',
+        scale: str = "z",
         bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
         **kwargs
@@ -793,7 +827,7 @@ class IRTScorer:
         if z.requires_grad:
             z.requires_grad_(False)
 
-        if scale == 'bit' and self.model.latent_variables > 1:
+        if scale == "bit" and self.model.latent_variables > 1:
             expected_item_sum_scores = self.model.expected_scores(z, return_item_scores=True).detach()
             if not self.model.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
@@ -819,18 +853,18 @@ class IRTScorer:
                     expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
                     mean_slopes[:, item, latent_variable] = z_scores.grad[:, latent_variable]
 
-            if scale == 'bit' and self.model.latent_variables == 1:
+            if scale == "bit" and self.model.latent_variables == 1:
                 dbit_dz = self.bit_score_gradients(z, independent_z=1, **kwargs)
                 # divide by the derivative of the bit scores with respect to the z scores
                 # to get the expected item score slopes with respect to the bit scores
-                mean_slopes = torch.einsum('ab...,a...->ab...', mean_slopes, 1/dbit_dz)
+                mean_slopes = torch.einsum("ab...,a...->ab...", mean_slopes, 1/dbit_dz)
             else:
                 mean_slopes = mean_slopes.mean(dim=0)
 
         return mean_slopes
 
     def information(self, z: torch.Tensor, item: bool = True, scale: str = "z", degrees: list[int] = None, **kwargs) -> torch.Tensor:
-        """
+        r"""
         Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
 
         Parameters
@@ -860,20 +894,20 @@ class IRTScorer:
         -----
         In the context of IRT, the Fisher information matrix measures the amount of information
         that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\\mathbf{z}`.
+        :math:`\mathbf{z}`.
 
         The formula for the Fisher information matrix in the case of multiple parameters is:
 
         .. math::
 
-            I(\\mathbf{z}) = E\\left[ \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right) \\left(\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}\\right)^T \\right] = -E\\left[\\frac{\\partial^2 \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}\\right]
+            I(\mathbf{z}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right) \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}\right]
 
         Where:
 
-        - :math:`I(\\mathbf{z})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \\mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial \\ell(X; \\mathbf{z})}{\\partial \\mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
-        - :math:`\\frac{\\partial^2 \\log f(X; \\mathbf{z})}{\\partial \\mathbf{z} \\partial \\mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\\mathbf{z}`.
+        - :math:`I(\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{z}`.
+        - :math:`\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
+        - :math:`\frac{\partial^2 \log f(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
         
         For additional details, see :cite:t:`Chang2017`.
         """
@@ -885,7 +919,7 @@ class IRTScorer:
         if scale == "bit":
             bit_z_gradients = self.bit_score_gradients(z, one_dimensional=False, **kwargs)
             # we divide by diagonal of the bit score gradients (the gradients in the direction of the bit score corresponding z scores)
-            bit_z_gradients_diag = torch.einsum('...ii->...i', bit_z_gradients)
+            bit_z_gradients_diag = torch.einsum("...ii->...i", bit_z_gradients)
             gradients = (gradients.permute(1, 2, 0, 3) / bit_z_gradients_diag).permute(2, 0, 1, 3)
 
         # squared gradient matrices for each latent variable
@@ -897,7 +931,7 @@ class IRTScorer:
         if degrees is not None and z.shape[1] > 1:
             cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
             # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
-            information = torch.einsum('i,...ij,j->...', cos_degrees, information_matrices, cos_degrees)
+            information = torch.einsum("i,...ij,j->...", cos_degrees, information_matrices, cos_degrees)
         else:
             information = information_matrices
 

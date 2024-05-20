@@ -110,19 +110,19 @@ def test_bit_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables, bi
     start_z = torch.full((1, latent_variables), -0.2)
 
     # Mock the necessary methods
-    with patch.object(IRTScorer, 'latent_scores', return_value=torch.tensor([[0.8], [-0.7], [0.8]]).repeat(1, latent_variables)) as mock_latent_scores:
+    with patch.object(IRTScorer, "latent_scores", return_value=torch.tensor([[0.8], [-0.7], [0.8]]).repeat(1, latent_variables)) as mock_latent_scores:
         inverted_scales = torch.ones((1, latent_variables))
         inverted_scales[0, 1::2] = -1 # invert every other scale
-        with patch.object(IRTScorer, '_inverted_scales', return_value=inverted_scales):
-            # with patch.object(IRTScorer, '_anti_invert_and_adjust_z_scores', return_value=(z, z, start_z)):
+        with patch.object(IRTScorer, "_inverted_scales", return_value=inverted_scales):
+            # with patch.object(IRTScorer, "_anti_invert_and_adjust_z_scores", return_value=(z, z, start_z)):
             grid_start = torch.full((latent_variables,), -0.6)
             grid_end = torch.full((latent_variables,), 2.0)
-            with patch.object(IRTScorer, '_get_grid_boundaries', return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
+            with patch.object(IRTScorer, "_get_grid_boundaries", return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
                 if one_dimensional:
-                    with patch.object(IRTScorer, '_compute_1d_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
+                    with patch.object(IRTScorer, "_compute_1d_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
                         bit_scores, _ = irt_scorer.bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
                 else:
-                    with patch.object(IRTScorer, '_compute_multi_dimensional_bit_scores', return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
+                    with patch.object(IRTScorer, "_compute_multi_dimensional_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
                         bit_scores, _ = irt_scorer.bit_scores_from_z(z, start_z, one_dimensional=one_dimensional, z_estimation_method=bit_score_z_grid_method)
 
     # Assert the result
@@ -132,7 +132,7 @@ def test_bit_scores(irt_scorer: IRTScorer, one_dimensional, latent_variables, bi
         assert bit_scores.shape == (4, latent_variables)
 
     if bit_score_z_grid_method == "ML":
-        mock_latent_scores.assert_called_once_with(irt_scorer.algorithm.train_data, scale='z', z_estimation_method='ML', ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.3)
+        mock_latent_scores.assert_called_once_with(irt_scorer.algorithm.train_data, scale="z", z_estimation_method="ML", ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.3)
 
 @pytest.mark.parametrize("z_estimation_method", ["NN", "EAP"])
 def test_latent_scores(irt_scorer: IRTScorer, z_estimation_method):

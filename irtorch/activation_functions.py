@@ -1,7 +1,7 @@
 import logging
 import torch
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class BoundedELU(torch.autograd.Function):
     # Set generate_vmap_rule to True to ask PyTorch to automatically generate a vmap rule.
@@ -42,8 +42,8 @@ class BoundedELU(torch.autograd.Function):
         middle_part = input_tensor
 
         # we need to remove possible infinities to avoid nan in the output
-        neg_part = torch.where(neg_part == float('inf'), torch.zeros_like(neg_part), neg_part)
-        pos_part = torch.where(pos_part == float('-inf'), torch.zeros_like(pos_part), pos_part)
+        neg_part = torch.where(neg_part == float("inf"), torch.zeros_like(neg_part), neg_part)
+        pos_part = torch.where(pos_part == float("-inf"), torch.zeros_like(pos_part), pos_part)
 
         output = neg_mask * neg_part + pos_mask * pos_part + middle_mask * middle_part
 
@@ -84,8 +84,8 @@ class BoundedELU(torch.autograd.Function):
         middle_part_grad = 1
 
         # Ensuring gradient is not infinite
-        neg_part_grad = torch.where(neg_part_grad == float('inf'), torch.zeros_like(neg_part_grad), neg_part_grad)
-        pos_part_grad = torch.where(pos_part_grad == float('inf'), torch.zeros_like(pos_part_grad), pos_part_grad)
+        neg_part_grad = torch.where(neg_part_grad == float("inf"), torch.zeros_like(neg_part_grad), neg_part_grad)
+        pos_part_grad = torch.where(pos_part_grad == float("inf"), torch.zeros_like(pos_part_grad), pos_part_grad)
 
         grad_input = neg_mask * neg_part_grad + pos_mask * pos_part_grad + middle_mask * middle_part_grad
         return grad_input * grad_output, None

@@ -34,7 +34,7 @@ def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_catego
     data : torch.Tensor
         A 2D tensor where each row represents one respondent and each column represents an item.
         The values should be the scores/possible responses on the items, starting from 0.
-        Missing item responses need to be coded as -1 or 'nan'.
+        Missing item responses need to be coded as -1 or "nan".
     mc_correct : list[int], optional
         A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
     item_categories : list[int], optional
@@ -308,7 +308,7 @@ class PytorchIRTDataset(torch.utils.data.Dataset):
 def is_jupyter():
     try:
         from IPython import get_ipython
-        if 'IPKernelApp' not in get_ipython().config:
+        if "IPKernelApp" not in get_ipython().config:
             raise ImportError("Not in IPython")
         return True
     except Exception:
@@ -325,4 +325,4 @@ def dynamic_print(string_to_print):
 
     """
     formatted_string = f"\r{string_to_print} " # small space after to make it look better in terminal
-    print(formatted_string, end='', flush=True)
+    print(formatted_string, end="", flush=True)

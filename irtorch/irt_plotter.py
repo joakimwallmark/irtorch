@@ -12,7 +12,7 @@ from irtorch.irt_evaluator import IRTEvaluator
 from irtorch._internal_utils import output_to_item_entropy
 
 pio.templates.default = "plotly_white"
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class IRTPlotter:
     """
@@ -56,19 +56,19 @@ class IRTPlotter:
 
         data_frames = []
 
-        if 'train_loss' in self.algorithm.training_history and len(self.algorithm.training_history['train_loss']) > 0:
+        if "train_loss" in self.algorithm.training_history and len(self.algorithm.training_history["train_loss"]) > 0:
             train_df = pd.DataFrame({
-                'Epoch': range(1, len(self.algorithm.training_history['train_loss']) + 1),
-                'Loss': self.algorithm.training_history['train_loss'],
-                'Type': 'Training'
+                "Epoch": range(1, len(self.algorithm.training_history["train_loss"]) + 1),
+                "Loss": self.algorithm.training_history["train_loss"],
+                "Type": "Training"
             })
             data_frames.append(train_df)
 
-        if 'validation_loss' in self.algorithm.training_history and len(self.algorithm.training_history['validation_loss']) > 0:
+        if "validation_loss" in self.algorithm.training_history and len(self.algorithm.training_history["validation_loss"]) > 0:
             validation_df = pd.DataFrame({
-                'Epoch': range(1, len(self.algorithm.training_history['validation_loss']) + 1),
-                'Loss': self.algorithm.training_history['validation_loss'],
-                'Type': 'Validation'
+                "Epoch": range(1, len(self.algorithm.training_history["validation_loss"]) + 1),
+                "Loss": self.algorithm.training_history["validation_loss"],
+                "Type": "Validation"
             })
             data_frames.append(validation_df)
 
@@ -78,9 +78,9 @@ class IRTPlotter:
         plot_df = pd.concat(data_frames)
 
         fig = px.line(
-            plot_df, x='Epoch', y='Loss', color='Type',
-            labels={'Loss': 'Loss', 'Epoch': 'Epoch'},
-            title='Training History')
+            plot_df, x="Epoch", y="Loss", color="Type",
+            labels={"Loss": "Loss", "Epoch": "Epoch"},
+            title="Training History")
 
         return fig
 
@@ -824,10 +824,10 @@ class IRTPlotter:
         color: str
     ) -> go.Figure:
         df = pd.DataFrame({
-            'x': x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
-            'y': y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
+            "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
+            "y": y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
         })
-        fig = px.line(df, x='x', y='y', title=title, color_discrete_sequence=[color])
+        fig = px.line(df, x="x", y="y", title=title, color_discrete_sequence=[color])
         fig.update_layout(xaxis_title=x_label, yaxis_title=y_label)
         return fig
 
@@ -939,7 +939,7 @@ class IRTPlotter:
             fig.add_trace(go.Scatter(
                 x=latent_scores,
                 y=prob_matrix[:, i],
-                mode='lines',
+                mode="lines",
                 name=response_text,
                 line=dict(color=color)
             ))
@@ -949,16 +949,16 @@ class IRTPlotter:
                 fig.add_trace(go.Scatter(
                     x=latent_group_means,
                     y=group_probs_data[:, i],
-                    mode='markers', name=f'Data {response_to_show}',
-                    marker=dict(symbol='circle-open', color=color)
+                    mode="markers", name=f"Data {response_to_show}",
+                    marker=dict(symbol="circle-open", color=color)
                 ))
                 # Adding scatter plot for group model predictions
                 fig.add_trace(go.Scatter(
                     x=latent_group_means,
                     y=group_probs_model[:, i],
-                    mode='markers',
-                    name=f'Model {response_to_show}',
-                    marker=dict(symbol='circle', color=color)
+                    mode="markers",
+                    name=f"Model {response_to_show}",
+                    marker=dict(symbol="circle", color=color)
                 ))
 
         legend_title = "Item response" if self.model.mc_correct is not None else "Score"
@@ -1034,15 +1034,15 @@ class IRTPlotter:
             z = prob_matrix[:, response_category].reshape((steps, steps))
             fig.add_trace(go.Surface(
                 x=x, y=y, z=z, 
-                name=f'Response {response_category}',
+                name=f"Response {response_category}",
                 showscale=False,  # Optionally hide the color scale
                 colorscale=[(0, colors[response_category % len(colors)]), (1, colors[response_category % len(colors)])],
             ))
             # Dummy trace for legend
             fig.add_trace(go.Scatter3d(
-                x=[None], y=[None], z=[None], mode='markers',
+                x=[None], y=[None], z=[None], mode="markers",
                 marker=dict(size=10, color=colors[response_category % len(colors)]),
-                showlegend=True, name=f'Response {response_category}'
+                showlegend=True, name=f"Response {response_category}"
             ))
 
         fig.update_layout(
@@ -1119,13 +1119,13 @@ class IRTPlotter:
         y_label: str,
         color: str
     ) -> go.Figure:
-        df = pd.DataFrame(scores, columns=['values'])
+        df = pd.DataFrame(scores, columns=["values"])
         histogram_kwargs = {
-            'x': "values",
-            'marginal': "box"
+            "x": "values",
+            "marginal": "box"
         }
         if color:
-            histogram_kwargs['color_discrete_sequence'] = [color]
+            histogram_kwargs["color_discrete_sequence"] = [color]
         fig = px.histogram(df, **histogram_kwargs)
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
         return fig
@@ -1155,7 +1155,7 @@ class IRTPlotter:
         fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
         return fig
 
-    def _generate_grayscale_colors(self, n, start_color='#b0b0b0'):
+    def _generate_grayscale_colors(self, n, start_color="#b0b0b0"):
         """
         Generates a list of n colors in grayscale from light gray to black.
 
@@ -1177,5 +1177,5 @@ class IRTPlotter:
             start_rgb + (end_rgb - start_rgb) * i / (n - 1)
         ).astype(int) for i in range(n)]
         # Convert RGB to hexadecimal
-        hex_colors = ['#' + ''.join(f'{int(c):02x}' for c in color) for color in colors]
+        hex_colors = ["#" + "".join(f"{int(c):02x}" for c in color) for color in colors]
         return hex_colors

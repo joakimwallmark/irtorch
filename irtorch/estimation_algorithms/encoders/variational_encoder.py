@@ -2,7 +2,7 @@ import logging
 import torch.nn as nn
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class VariationalEncoder(BaseEncoder):
     def __init__(

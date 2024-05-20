@@ -2,7 +2,7 @@ import logging
 import torch
 import torch.distributions as dist
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class GaussianMixtureModel(torch.nn.Module):
     """

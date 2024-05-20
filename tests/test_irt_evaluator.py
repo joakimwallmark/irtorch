@@ -101,14 +101,14 @@ def test_evaluate_data_z_input(irt_evaluator: IRTEvaluator):
     )
 
     # Call the method with data and z as None
-    result_data, result_z = irt_evaluator._evaluate_data_z_input(data, None, 'NN')
+    result_data, result_z = irt_evaluator._evaluate_data_z_input(data, None, "NN")
 
     # Check the shape of the output data and z
     assert result_data.shape == data.shape
     assert result_z.shape == irt_evaluator.algorithm.training_z_scores.shape
 
     # Call the method with data as None
-    result_data, result_z = irt_evaluator._evaluate_data_z_input(None, None, 'NN')
+    result_data, result_z = irt_evaluator._evaluate_data_z_input(None, None, "NN")
 
     # Check the shape of the output data and z
     assert result_data.shape == irt_evaluator.algorithm.train_data.shape
@@ -378,11 +378,11 @@ def test_infit_outfit(irt_evaluator: IRTEvaluator):
 
     irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock)
 
-    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = "item")
     assert torch.allclose(infit, torch.tensor([0.6000000, 0.4237288])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.4973261, 0.5139347])), "Outfit is incorrect"
 
-    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = "respondent")
     assert torch.allclose(infit, torch.tensor([0.9161677, 0.0837438])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.8878143, 0.1234465])), "Outfit is incorrect"
 
@@ -392,10 +392,10 @@ def test_infit_outfit(irt_evaluator: IRTEvaluator):
     irt_evaluator.model.expected_scores = MagicMock(side_effect=expected_scores_mock_mc)
 
     irt_evaluator.model.mc_correct = [1, 3]
-    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'item')
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = "item")
     assert torch.allclose(infit, torch.tensor([0.6000000, 0.8947369])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.4973262, 0.8803419])), "Outfit is incorrect"
 
-    infit, outfit = irt_evaluator.infit_outfit(data, z, level = 'respondent')
+    infit, outfit = irt_evaluator.infit_outfit(data, z, level = "respondent")
     assert torch.allclose(infit, torch.tensor([1.0202020, 0.4084507])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([1.0202019, 0.3574660])), "Outfit is incorrect"

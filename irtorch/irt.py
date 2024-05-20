@@ -9,7 +9,7 @@ from irtorch.irt_scorer import IRTScorer
 from irtorch.irt_plotter import IRTPlotter
 from irtorch.irt_evaluator import IRTEvaluator
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class IRT:
     """

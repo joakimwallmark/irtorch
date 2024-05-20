@@ -8,7 +8,7 @@ from torch.distributions import MultivariateNormal
 from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
 from irtorch.utils import one_hot_encode_test_data, decode_one_hot_test_data
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class MMLIRT(BaseIRTAlgorithm, nn.Module):
     r"""
@@ -198,8 +198,8 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
         train_data_rep = train_data.repeat(latent_combos.size(0), 1)
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
 
-        best_loss = float('inf')
-        prev_lr = [group['lr'] for group in self.optimizer.param_groups]
+        best_loss = float("inf")
+        prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
             train_loss = self._train_step(
                 train_data_rep,
@@ -215,11 +215,11 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
             if current_loss < best_loss:
                 best_loss = current_loss
                 best_epoch = epoch
-                best_model_state = { 'state_dict': copy.deepcopy(self.state_dict()),
-                                    'optimizer': copy.deepcopy(self.optimizer.state_dict()) }
+                best_model_state = { "state_dict": copy.deepcopy(self.state_dict()),
+                                    "optimizer": copy.deepcopy(self.optimizer.state_dict()) }
             
 
-            current_lr = [group['lr'] for group in self.optimizer.param_groups]
+            current_lr = [group["lr"] for group in self.optimizer.param_groups]
             # Check if the learning rate has been updated
             if current_lr != prev_lr:
                 lr_update_count += 1
@@ -229,12 +229,12 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
                 logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                 break
 
-            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
+            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
 
         # Load the best model state
         if best_model_state is not None:
-            self.load_state_dict(best_model_state['state_dict'])
-            self.optimizer.load_state_dict(best_model_state['optimizer'])
+            self.load_state_dict(best_model_state["state_dict"])
+            self.optimizer.load_state_dict(best_model_state["optimizer"])
             logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
     def _train_step(
@@ -267,7 +267,7 @@ class MMLIRT(BaseIRTAlgorithm, nn.Module):
 
         self.optimizer.zero_grad()
         logits = self(latent_grid)
-        ll = self.model.log_likelihood(train_data, logits, loss_reduction='none')
+        ll = self.model.log_likelihood(train_data, logits, loss_reduction="none")
         ll = ll.view(-1, self.model.items).sum(dim=1) # sum over items
         
         log_sums = (log_weights + ll).view(number_of_weights, -1)

@@ -8,7 +8,7 @@ from irtorch.estimation_algorithms.encoders import BaseEncoder, StandardEncoder
 from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
 from irtorch.utils import one_hot_encode_test_data, decode_one_hot_test_data
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class AEIRT(BaseIRTAlgorithm, nn.Module):
     """
@@ -183,8 +183,8 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             The validation data.
         """
         lr_update_count = 0
-        best_loss = float('inf')
-        prev_lr = [group['lr'] for group in self.optimizer.param_groups]
+        best_loss = float("inf")
+        prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
             if hasattr(self, "anneal"):
                 if self.anneal:
@@ -207,25 +207,25 @@ class AEIRT(BaseIRTAlgorithm, nn.Module):
             if current_loss < best_loss:
                 best_loss = current_loss
                 best_epoch = epoch
-                best_model_state = { 'state_dict': copy.deepcopy(self.state_dict()),
-                                    'optimizer': copy.deepcopy(self.optimizer.state_dict()) }
+                best_model_state = { "state_dict": copy.deepcopy(self.state_dict()),
+                                    "optimizer": copy.deepcopy(self.optimizer.state_dict()) }
             
             if lr_update_count >= learning_rate_updates_before_stopping:
                 logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                 break
 
-            current_lr = [group['lr'] for group in self.optimizer.param_groups]
+            current_lr = [group["lr"] for group in self.optimizer.param_groups]
             # Check if the learning rate has been updated
             if current_lr != prev_lr:
                 lr_update_count += 1
                 prev_lr = current_lr
 
-            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]['lr'])
+            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
 
         # Load the best model state
         if best_model_state is not None:
-            self.load_state_dict(best_model_state['state_dict'])
-            self.optimizer.load_state_dict(best_model_state['optimizer'])
+            self.load_state_dict(best_model_state["state_dict"])
+            self.optimizer.load_state_dict(best_model_state["optimizer"])
             logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
 
     def _train_step(self, epoch):

@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from torch import nn
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class BaseEncoder(ABC, nn.Module):
     """

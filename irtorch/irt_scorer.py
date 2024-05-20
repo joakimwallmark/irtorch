@@ -10,7 +10,7 @@ from irtorch._internal_utils import output_to_item_entropy, random_guessing_data
 from irtorch.outlier_detector import OutlierDetector
 from irtorch.utils import one_hot_encode_test_data
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class IRTScorer:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm):
@@ -233,7 +233,7 @@ class IRTScorer:
         if scale == "z":
             if standard_errors:
                 fisher_info = self.information(z, item=False, scale = "z", degrees=None)
-                se = 1/torch.einsum('...ii->...i', fisher_info).sqrt()
+                se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
                 return z, se
             return z
         elif scale == "bit":
@@ -338,7 +338,7 @@ class IRTScorer:
                     loss = loss.item()
 
                 denominator = data.numel()
-                dynamic_print(f'Iteration {i+1}: Current Loss = {loss}')
+                dynamic_print(f"Iteration {i+1}: Current Loss = {loss}")
                 if len(loss_history) > 0 and abs(loss - loss_history[-1]) / denominator < tolerance:
                     logger.info("Converged at iteration %s.", i+1)
                     break
@@ -794,7 +794,7 @@ class IRTScorer:
     def expected_item_score_slopes(
         self,
         z: torch.Tensor,
-        scale: str = 'z',
+        scale: str = "z",
         bit_scores: torch.Tensor = None,
         rescale_by_item_score: bool = True,
         **kwargs
@@ -827,7 +827,7 @@ class IRTScorer:
         if z.requires_grad:
             z.requires_grad_(False)
 
-        if scale == 'bit' and self.model.latent_variables > 1:
+        if scale == "bit" and self.model.latent_variables > 1:
             expected_item_sum_scores = self.model.expected_scores(z, return_item_scores=True).detach()
             if not self.model.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
@@ -853,11 +853,11 @@ class IRTScorer:
                     expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
                     mean_slopes[:, item, latent_variable] = z_scores.grad[:, latent_variable]
 
-            if scale == 'bit' and self.model.latent_variables == 1:
+            if scale == "bit" and self.model.latent_variables == 1:
                 dbit_dz = self.bit_score_gradients(z, independent_z=1, **kwargs)
                 # divide by the derivative of the bit scores with respect to the z scores
                 # to get the expected item score slopes with respect to the bit scores
-                mean_slopes = torch.einsum('ab...,a...->ab...', mean_slopes, 1/dbit_dz)
+                mean_slopes = torch.einsum("ab...,a...->ab...", mean_slopes, 1/dbit_dz)
             else:
                 mean_slopes = mean_slopes.mean(dim=0)
 
@@ -919,7 +919,7 @@ class IRTScorer:
         if scale == "bit":
             bit_z_gradients = self.bit_score_gradients(z, one_dimensional=False, **kwargs)
             # we divide by diagonal of the bit score gradients (the gradients in the direction of the bit score corresponding z scores)
-            bit_z_gradients_diag = torch.einsum('...ii->...i', bit_z_gradients)
+            bit_z_gradients_diag = torch.einsum("...ii->...i", bit_z_gradients)
             gradients = (gradients.permute(1, 2, 0, 3) / bit_z_gradients_diag).permute(2, 0, 1, 3)
 
         # squared gradient matrices for each latent variable
@@ -931,7 +931,7 @@ class IRTScorer:
         if degrees is not None and z.shape[1] > 1:
             cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
             # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
-            information = torch.einsum('i,...ij,j->...', cos_degrees, information_matrices, cos_degrees)
+            information = torch.einsum("i,...ij,j->...", cos_degrees, information_matrices, cos_degrees)
         else:
             information = information_matrices
 

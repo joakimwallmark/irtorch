@@ -6,7 +6,7 @@ from irtorch.latent_variable_functions import (
     interp,
 )
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class QuantileMVNormal:
     """

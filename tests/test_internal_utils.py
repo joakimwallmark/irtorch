@@ -65,7 +65,7 @@ def testdynamic_print(capsys):
 
     # Capture the output again after calling dynamic_print
     captured_output = capsys.readouterr()
-    assert captured_output.out == '\rarg1\narg2 '
+    assert captured_output.out == "\rarg1\narg2 "
 
     dynamic_print("Hello World!")
     captured_output = capsys.readouterr()
@@ -193,7 +193,7 @@ def test_output_to_item_entropy():
         output_to_item_entropy(output, [2, 2, 3, 2, 2])
 
 def test_impute_missing():
-    data = torch.tensor([[1, 2, 1, -1], [-1, float('nan'), 0, 2], [-1, float('nan'), 1, 2]])
+    data = torch.tensor([[1, 2, 1, -1], [-1, float("nan"), 0, 2], [-1, float("nan"), 1, 2]])
     # mc_correct is corresponds to correct item category and not correct score (2 means score 1 is correct)
     mc_correct = [2, 3, 2, 3]
     imputed_data = impute_missing(data = data.clone())

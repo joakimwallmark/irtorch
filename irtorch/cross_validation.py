@@ -6,7 +6,7 @@ from itertools import product
 import torch.multiprocessing as mp
 from irtorch.irt import IRT
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 def cross_validation(
     irt_model: IRT,
@@ -18,7 +18,7 @@ def cross_validation(
     **kwargs
 ) -> pd.DataFrame:
     """
-    Perform cross-validation on the given model and data. Uses log-likelihood for model evaluation. Note that for running on the CPU on windows, `if __name__ == "__main__":` needs to be added to the main script before calling this function, see examples.
+    Perform cross-validation on the given model and data. Uses log-likelihood for model evaluation. Note that for running on the CPU on windows, `if __name__ == '__main__':` needs to be added to the main script before calling this function, see examples.
 
     Parameters
     ----------
@@ -68,8 +68,8 @@ def cross_validation(
 
     Finally, we perform cross-validation to find a good set of parameters:
 
-    >>> if __name__ == "__main__":
-    ...     result = cross_validation(irt_model, data=train_data, folds=5, params_grid=params_grid, z_estimation_method="NN", device="cpu")
+    >>> if __name__ == '__main__':
+    ...     result = cross_validation(irt_model, data=train_data, folds=5, params_grid=params_grid, z_estimation_method='NN', device='cpu')
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")

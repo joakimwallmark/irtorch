@@ -1,7 +1,7 @@
 import logging
 import torch
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 def interp(x_new, x, y):
     """

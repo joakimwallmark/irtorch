@@ -6,7 +6,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.layers import SoftplusLinear, NegationLayer
 from irtorch.activation_functions import BoundedELU
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class MonotoneNN(BaseIRTModel):
     r"""
@@ -178,17 +178,17 @@ class MonotoneNN(BaseIRTModel):
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         latent_variable_outputs = []
         for latent_variable in range(self.latent_variables):
-            layer_out = self._modules[f'linear0_dim{latent_variable}'](z[:, latent_variable].unsqueeze(1))
+            layer_out = self._modules[f"linear0_dim{latent_variable}"](z[:, latent_variable].unsqueeze(1))
 
             layer_out = self.split_activation(layer_out)
             for i in range(1, self.hidden_layers):
-                layer_out = self._modules[f'linear{i}_dim{latent_variable}'](layer_out)
+                layer_out = self._modules[f"linear{i}_dim{latent_variable}"](layer_out)
                 layer_out = self.split_activation(layer_out)
 
             layer_out = layer_out.reshape(-1, self.separations, self.hidden_out_dim).sum(dim=2)
 
             if self.negative_latent_variable_item_relationships:
-                layer_out = self._modules[f'negation_dim{latent_variable}'](layer_out)
+                layer_out = self._modules[f"negation_dim{latent_variable}"](layer_out)
 
             latent_variable_outputs.append(layer_out)
         

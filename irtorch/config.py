@@ -1,5 +1,5 @@
 import logging
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 def set_verbosity(level) -> None:
     """

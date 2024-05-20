@@ -1,7 +1,7 @@
 import logging
 import torch
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class OutlierDetector:
     """
@@ -152,12 +152,12 @@ class OutlierDetector:
         lower_bound = q1 - self.factor * iqr
         upper_bound = q3 + self.factor * iqr
 
-        # Mask the original data with the non-outliers mask and replace outliers with 'inf'/'-inf' (to ignore during min/max calculation)
+        # Mask the original data with the non-outliers mask and replace outliers with "inf"/"-inf" (to ignore during min/max calculation)
         non_outliers_mask = (data >= lower_bound) & (data <= upper_bound)
         if smallest:
-            masked_data = torch.where(non_outliers_mask, data, torch.full_like(data, float('inf')))
+            masked_data = torch.where(non_outliers_mask, data, torch.full_like(data, float("inf")))
         else:
-            masked_data = torch.where(non_outliers_mask, data, torch.full_like(data, float('-inf')))
+            masked_data = torch.where(non_outliers_mask, data, torch.full_like(data, float("-inf")))
         resulting_values, _ = torch.min(masked_data, dim=0) if smallest else torch.max(masked_data, dim=0)
 
         return resulting_values.unsqueeze(0)

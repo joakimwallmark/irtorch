@@ -12,7 +12,7 @@ from irtorch._internal_utils import (
     sum_incorrect_probabilities,
 )
 
-logger = logging.getLogger('irtorch')
+logger = logging.getLogger("irtorch")
 
 class IRTEvaluator:
     def __init__(self, model: BaseIRTModel, algorithm: BaseIRTAlgorithm, scorer: IRTScorer):

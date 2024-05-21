@@ -26,7 +26,7 @@ class VAE(AE):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         validation_data: torch.Tensor = None,
-        one_hot_encoded: bool = False,
+        one_hot_encoded: bool = True,
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
         batch_normalization_encoder: bool = True,
@@ -90,8 +90,9 @@ class VAE(AE):
         self.annealing_epochs = annealing_epochs
         self.anneal = anneal
         self.imputation_method = imputation_method
+        self.one_hot_encoded = one_hot_encoded
 
-        if one_hot_encoded or model.mc_correct is not None:
+        if one_hot_encoded:
             input_dim = sum(model.modeled_item_responses)
         else:
             input_dim = len(model.modeled_item_responses)

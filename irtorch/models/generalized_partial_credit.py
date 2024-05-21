@@ -11,6 +11,8 @@ class GeneralizedPartialCredit(BaseIRTModel):
     ----------
     latent_variables : int
         Number of latent variables.
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
     item_categories : list[int]
         Number of categories for each item. One integer for each item. Missing responses exluded.
     item_z_relationships : torch.Tensor, optional
@@ -18,10 +20,18 @@ class GeneralizedPartialCredit(BaseIRTModel):
     """
     def __init__(
         self,
-        latent_variables: int,
-        item_categories: list[int],
+        latent_variables: int = 1,
+        data: torch.Tensor = None,
+        item_categories: list[int] = None,
         item_z_relationships: torch.Tensor = None,
     ):
+        if item_categories is None:
+            if data is None:
+                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+            else:
+                # replace nan with -inf to get max
+                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+
         super().__init__(latent_variables=latent_variables, item_categories=item_categories)
         if item_z_relationships is not None:
             if item_z_relationships.shape != (len(item_categories), latent_variables):

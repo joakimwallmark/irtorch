@@ -147,7 +147,13 @@ class AE(BaseIRTAlgorithm):
         # store the latent z scores of the training data
         # used for more efficient computation when using other methods
         if not self.one_hot_encoded:
-            train_data = self.fix_missing_values(train_data)
+            if train_data.isnan().any():
+                train_data[train_data.isnan()] = -1
+            if model.model_missing:
+                train_data = train_data + 1 # handled in z_scores for nn
+            else:
+                train_data[train_data == -1] = 0
+
         self.training_z_scores = self.z_scores(train_data).clone().detach()
 
     def _training_loop(
@@ -249,7 +255,7 @@ class AE(BaseIRTAlgorithm):
             self.optimizer.step()
             loss += batch_loss.item()
 
-        # Calculate averge per batch loss and accuracy per epoch and print out what's happening
+        # Calculate averge per batch loss and accuracy per epoch and print
         loss /= len(self.data_loader)
         self.training_history["train_loss"].append(loss)
         return loss

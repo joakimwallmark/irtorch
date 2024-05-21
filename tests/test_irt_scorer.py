@@ -44,10 +44,6 @@ def irt_scorer(z_scores, latent_variables):
         else:
             return torch.randn(input_tensor.shape[0], latent_variables)
 
-    # Mock fix_missing_values method
-    def fix_missing_values_mock(input_tensor):
-        return input_tensor
-
     # Mock decoder forward method
     def forward_mock(input_tensor):
         # Find the unique rows in the input_tensor and their inverse indices
@@ -78,7 +74,6 @@ def irt_scorer(z_scores, latent_variables):
     mock_model.model_missing = False
     mock_model.log_likelihood = MagicMock(side_effect=log_likelihood_mock)
     mock_algorithm.z_scores = MagicMock(side_effect=z_scores_mock)
-    mock_algorithm.fix_missing_values = MagicMock(side_effect=fix_missing_values_mock)
 
     return IRTScorer(mock_model, mock_algorithm)
 

@@ -485,6 +485,7 @@ class IRTPlotter:
                     groups=group_fit_groups,
                     **kwargs
                 )
+                # TODO bit_scales _get_bit_midpoints() when scale is bits
                 group_probs_data = group_probs_data[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
                 group_probs_model = group_probs_model[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
                 

@@ -554,7 +554,7 @@ class IRT:
         pd.DataFrame
             A dataframe with the item parameters.
         """
-        if hasattr(self.model, 'item_parameters'):
+        if hasattr(self.model, "item_parameters"):
             return self.model.item_parameters(irt_format)
         else:
             raise AttributeError("item_parameters method is not available for the chosen IRT model.")

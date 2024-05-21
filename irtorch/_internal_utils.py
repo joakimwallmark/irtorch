@@ -24,6 +24,38 @@ def linear_regression(x, y):
 
     return w
 
+def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputation_method: str = "zero"):
+    """
+    Deal with missing values so that the data can be used for fitting.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        The data to fix.
+    model_missing : bool, optional
+        Whether the model can handle missing values. If True, missing values are encoded as -1. If False, missing values are imputed. (default is False)
+    imputation_method : str, optional
+        The method to use for imputing missing values. The default is "zero".
+
+    Returns
+    -------
+    torch.Tensor
+        The data with missing values imputed.
+    """
+    if data.isnan().any():
+        data[data.isnan()] = -1
+
+    if model_missing:
+        data = data + 1 # handled in z_scores for nn
+    else:
+        if imputation_method == "zero":
+            data[data == -1] = 0
+        else:
+            # self._impute_missing(data, data.isnan())
+            # see also helper_function impute_missing
+            raise NotImplementedError("Imputation methods not implemented yet")
+
+    return data
 
 def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_categories: list[int] = None):
     """

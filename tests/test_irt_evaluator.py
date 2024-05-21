@@ -23,12 +23,6 @@ def irt_evaluator(latent_variables):
     )
     mock_algorithm.training_z_scores = torch.randn(30, latent_variables)
 
-    # Mock fix_missing_values method 
-    def fix_missing_values_mock(input_tensor):
-        return input_tensor
-
-    mock_algorithm.fix_missing_values = MagicMock(side_effect=fix_missing_values_mock)
-
     def model_forward_mock(input_tensor: torch.Tensor):
         logits = [
             torch.randn(input_tensor.shape[0], category)

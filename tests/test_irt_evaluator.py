@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 import torch
 from torch.nn.functional import softmax
 import pytest
-from irtorch.irt_evaluator import IRTEvaluator, IRTScorer
+from irtorch.evaluation import Evaluation, Scoring
 from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
 from irtorch.quantile_mv_normal import QuantileMVNormal
@@ -52,7 +52,7 @@ def irt_evaluator(latent_variables):
 
     mock_algorithm.z_scores = MagicMock(side_effect=z_scores_mock)
     # Create a mock instance of IRTScorer
-    mock_scorer = MagicMock(spec=IRTScorer)
+    mock_scorer = MagicMock(spec=Scoring)
 
     # Mock z_scores method based on input
     def latent_scores(data, **kwargs):
@@ -80,11 +80,11 @@ def irt_evaluator(latent_variables):
     )
     mock_scorer.latent_density = QuantileMVNormal()
     mock_scorer.latent_density.pdf = MagicMock(side_effect=pdf_mock)
-    return IRTEvaluator(mock_model, mock_algorithm, mock_scorer)
+    return Evaluation(mock_model, mock_algorithm, mock_scorer)
 
 
 # add test for the _evaluate_data_z_input method
-def test_evaluate_data_z_input(irt_evaluator: IRTEvaluator):
+def test_evaluate_data_z_input(irt_evaluator: Evaluation):
     # Create some synthetic test data
     data = torch.cat(
         [
@@ -108,7 +108,7 @@ def test_evaluate_data_z_input(irt_evaluator: IRTEvaluator):
     assert result_data.shape == irt_evaluator.algorithm.train_data.shape
     assert result_z.shape == irt_evaluator.algorithm.training_z_scores.shape
 
-def test_probabilities_from_grouped_z(irt_evaluator: IRTEvaluator, latent_variables):
+def test_probabilities_from_grouped_z(irt_evaluator: Evaluation, latent_variables):
     # Create some synthetic z scores
     grouped_z = (
         torch.randn(10, latent_variables),
@@ -121,7 +121,7 @@ def test_probabilities_from_grouped_z(irt_evaluator: IRTEvaluator, latent_variab
     assert probabilities.shape == (3, 2, 3)
     assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1]), atol=1e-7)
 
-def test_probabilities_from_grouped_data(irt_evaluator: IRTEvaluator):
+def test_probabilities_from_grouped_data(irt_evaluator: Evaluation):
     # Create synthetic test data groups
     grouped_data = (
         torch.cat(
@@ -154,7 +154,7 @@ def test_probabilities_from_grouped_data(irt_evaluator: IRTEvaluator):
     assert torch.allclose(probabilities.sum(dim=2), torch.ones_like(probabilities[:, :, 0]), atol=1e-7)
 
 @pytest.mark.parametrize("scale", ["bit", "z"])
-def test_latent_group_probabilities(irt_evaluator: IRTEvaluator, scale):
+def test_latent_group_probabilities(irt_evaluator: Evaluation, scale):
     # Create some synthetic test data
     data = torch.cat(
         [
@@ -184,7 +184,7 @@ def test_latent_group_probabilities(irt_evaluator: IRTEvaluator, scale):
         # check if bit score was called
         irt_evaluator.scorer.bit_scores_from_z.assert_called_once()
 
-def test_group_fit_residuals(irt_evaluator: IRTEvaluator):
+def test_group_fit_residuals(irt_evaluator: Evaluation):
     data = torch.cat(
         [
             torch.randint(0, item_cat, (30, 1))
@@ -202,7 +202,7 @@ def test_group_fit_residuals(irt_evaluator: IRTEvaluator):
 @pytest.mark.parametrize(
     "latent_density_method", ["data", "encoder sampling", "qmvn", "gmm"]
 )
-def test_sum_score_probabilities(irt_evaluator: IRTEvaluator, latent_density_method):
+def test_sum_score_probabilities(irt_evaluator: Evaluation, latent_density_method):
     if latent_density_method == "encoder sampling":
         with pytest.raises(ValueError):
             total_score_probs = irt_evaluator.sum_score_probabilities(
@@ -218,7 +218,7 @@ def test_sum_score_probabilities(irt_evaluator: IRTEvaluator, latent_density_met
         # They should add up to 1
         assert torch.isclose(total_score_probs.sum(), torch.tensor(1.0), atol=1e-6)
 
-def test_log_likelihood(irt_evaluator: IRTEvaluator):
+def test_log_likelihood(irt_evaluator: Evaluation):
     # Create synthetic test data
     data = torch.cat(
         [
@@ -268,7 +268,7 @@ def test_log_likelihood(irt_evaluator: IRTEvaluator):
     assert torch.isclose(item_likelihoods[1], torch.tensor(-0.6))
 
 
-def test_accuracy(irt_evaluator: IRTEvaluator):
+def test_accuracy(irt_evaluator: Evaluation):
     # Create synthetic test data
     data = torch.cat(
         [
@@ -306,7 +306,7 @@ def test_accuracy(irt_evaluator: IRTEvaluator):
     assert torch.all((accuracy >= 0) & (accuracy <= 1)), "All values are not between 0 and 1"
 
 
-def test_residuals(irt_evaluator: IRTEvaluator):
+def test_residuals(irt_evaluator: Evaluation):
     # Create synthetic test data
     data = torch.tensor(
         (
@@ -357,7 +357,7 @@ def test_residuals(irt_evaluator: IRTEvaluator):
     assert residuals.shape == (2,)  # We have 2 items
     assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"
 
-def test_infit_outfit(irt_evaluator: IRTEvaluator):
+def test_infit_outfit(irt_evaluator: Evaluation):
     data = torch.tensor([[0, 2], [1, 1]]).float()
     z = torch.randn(2, irt_evaluator.model.latent_variables)
 

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 import torch
 import pytest
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
-from irtorch.irt_plotter import IRTScorer, IRTPlotter, IRTEvaluator
+from irtorch.plotting import IRTScorer, Plotting, IRTEvaluator
 from irtorch.models import BaseIRTModel
 
 
@@ -49,7 +49,7 @@ def irt_plotter(latent_variables):
 
     mock_evaluator = MagicMock(spec=IRTEvaluator)
 
-    return IRTPlotter(mock_model, mock_algorithm, mock_evaluator, mock_scorer)
+    return Plotting(mock_model, mock_algorithm, mock_evaluator, mock_scorer)
 
 
 # def test_plot_training_history(irt_plotter: IRTPlotter):

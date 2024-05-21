@@ -49,7 +49,32 @@ class BaseIRTModel(ABC, nn.Module):
         self.model_missing = model_missing
         self.algorithm = None
 
+        # self._scoring = None
+        self._bit_scales = None
+        self._evaluation = None
+        self._plotting = None
 
+    @property
+    def bit_scales(self):
+        if self._bit_scales is None:
+            from ..bit_scales import BitScales
+            self._bit_scales = BitScales(self)
+        return self._bit_scales
+
+    @property
+    def evaluation(self):
+        if self._evaluation is None:
+            from ..evaluation import Evaluation
+            self._evaluation = Evaluation(self)
+        return self._evaluation
+
+    @property
+    def plotting(self):
+        if self._plotting is None:
+            from ..plotting import Plotting
+            self._plotting = Plotting(self)
+        return self._plotting
+    
     @abstractmethod
     def forward(self, z) -> torch.Tensor:
         """
@@ -610,3 +635,38 @@ class BaseIRTModel(ABC, nn.Module):
             return information
         else:
             return information.nansum(dim=1) # sum over items
+        
+
+    @torch.inference_mode()
+    def _z_grid(self, z_scores: torch.Tensor, grid_size: int = None):
+        """
+        Returns a new z score tensor covering a large range of latent variable values in a grid.
+        
+        Parameters
+        ----------
+        z_scores: torch.Tensor
+            The input test scores. Typically obtained from the training data.
+        grid_size: int
+            The number of grid points for each latent variable.
+        
+        Returns
+        -------
+        torch.Tensor
+            A tensor with all combinations of latent variable values. Latent variables as columns.
+        """
+        if grid_size is None:
+            grid_size = int(1e7 / (100 ** z_scores.shape[1]))
+        min_vals, _ = z_scores.min(dim=0)
+        max_vals, _ = z_scores.max(dim=0)
+        # add / remove 0.25 times the diff minus max and min in the training data
+        plus_minus = (max_vals-min_vals) * 0.25
+        min_vals = min_vals - plus_minus
+        max_vals = max_vals + plus_minus
+
+        # Using linspace to generate a range between min and max for each latent variable
+        grids = [torch.linspace(min_val, max_val, grid_size) for min_val, max_val in zip(min_vals, max_vals)]
+
+        # Use torch.cartesian_prod to generate all combinations of the tensors in grid
+        result = torch.cartesian_prod(*grids)
+        # Ensure result is always a 2D tensor even with 1 latent variable
+        return result.view(-1, z_scores.shape[1])

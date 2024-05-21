@@ -1,5 +1,4 @@
 import logging
-from .irt import IRT
 
 __version__ = "0.1.0"
 

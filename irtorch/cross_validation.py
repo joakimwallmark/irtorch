@@ -4,12 +4,12 @@ import copy
 import pandas as pd
 from itertools import product
 import torch.multiprocessing as mp
-from irtorch.irt import IRT
+from irtorch.models import BaseIRTModel
 
 logger = logging.getLogger("irtorch")
 
 def cross_validation(
-    irt_model: IRT,
+    model: BaseIRTModel,
     data: torch.Tensor,
     folds: int,
     params_grid: dict,
@@ -48,7 +48,8 @@ def cross_validation(
 
     First, we import necessary modules, load the data and split it into a training and testing set:
 
-    >>> from irtorch import IRT
+    >>> from irtorch.models import MonotoneNN
+    >>> from irtorch.estimation_algorithms import AE
     >>> from irtorch.load_dataset import swedish_national_mathematics_2
     >>> from irtorch.utils import split_data
     >>> from irtorch.cross_validation import cross_validation
@@ -57,7 +58,7 @@ def cross_validation(
 
     Next, we initialize the IRT model:
 
-    >>> irt_model = IRT(data=data_math)
+    >>> model = MonotoneNN(data=data_math)
 
     We then set up a grid of parameters for cross-validation:
 
@@ -69,7 +70,7 @@ def cross_validation(
     Finally, we perform cross-validation to find a good set of parameters:
 
     >>> if __name__ == '__main__':
-    ...     result = cross_validation(irt_model, data=train_data, folds=5, params_grid=params_grid, z_estimation_method='NN', device='cpu')
+    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, z_estimation_method='NN', device='cpu', algorithm = AE())
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
@@ -96,7 +97,7 @@ def cross_validation(
         for fold in range(folds):
             train_data = torch.cat([data_folds[i] for i in range(folds) if i != fold])
             validation_data = data_folds[fold]
-            jobs.append((copy.deepcopy(irt_model), train_data, validation_data, params, z_estimation_method, device))
+            jobs.append((copy.deepcopy(model), train_data, validation_data, params, z_estimation_method, device))
 
     if device == "cpu":
         cores_to_use = mp.cpu_count()
@@ -119,11 +120,11 @@ def cross_validation(
     results = results.groupby(param_comb_names).mean().reset_index()
     return results
 
-def _cv_fold(irt_model : IRT, train_data, validation_data, params, z_estimation_method, device):
+def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, z_estimation_method, device):
     if device == "cpu":
         torch.set_num_threads(1) # One thread per core, to avoid overloading the CPU
 
     irt_model.fit(train_data, device=device, **params)
-    log_likelihood = irt_model.log_likelihood(validation_data, z_estimation_method = z_estimation_method, reduction="sum").item()
+    log_likelihood = irt_model.evaluation.log_likelihood(validation_data, z_estimation_method = z_estimation_method, reduction="sum").item()
 
     return {**params, "log_likelihood": log_likelihood}

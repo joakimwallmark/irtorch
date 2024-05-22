@@ -27,10 +27,6 @@ class Evaluation:
         ----------
         model : BaseIRTModel
             BaseIRTModel object.
-        algorithm : BaseIRTAlgorithm
-            BaseIRTAlgorithm object.
-        scorer : IRTScorer
-            IRTScorer object used to obtain latent variable scores.
         """
         self.model = model
         self.latent_density = None
@@ -803,11 +799,11 @@ class Evaluation:
         if population_data is not None or (
             (
                 latent_density_method != "qmvn"
-                or not isinstance(self.model.latent_density, QuantileMVNormal)
+                or not isinstance(self.latent_density, QuantileMVNormal)
             )
             and (
                 latent_density_method != "gmm"
-                or not isinstance(self.model.latent_density, GaussianMixtureModel)
+                or not isinstance(self.latent_density, GaussianMixtureModel)
             )
         ):
             self.approximate_latent_density(
@@ -830,7 +826,7 @@ class Evaluation:
             # Add an extra dimension for 1D models to make it a 2D tensor with 1 column
             z_scores = z_scores.unsqueeze(1)
 
-        weights = self.model.evaluation.latent_density.pdf(z_scores)
+        weights = self.latent_density.pdf(z_scores)
         weights = weights / weights.sum()
 
         return z_scores, weights

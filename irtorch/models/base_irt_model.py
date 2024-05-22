@@ -253,6 +253,76 @@ class BaseIRTModel(ABC, nn.Module):
 
         return mean_slopes
 
+    def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
+        r"""
+        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
+
+        Parameters
+        ----------
+        z : torch.Tensor
+            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
+        item : bool, optional
+            Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
+        degrees : list[int], optional
+            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
+        **kwargs : dict, optional
+            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
+            
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the information for each z score. Dimensions are:
+            
+            - By default: (z rows, items, FIM rows, FIM columns).
+            - If degrees are specified: (z rows, items).
+            - If item is False: (z rows, FIM rows, FIM columns).
+            - If degrees are specified and item is False: (z rows).
+
+        Notes
+        -----
+        In the context of IRT, the Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the latent variable(s)
+        :math:`\mathbf{z}`.
+
+        The formula for the Fisher information matrix in the case of multiple parameters is:
+
+        .. math::
+
+            I(\mathbf{z}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right) \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}\right]
+
+        Where:
+
+        - :math:`I(\mathbf{z})` is the Fisher Information Matrix.
+        - :math:`\ell(X; \mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{z}`.
+        - :math:`\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
+        - :math:`\frac{\partial^2 \log f(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
+        
+        For additional details, see :cite:t:`Chang2017`.
+        """
+        if degrees is not None and len(degrees) != self.latent_variables:
+            raise ValueError("There must be one degree for each latent variable.")
+
+        probabilities = self.item_probabilities(z.clone())
+        gradients = self.probability_gradients(z).detach()
+
+        # squared gradient matrices for each latent variable
+        # Uses einstein summation with batch permutation ...
+        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
+        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
+        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
+
+        if degrees is not None and z.shape[1] > 1:
+            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
+            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
+            information = torch.einsum("i,...ij,j->...", cos_degrees, information_matrices, cos_degrees)
+        else:
+            information = information_matrices
+
+        if item:
+            return information
+        else:
+            return information.nansum(dim=1) # sum over items
+
     def item_z_relationship_directions(self, z: torch.Tensor) -> torch.Tensor:
         """
         Get the relationships between each item and latent variable for a fitted model.
@@ -531,17 +601,26 @@ class BaseIRTModel(ABC, nn.Module):
                 raise ValueError("Please fit the model before computing latent scores.")
             train_z_scores = self.algorithm.training_z_scores
             z_grid = self._z_grid(train_z_scores, grid_size=grid_points)
+            # Center the data and compute the covariance matrix.
+            mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
+            cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
         else:
             grid_values = torch.linspace(-3, 3, grid_points).view(-1, 1)
             grid_values = grid_values.expand(-1, self.latent_variables).contiguous()
-            columns = [grid_values[:, i] for i in range(grid_values.size(1))]
-            z_grid = torch.cartesian_prod(*columns)
+            if self.latent_variables == 1:
+                z_grid = grid_values
+            else:
+                columns = [grid_values[:, i] for i in range(grid_values.size(1))]
+                z_grid = torch.cartesian_prod(*columns)
 
-        # Center the data and compute the covariance matrix.
-        mean_centered_z_scores = train_z_scores - train_z_scores.mean(dim=0)
-        cov_matrix = mean_centered_z_scores.T @ mean_centered_z_scores / (train_z_scores.shape[0] - 1)
+            if hasattr(self.algorithm, "covariance_matrix"):
+                cov_matrix = self.algorithm.covariance_matrix
+            else:
+                cov_matrix = torch.eye(self.latent_variables)
+
         # Create prior (multivariate normal distribution).
-        prior_density = MultivariateNormal(torch.zeros(train_z_scores.shape[1]), cov_matrix)
+        means = torch.zeros(self.latent_variables)
+        prior_density = MultivariateNormal(means, cov_matrix)
         # Compute log of the prior.
         log_prior = prior_density.log_prob(z_grid)
 
@@ -565,77 +644,6 @@ class BaseIRTModel(ABC, nn.Module):
         posterior_times_z = replicated_z_grid * posterior
         expected_z = posterior_times_z.reshape(-1, z_grid.shape[0], posterior_times_z.shape[1])
         return expected_z.sum(dim=1).to(dtype=torch.float32)
-
-    def information(self, z: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
-        r"""
-        Calculate the Fisher information matrix (FIM) for the z scores (or the information in the direction supplied by degrees).
-
-        Parameters
-        ----------
-        z : torch.Tensor
-            A 2D tensor containing latent variable z scores for which to compute the information. Each column represents one latent variable.
-        item : bool, optional
-            Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
-        degrees : list[int], optional
-            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
-        **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
-            
-        Returns
-        -------
-        torch.Tensor
-            A tensor with the information for each z score. Dimensions are:
-            
-            - By default: (z rows, items, FIM rows, FIM columns).
-            - If degrees are specified: (z rows, items).
-            - If item is False: (z rows, FIM rows, FIM columns).
-            - If degrees are specified and item is False: (z rows).
-
-        Notes
-        -----
-        In the context of IRT, the Fisher information matrix measures the amount of information
-        that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\mathbf{z}`.
-
-        The formula for the Fisher information matrix in the case of multiple parameters is:
-
-        .. math::
-
-            I(\mathbf{z}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right) \left(\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}\right]
-
-        Where:
-
-        - :math:`I(\mathbf{z})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \mathbf{z})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{z}`.
-        - :math:`\frac{\partial \ell(X; \mathbf{z})}{\partial \mathbf{z}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
-        - :math:`\frac{\partial^2 \log f(X; \mathbf{z})}{\partial \mathbf{z} \partial \mathbf{z}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{z}`.
-        
-        For additional details, see :cite:t:`Chang2017`.
-        """
-        if degrees is not None and len(degrees) != self.latent_variables:
-            raise ValueError("There must be one degree for each latent variable.")
-
-        probabilities = self.item_probabilities(z.clone())
-        gradients = self.probability_gradients(z).detach()
-
-        # squared gradient matrices for each latent variable
-        # Uses einstein summation with batch permutation ...
-        squared_grad_matrices = torch.einsum("...i,...j->...ij", gradients, gradients)
-        information_matrices = squared_grad_matrices / probabilities.unsqueeze(-1).unsqueeze(-1).expand_as(squared_grad_matrices)
-        information_matrices = information_matrices.nansum(dim=2) # sum over item categories
-
-        if degrees is not None and z.shape[1] > 1:
-            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
-            # For each z and item: Matrix multiplication cos_degrees^T @ information_matrix @ cos_degrees
-            information = torch.einsum("i,...ij,j->...", cos_degrees, information_matrices, cos_degrees)
-        else:
-            information = information_matrices
-
-        if item:
-            return information
-        else:
-            return information.nansum(dim=1) # sum over items
-        
 
     @torch.inference_mode()
     def _z_grid(self, z_scores: torch.Tensor, grid_size: int = None):
@@ -670,3 +678,41 @@ class BaseIRTModel(ABC, nn.Module):
         result = torch.cartesian_prod(*grids)
         # Ensure result is always a 2D tensor even with 1 latent variable
         return result.view(-1, z_scores.shape[1])
+
+    def save_model(self, path: str) -> None:
+        """
+        Save the fitted model.
+
+        Parameters
+        -------
+        path : str
+            Where to save fitted model.
+        """
+        to_save = {
+            "model_state_dict": self.state_dict(),
+            "algorithm": self.algorithm,
+            # "train_data": self.algorithm.train_data,
+            # "training_z_scores": self.algorithm.training_z_scores,
+            # "training_history": self.algorithm.training_history,
+        }
+        torch.save(to_save, path)
+
+    def load_model(self, path: str) -> None:
+        """
+        Loads the model from a file. The initialized model should have the same structure and hyperparameter settings as the fitted model that is being loaded (e.g., the same number of latent variables).
+
+        Parameters
+        -------
+        path : str
+            Where to load fitted model from.
+        """
+        checkpoint = torch.load(path)
+        self.load_state_dict(checkpoint["model_state_dict"])
+        if "algorithm" in checkpoint:
+            self.algorithm = checkpoint["algorithm"]
+        # if "train_data" in checkpoint:
+        #     self.algorithm.train_data = checkpoint["train_data"]
+        # if "training_z_scores" in checkpoint:
+        #     self.algorithm.training_z_scores = checkpoint["training_z_scores"]
+        # if "training_history" in checkpoint:
+        #     self.algorithm.training_history = checkpoint["training_history"]

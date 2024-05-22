@@ -3,7 +3,8 @@ import random
 import pytest
 import torch
 import numpy as np
-from irtorch.irt import IRT
+from irtorch.models import MonotoneNN
+from irtorch.estimation_algorithms import AE, VAE, BaseIRTAlgorithm
 from irtorch._internal_utils import PytorchIRTDataset
 from irtorch.utils import get_item_categories
 
@@ -16,7 +17,7 @@ def device(request):
     return request.param
 
 # This fixture runs once per module, regardless of how many tests invoke it...
-@pytest.fixture(scope="module", params=["VAE", "AE"])
+@pytest.fixture(scope="module", params=[VAE, AE])
 def fitting_algorithm(request):
     return request.param
 
@@ -34,7 +35,7 @@ def data(data_type):
         return torch.load("tests/datasets/test_data_mc.pt")
 
 @pytest.fixture(scope="module")
-def model(device, latent_variables, data, data_type, fitting_algorithm):
+def model(device, latent_variables, data, data_type, fitting_algorithm: BaseIRTAlgorithm):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("GPU is not available.")
     one_hot_encoded=False
@@ -49,25 +50,25 @@ def model(device, latent_variables, data, data_type, fitting_algorithm):
         n_cats = get_item_categories(data)
 
     torch.manual_seed(125)
-    model = IRT(
-        estimation_algorithm=fitting_algorithm,
+    irt_model = MonotoneNN(
         latent_variables=latent_variables,
         item_categories=n_cats,
-        one_hot_encoded=one_hot_encoded,
         mc_correct=correct_cat
     )
     # check if file exists
     file_path = f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt"
     if os.path.isfile(file_path):
-        model.load_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
+        irt_model.load_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
     else:
-        model.fit(
+        irt_model.fit(
             train_data=data,
+            algorithm=fitting_algorithm(),
+            one_hot_encoded=one_hot_encoded,
             device=device
         )
-        model.save_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
+        irt_model.save_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
 
-    return model
+    return irt_model
 
 @pytest.fixture(scope="module")
 def item_categories():

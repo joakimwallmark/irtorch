@@ -1,105 +1,67 @@
 import pytest
 import torch
-from utils import initialize_fit
-from irtorch.estimation_algorithms.vae import VAE
-from irtorch.models import MonotoneNN
+from irtorch.estimation_algorithms.vae import VAE, VariationalEncoder
+from irtorch.models import MonotoneNN, BaseIRTModel
 
 
 # The @pytest.fixture decorator is used to create fixture methods.
 # This method is called once per test method that uses it, and its return value is passed to the test method as an argument.
 # pytest.fixture with params creates two fixtures, one for the CPU and one for the GPU.
 # The ids parameter is used to give the tests meaningful names
-class TestVAIRT:
+class TestVAE:
     @pytest.fixture()
-    def algorithm(self, device, latent_variables, item_categories, data_loaders):
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("GPU is not available.")
-
+    def irt_model(self, latent_variables, item_categories):
         model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories,
             hidden_dim = [3]
         )
-        algorithm = VAE(
-            model=model,
-            hidden_layers_encoder=[20],  # 1 hidden layer with 20 neurons
-            nonlinear_encoder=torch.nn.ELU()
-        )
+        return model
 
+    @pytest.fixture()
+    def algorithm(self, irt_model: BaseIRTModel, data_loaders, latent_variables, item_categories):
+        algorithm = VAE()
+        algorithm.imputation_method = "zero"
+        algorithm.one_hot_encoded = False
         # Set DataLoaders from the fixture
         algorithm.data_loader, algorithm.validation_data_loader = data_loaders
 
-        initialize_fit(algorithm)
+        algorithm.encoder = VariationalEncoder(
+            input_dim=len(item_categories),
+            latent_variables=latent_variables,
+            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+        )
         return algorithm
 
     @pytest.fixture()
-    def algorithm_small_data(
-        self, latent_variables, item_categories_small, data_loaders_small
-    ):
-        # same weights and biases every time
-        torch.manual_seed(0)
+    def irt_model_small(self, latent_variables, item_categories_small):
         model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories_small,
             hidden_dim = [3]
         )
-        algorithm = VAE(
-            model=model,
-            hidden_layers_encoder=[20],  # 1 hidden layer with 20 neurons
-            nonlinear_encoder=torch.nn.ELU()
-        )
+        return model
 
+    @pytest.fixture()
+    def algorithm_small_data(self, irt_model: BaseIRTModel, data_loaders_small, latent_variables, item_categories_small):
+        algorithm = VAE()
+        algorithm.imputation_method = "zero"
+        algorithm.one_hot_encoded = False
         # Set DataLoaders from the fixture
         algorithm.data_loader, algorithm.validation_data_loader = data_loaders_small
 
-        initialize_fit(algorithm)
+        algorithm.encoder = VariationalEncoder(
+            input_dim=len(item_categories_small),
+            latent_variables=latent_variables,
+            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+        )
         return algorithm
 
-    def test_forward(self, algorithm: VAE, test_data):
-        algorithm.iw_samples = 1
-        output = algorithm(test_data)
-        assert len(output) == 4
-        assert output[0].shape == (
-            algorithm.iw_samples * 120,
-            max(algorithm.model.modeled_item_responses)*len(algorithm.model.modeled_item_responses),
-        )
-        assert output[1].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-        assert output[2].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-        assert output[3].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-        algorithm.iw_samples = 10
-        output = algorithm(test_data)
-        assert len(output) == 4
-        assert output[0].shape == (
-            algorithm.iw_samples * 120,
-            max(algorithm.model.modeled_item_responses)*len(algorithm.model.modeled_item_responses),
-        )
-        assert output[1].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-        assert output[2].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-        assert output[3].shape == (
-            algorithm.iw_samples * 120,
-            algorithm.model.latent_variables,
-        )
-
-    def test_latent_scores(self, algorithm: VAE, test_data):
+    def test_z_scores(self, algorithm: VAE, irt_model: BaseIRTModel, test_data):
         output = algorithm.z_scores(test_data)
-        assert output.shape == (120, algorithm.model.latent_variables)
+        assert output.shape == (120, irt_model.latent_variables)
 
-    def test__impute_missing_with_prior(self, algorithm: VAE):
+    def test__impute_missing_with_prior(self, algorithm: VAE, irt_model: BaseIRTModel):
         a, b = 5, 5
         data = torch.full((a, b), 5).float()
         missing_mask = torch.tensor(
@@ -112,8 +74,7 @@ class TestVAIRT:
             ]
         )
 
-        algorithm.imputation_method = "prior"
-        imputed_data = algorithm._impute_missing_with_prior(data, missing_mask)
+        imputed_data = algorithm._impute_missing_with_prior(irt_model, data, missing_mask)
         assert torch.equal(
             torch.full((20,), 5).float(),
             imputed_data[(1 - missing_mask).bool()],
@@ -124,7 +85,7 @@ class TestVAIRT:
         ):
             assert replaced
 
-    def test__mean_scores(self, algorithm: VAE):
+    def test__mean_scores(self, algorithm: VAE, irt_model: BaseIRTModel):
         logits = torch.tensor(
             [
                 [
@@ -148,7 +109,7 @@ class TestVAIRT:
             ]
         )
 
-        means = algorithm._mean_scores(logits)
+        means = algorithm._mean_scores(irt_model, logits)
         assert torch.allclose(
             means,
             torch.tensor([0.3791, 0.9709, 1.0655, 1.6510, 1.5445]),
@@ -159,6 +120,7 @@ class TestVAIRT:
     def test__loss_function(
         self,
         algorithm_small_data: VAE,
+        irt_model_small: BaseIRTModel,
         test_data,
         iw_samples,
         latent_variables,
@@ -179,6 +141,6 @@ class TestVAIRT:
         std = torch.exp(0.5 * logvars)
         z_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
-            test_data[0:2, 0:2], logits, z_samples, means, logvars
+            irt_model_small, test_data[0:2, 0:2], logits, z_samples, means, logvars
         )
         assert loss > 0

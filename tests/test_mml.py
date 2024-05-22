@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import patch
-from utils import initialize_fit
 import torch
 from torch.distributions import MultivariateNormal
 from irtorch.estimation_algorithms import MML
@@ -13,33 +12,32 @@ from irtorch.models import MonotoneNN
 # The ids parameter is used to give the tests meaningful names
 class TestMML:
     @pytest.fixture()
-    def algorithm(self, device, latent_variables, item_categories):
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("GPU is not available.")
-
+    def irt_model(self, latent_variables, item_categories):
         model = MonotoneNN(
             latent_variables = latent_variables,
             item_categories = item_categories,
             hidden_dim = [3]
         )
-        algorithm = MML(model=model)
+        return model
 
+    @pytest.fixture()
+    def algorithm(self, data_loaders):
+        algorithm = MML()
         algorithm.imputation_method = "zero"
-
-        initialize_fit(algorithm)
+        # Set DataLoaders from the fixture
+        algorithm.data_loader, algorithm.validation_data_loader = data_loaders
         return algorithm
 
-    def test_forward(self, algorithm: MML, test_data):
-        output = algorithm.forward(test_data)
-        assert output.shape == (120, algorithm.model.max_item_responses * algorithm.model.items)
-
-    def test__train_step(self, algorithm: MML, test_data: torch.Tensor, device):
+    def test__train_step(self, algorithm: MML, irt_model: MonotoneNN, test_data: torch.Tensor):
+        algorithm.optimizer = torch.optim.Adam(
+            list(irt_model.parameters()), lr=0.01, amsgrad=True
+        )
         previous_loss = float("inf")
         latent_grid = torch.linspace(-3, 3, 5).view(-1, 1)
-        latent_grid = latent_grid.expand(-1, algorithm.model.latent_variables).contiguous().to(device)
+        latent_grid = latent_grid.expand(-1, irt_model.latent_variables).contiguous()
         normal_dist = MultivariateNormal(
-            loc=torch.zeros(algorithm.model.latent_variables).to(device),
-            covariance_matrix=torch.eye(algorithm.model.latent_variables).to(device)
+            loc=torch.zeros(irt_model.latent_variables),
+            covariance_matrix=torch.eye(irt_model.latent_variables)
         )
         if latent_grid.size(1) > 1:
             columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
@@ -53,10 +51,11 @@ class TestMML:
         log_weights_rep = log_weights.repeat_interleave(test_data.size(0), dim=0)
 
 
-        algorithm.to(device)
+        algorithm
         for _ in range(2):
             loss = algorithm._train_step(
-                train_data_rep.to(device),
+                irt_model,
+                train_data_rep,
                 latent_combos_rep,
                 log_weights_rep,
                 latent_combos.size(0)
@@ -64,7 +63,7 @@ class TestMML:
             assert loss <= previous_loss  # Loss should decrease
             previous_loss = loss
 
-    def test__impute_missing_zero(self, algorithm: MML):
+    def test__impute_missing_zero(self, algorithm: MML, irt_model: MonotoneNN):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)
@@ -79,7 +78,7 @@ class TestMML:
         )
 
         algorithm.imputation_method = "zero"
-        imputed_data = algorithm._impute_missing(data, missing_mask)
+        imputed_data = algorithm._impute_missing(irt_model, data, missing_mask)
         assert torch.equal(
             imputed_data,
             torch.tensor(
@@ -92,17 +91,17 @@ class TestMML:
                 ]
             ),
         )
-        imputed_data = algorithm._impute_missing(data, no_missing_mask)
+        imputed_data = algorithm._impute_missing(irt_model, data, no_missing_mask)
         assert torch.equal(imputed_data, data)
 
-    # The following is a test for the fit function of the MML class
-    def test_fit(self, algorithm: MML, test_data):
+    def test_fit(self, algorithm: MML, irt_model: MonotoneNN, test_data):
         # Mock the inner functions that would be called during training
         with patch.object(
             algorithm, "_train_step", return_value=torch.tensor(0.5)
         ) as mocked_train_step:
             # Call fit function
             algorithm.fit(
+                model=irt_model,
                 train_data=test_data[0:100],
                 max_epochs=5
             )

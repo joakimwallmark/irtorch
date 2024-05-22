@@ -247,7 +247,7 @@ class AE(BaseIRTAlgorithm):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
             if batch.shape[0] < 4 and self.batch_normalization:
                 continue
-            batch = self._impute_missing(model, batch, mask)
+            batch = self._impute_missing(batch, mask)
             self.optimizer.zero_grad()
             batch_loss = self._train_batch(model, batch)
             batch_loss.backward()
@@ -260,7 +260,7 @@ class AE(BaseIRTAlgorithm):
         self.training_history["train_loss"].append(loss)
         return loss
 
-    def _impute_missing(self, model: BaseIRTModel, batch, missing_mask):
+    def _impute_missing(self, batch, missing_mask):
         if torch.sum(missing_mask) > 0:
             if self.imputation_method == "zero":
                 imputed_batch = batch

@@ -51,8 +51,6 @@ def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputati
         if imputation_method == "zero":
             data[data == -1] = 0
         else:
-            # self._impute_missing(data, data.isnan())
-            # see also helper_function impute_missing
             raise NotImplementedError("Imputation methods not implemented yet")
 
     return data

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 import torch
 from torch.nn.functional import softmax
 import pytest
-from irtorch.evaluation import Evaluation, Scoring
+from irtorch.evaluation import Evaluation
 from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
 from irtorch.quantile_mv_normal import QuantileMVNormal

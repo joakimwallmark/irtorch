@@ -56,6 +56,15 @@ class BaseIRTModel(ABC, nn.Module):
 
     @property
     def bit_scales(self):
+        """
+        Various bit scale related functions as described in :class:`irtorch.BitScales`.
+        Bit scales are used to put the latent variable scores on a metric scale.
+
+        Returns
+        -------
+        BitScales
+            An instance of the :class:`irtorch.BitScales` class.
+        """
         if self._bit_scales is None:
             from ..bit_scales import BitScales
             self._bit_scales = BitScales(self)
@@ -446,14 +455,15 @@ class BaseIRTModel(ABC, nn.Module):
                     one_hot_data = one_hot_encode_test_data(data, self.item_categories, encode_missing=self.model_missing)
                     if hasattr(self.algorithm, "z_scores"):
                         z = self.algorithm.z_scores(one_hot_data).clone()
-                else:
-                    data = fix_missing_values(data, self.model_missing, imputation_method="zero")
+
+            data = fix_missing_values(data, self.model_missing, imputation_method="zero")
+            
+            if z_estimation_method in ["NN", "ML", "MAP"]:
+                if not hasattr(self.algorithm, "one_hot_encoded") or (hasattr(self.algorithm, "one_hot_encoded") and not self.algorithm.one_hot_encoded):
                     if hasattr(self.algorithm, "z_scores"):
                         z = self.algorithm.z_scores(data).clone()
                     else:
                         z = torch.zeros(data.shape[0], self.latent_variables).float()
-            else:
-                data = fix_missing_values(data, self.model_missing, imputation_method="zero")
 
             if z_estimation_method in ["ML", "MAP"]:
                 z = self._ml_map_z_scores(data, z, z_estimation_method, learning_rate=lbfgs_learning_rate, device=ml_map_device)
@@ -510,7 +520,7 @@ class BaseIRTModel(ABC, nn.Module):
                 elif hasattr(self.algorithm, "covariance_matrix"):
                     prior_density = MultivariateNormal(torch.zeros(self.latent_variables), self.algorithm.covariance_matrix)
 
-            # Ensure decoder parameters gradients are not updated
+            # Ensure model parameters gradients are not updated
             self.requires_grad_(False)
 
             if encoder_z_scores is None:

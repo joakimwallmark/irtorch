@@ -78,18 +78,6 @@ def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
 
 @pytest.fixture
 def evaluation(irt_model: BaseIRTModel):
-    # def min_max_z_for_integration_mock(z):
-    #     z_min = z.min(dim=0)[0]
-    #     z_max = z.max(dim=0)[0]
-    #     z_stds = z.std(dim=0)
-    #     return z_min - z_stds, z_max + z_stds
-
-    # Mock latent density pdf function
-    # mock_bit_scales.bit_scores_from_z = MagicMock(side_effect=bit_scores_from_z_mock)
-    # mock_bit_scales.min_max_z_for_integration = MagicMock(
-    #     side_effect=min_max_z_for_integration_mock
-    # )
-    
     def pdf_mock(z):
         return torch.rand(z.shape[0])
 

@@ -7,11 +7,11 @@ from irtorch.estimation_algorithms import VAE, AE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import (
-    impute_missing,
     conditional_score_distribution,
     sum_incorrect_probabilities,
     fix_missing_values
 )
+from irtorch.utils import impute_missing
 
 if TYPE_CHECKING:
     from irtorch.models.base_irt_model import BaseIRTModel
@@ -19,15 +19,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger("irtorch")
 
 class Evaluation:
-    def __init__(self, model: BaseIRTModel):
-        """
-        Initializes the IRTEvaluator class.
+    """
+    Class for evaluating IRT model performance using various metrics.
 
-        Parameters
-        ----------
-        model : BaseIRTModel
-            BaseIRTModel object.
-        """
+    Parameters
+    ----------
+    model : BaseIRTModel
+        The IRT model to evaluate.
+    """
+    def __init__(self, model: BaseIRTModel):
         self.model = model
         self.latent_density = None
 
@@ -65,6 +65,10 @@ class Evaluation:
 
         if z is None:
             z = self.model.latent_scores(data=data, z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
+
+        if self.model.model_missing:
+            data[data.isnan()] = -1
+            data = data + 1
 
         data = fix_missing_values(data)
         
@@ -656,7 +660,7 @@ class Evaluation:
         return sum_score_probabilities.sum(dim=0)
 
     @torch.inference_mode()
-    def min_max_z_for_integration(
+    def _min_max_z_for_integration(
         self,
         z: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -811,7 +815,7 @@ class Evaluation:
             )
 
         # get the min/max points for integration
-        min_z, max_z = self.min_max_z_for_integration(z_scores)
+        min_z, max_z = self._min_max_z_for_integration(z_scores)
 
         # Create a list of linspace tensors for each dimension
         lin_spaces = [

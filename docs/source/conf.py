@@ -41,3 +41,6 @@ html_theme_options = {
     "logo_only": True,
     "display_version": False,
 }
+# register css file
+# Required to hide cells with hidde-input tag 
+html_css_files = ['custom.css']

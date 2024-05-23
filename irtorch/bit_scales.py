@@ -13,6 +13,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger("irtorch")
 
 class BitScales:
+    """
+    Class for bit scale related features.
+
+    Parameters
+    ----------
+    model : BaseIRTModel
+        The IRT model to use for bit scale computation.
+    """
     def __init__(self, model: BaseIRTModel):
         self.model = model
 

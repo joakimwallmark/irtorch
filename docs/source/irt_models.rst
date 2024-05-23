@@ -1,5 +1,11 @@
+.. _irt_models:
+
 IRT models
 ==================
+
+.. autoclass:: irtorch.models.BaseIRTModel
+    :show-inheritance:
+    :members:
 
 .. autoclass:: irtorch.models.OneParameterLogistic
     :show-inheritance:
@@ -15,7 +21,3 @@ IRT models
 
 .. autoclass:: irtorch.models.MonotoneNN
     :show-inheritance:
-
-.. autoclass:: irtorch.models.BaseIRTModel
-    :show-inheritance:
-    :members:

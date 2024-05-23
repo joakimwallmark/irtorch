@@ -30,6 +30,9 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
 
    irt_models
    estimation_algorithms
+   evaluation
+   plotting
+   bit_scales
    config
    datasets
    cross_validation

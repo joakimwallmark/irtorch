@@ -18,18 +18,12 @@ logger = logging.getLogger("irtorch")
 
 class Plotting:
     """
-    Initializes the IRTPlotter class with a given model, fitting algorithm, scorer and evaluator.
+    Plotting class for IRT models.
 
     Parameters
     ----------
     model : BaseIRTModel
-        BaseIRTModel object.
-    algorithm : BaseIRTAlgorithm
-        BaseIRTAlgorithm object.
-    scorer : IRTScorer
-        IRTScorer object used to obtain latent variable scores.
-    evaluator : IRTEvaluator
-        IRTEvaluator object used to obtain evaluation measures.
+        The IRT model to use for plotting.
     """
     def __init__(
         self, model: BaseIRTModel
@@ -112,7 +106,7 @@ class Plotting:
             The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
-                title : str, optional
+        title : str, optional
             The title for the plot. (default is None)
         x_label : str, optional
             The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
@@ -439,7 +433,7 @@ class Plotting:
         elif len(fixed_zs) is not model_dim - len(latent_variables):
             raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")
 
-        min_z, max_z = self.model.evaluation.min_max_z_for_integration()
+        min_z, max_z = self.model.evaluation._min_max_z_for_integration()
         if z_range is None:
             z_range = min_z[latent_indices[0]].item(), max_z[latent_indices[0]].item()
         if second_z_range is None and len(latent_indices) > 1:
@@ -944,8 +938,14 @@ class Plotting:
 
         # Plot each response category
         for i in range(prob_matrix.shape[1]):
-            response_text = f"Option {i+1}" if self.model.mc_correct is not None else f"{i}"
-            response_to_show = i+1 if self.model.mc_correct is not None else i
+            if self.model.model_missing:
+                if i == 0:
+                    response_text = "Missing"
+                else:
+                    response_text = f"Option {i}" if self.model.mc_correct is not None else f"{i}"
+            else:
+                response_text = f"Option {i+1}" if self.model.mc_correct is not None else f"{i}"
+
             color = colors[i % len(colors)]  # Ensure color wraps around if more categories than colors
             fig.add_trace(go.Scatter(
                 x=latent_scores,
@@ -956,11 +956,22 @@ class Plotting:
             ))
 
             if latent_group_means is not None and group_probs_data is not None and group_probs_model is not None:
+                if self.model.model_missing:
+                    if i == 0:
+                        data_text = "Data missing"
+                        model_text = "Model missing"
+                    else:
+                        data_text = f"Data {i}" if self.model.mc_correct is not None else f"{i}"
+                        model_text = f"Model {i}" if self.model.mc_correct is not None else f"{i}"
+                else:
+                    data_text = f"Data {i+1}" if self.model.mc_correct is not None else f"{i}"
+                    model_text = f"Model {i+1}" if self.model.mc_correct is not None else f"{i}"
+
                 # Adding scatter plot for group data
                 fig.add_trace(go.Scatter(
                     x=latent_group_means,
                     y=group_probs_data[:, i],
-                    mode="markers", name=f"Data {response_to_show}",
+                    mode="markers", name=data_text,
                     marker=dict(symbol="circle-open", color=color)
                 ))
                 # Adding scatter plot for group model predictions
@@ -968,7 +979,7 @@ class Plotting:
                     x=latent_group_means,
                     y=group_probs_model[:, i],
                     mode="markers",
-                    name=f"Model {response_to_show}",
+                    name=model_text,
                     marker=dict(symbol="circle", color=color)
                 ))
 

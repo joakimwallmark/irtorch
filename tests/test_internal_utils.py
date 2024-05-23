@@ -9,8 +9,7 @@ from irtorch._internal_utils import (
     sum_incorrect_probabilities,
     entropy,
     output_to_item_entropy,
-    impute_missing,
-    random_guessing_data
+    random_guessing_data,
 )
 
 @pytest.fixture(scope="module")
@@ -60,7 +59,7 @@ def logits(device):
 def test_is_jupyter():
     assert is_jupyter() is False
 
-def testdynamic_print(capsys):
+def test_dynamic_print(capsys):
     dynamic_print("arg1\narg2")
 
     # Capture the output again after calling dynamic_print
@@ -191,23 +190,6 @@ def test_output_to_item_entropy():
     # Test with invalid input (length of item_categories is not equal to the second dimension of output divided by the sum of item_categories)
     with pytest.raises(ValueError):
         output_to_item_entropy(output, [2, 2, 3, 2, 2])
-
-def test_impute_missing():
-    data = torch.tensor([[1, 2, 1, -1], [-1, float("nan"), 0, 2], [-1, float("nan"), 1, 2]])
-    # mc_correct is corresponds to correct item category and not correct score (2 means score 1 is correct)
-    mc_correct = [2, 3, 2, 3]
-    imputed_data = impute_missing(data = data.clone())
-    assert (imputed_data == torch.tensor([[1, 2, 1, 0], [0, 0, 0, 2], [0, 0, 1, 2]])).all()
-
-    imputed_data = impute_missing(data = data, mc_correct=mc_correct, item_categories=[3, 3, 2, 3])
-    missing_mask = torch.logical_or(data == -1, data.isnan())
-    assert (imputed_data[missing_mask] > -1).all() # all missing are replaced
-    assert (imputed_data[~missing_mask] == data[~missing_mask]).all() # non missing are still the same
-    assert imputed_data[0, 3] != 2 # we did not replace with true values
-    assert imputed_data[1, 0] != 1
-    assert imputed_data[1, 1] != 2
-    assert imputed_data[2, 0] != 1
-    assert imputed_data[2, 1] != 2
 
 def test_random_guessing_data():
     # Test non multiple choice data

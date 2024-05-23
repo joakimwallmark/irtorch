@@ -28,7 +28,6 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    :maxdepth: 2
    :caption: API Reference 📖
 
-   irt
    irt_models
    estimation_algorithms
    config

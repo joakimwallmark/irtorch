@@ -14,7 +14,7 @@ def cross_validation(
     folds: int,
     params_grid: dict,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    z_estimation_method: str = "ML",
+    theta_estimation: str = "ML",
     **kwargs
 ) -> pd.DataFrame:
     """
@@ -30,8 +30,8 @@ def cross_validation(
         The number of folds to use for cross-validation.
     params_grid : dict
         The hyperparameters to use for cross-validation. All need to be arguments for the model fit method.
-    z_estimation_method : str, optional
-        Method used to obtain the z scores. Also used for bit scores as they require the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+    theta_estimation : str, optional
+        Method used to obtain the theta scores. Also used for bit scores as they require the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
     device : str, optional
         The device to use for training. Can be 'cpu' for CPU or 'cuda' for GPU (if available). The default is 'cuda' if a GPU is available, otherwise 'cpu'.
     **kwargs
@@ -70,7 +70,7 @@ def cross_validation(
     Finally, we perform cross-validation to find a good set of parameters:
 
     >>> if __name__ == '__main__':
-    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, z_estimation_method='NN', device='cpu', algorithm = AE())
+    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = AE())
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
@@ -97,7 +97,7 @@ def cross_validation(
         for fold in range(folds):
             train_data = torch.cat([data_folds[i] for i in range(folds) if i != fold])
             validation_data = data_folds[fold]
-            jobs.append((copy.deepcopy(model), train_data, validation_data, params, z_estimation_method, device))
+            jobs.append((copy.deepcopy(model), train_data, validation_data, params, theta_estimation, device))
 
     if device == "cpu":
         cores_to_use = mp.cpu_count()
@@ -120,11 +120,11 @@ def cross_validation(
     results = results.groupby(param_comb_names).mean().reset_index()
     return results
 
-def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, z_estimation_method, device):
+def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, theta_estimation, device):
     if device == "cpu":
         torch.set_num_threads(1) # One thread per core, to avoid overloading the CPU
 
     irt_model.fit(train_data, device=device, **params)
-    log_likelihood = irt_model.evaluation.log_likelihood(validation_data, z_estimation_method = z_estimation_method, reduction="sum").item()
+    log_likelihood = irt_model.evaluation.log_likelihood(validation_data, theta_estimation = theta_estimation, reduction="sum").item()
 
     return {**params, "log_likelihood": log_likelihood}

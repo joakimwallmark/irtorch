@@ -8,7 +8,7 @@ def test_forward():
     model = NominalResponse(
         latent_variables = 2,
         item_categories=[2, 3, 3],
-        item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
+        item_theta_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
         reference_category=True
     )
     original_weights = model.weight_param.clone()
@@ -17,11 +17,11 @@ def test_forward():
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [0, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
 
         loss = -model.log_likelihood(data=data, output=output)
@@ -38,7 +38,7 @@ def test_forward():
     model = NominalResponse(
         latent_variables = 2,
         item_categories=[2, 3, 3],
-        item_z_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
+        item_theta_relationships=torch.tensor([[True, True], [True, True], [False, True]]),
         reference_category=False
     )
     original_weights = model.weight_param.clone()
@@ -47,11 +47,11 @@ def test_forward():
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [0, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
 
         loss = -model.log_likelihood(data=data, output=output)
@@ -68,7 +68,7 @@ def test_item_parameters(latent_variables):
     model = NominalResponse(
         latent_variables = latent_variables,
         item_categories=[2, 3, 4],
-        item_z_relationships=torch.tensor([[True], [True], [True]]).repeat(1, latent_variables)
+        item_theta_relationships=torch.tensor([[True], [True], [True]]).repeat(1, latent_variables)
     )
     parameters = model.item_parameters(irt_format=False)
 
@@ -83,7 +83,7 @@ def test_item_parameters(latent_variables):
     model = NominalResponse(
         latent_variables = latent_variables,
         item_categories=[2, 3, 4],
-        item_z_relationships=torch.tensor([[True], [True], [True]]).repeat(1, latent_variables),
+        item_theta_relationships=torch.tensor([[True], [True], [True]]).repeat(1, latent_variables),
         reference_category=True
     )
     parameters = model.item_parameters(irt_format=False)

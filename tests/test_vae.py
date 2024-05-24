@@ -57,8 +57,8 @@ class TestVAE:
         )
         return algorithm
 
-    def test_z_scores(self, algorithm: VAE, irt_model: BaseIRTModel, test_data):
-        output = algorithm.z_scores(test_data)
+    def test_theta_scores(self, algorithm: VAE, irt_model: BaseIRTModel, test_data):
+        output = algorithm.theta_scores(test_data)
         assert output.shape == (120, irt_model.latent_variables)
 
     def test__impute_missing_with_prior(self, algorithm: VAE, irt_model: BaseIRTModel):
@@ -139,8 +139,8 @@ class TestVAE:
             iw_samples, latent_variables
         )
         std = torch.exp(0.5 * logvars)
-        z_samples = means + torch.randn_like(std) * std
+        theta_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
-            irt_model_small, test_data[0:2, 0:2], logits, z_samples, means, logvars
+            irt_model_small, test_data[0:2, 0:2], logits, theta_samples, means, logvars
         )
         assert loss > 0

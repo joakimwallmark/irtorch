@@ -19,7 +19,7 @@ class AE(BaseIRTAlgorithm):
         self.one_hot_encoded = True
         self.batch_normalization = False
         self.encoder = None
-        self.training_z_scores = None
+        self.training_theta_scores = None
         self.data_loader = None
         self.validation_data_loader = None
         self.optimizer = None
@@ -144,17 +144,17 @@ class AE(BaseIRTAlgorithm):
         self.encoder.eval()
         model.eval()
 
-        # store the latent z scores of the training data
+        # store the latent theta scores of the training data
         # used for more efficient computation when using other methods
         if not self.one_hot_encoded:
             if train_data.isnan().any():
                 train_data[train_data.isnan()] = -1
             if model.model_missing:
-                train_data = train_data + 1 # handled in z_scores for nn
+                train_data = train_data + 1 # handled in theta_scores for nn
             else:
                 train_data[train_data == -1] = 0
 
-        self.training_z_scores = self.z_scores(train_data).clone().detach()
+        self.training_theta_scores = self.theta_scores(train_data).clone().detach()
 
     def _training_loop(
         self,
@@ -343,7 +343,7 @@ class AE(BaseIRTAlgorithm):
         return loss, log_likelihood
 
     @torch.inference_mode()
-    def z_scores(self, data: torch.Tensor):
+    def theta_scores(self, data: torch.Tensor):
         """
         Get the latent scores from an input
 

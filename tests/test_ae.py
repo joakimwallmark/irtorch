@@ -36,8 +36,8 @@ class TestAE:
 
         return algorithm
 
-    def test_z_scores(self, algorithm: AE, irt_model: BaseIRTModel, test_data):
-        output = algorithm.z_scores(test_data)
+    def test_theta_scores(self, algorithm: AE, irt_model: BaseIRTModel, test_data):
+        output = algorithm.theta_scores(test_data)
         assert output.shape == (120, irt_model.latent_variables)
 
     def test__train_step(self, algorithm: AE, irt_model: BaseIRTModel):
@@ -58,7 +58,7 @@ class TestAE:
         assert isinstance(log_likelihood, float)
         assert log_likelihood > 0
 
-    def test__impute_missing_zero(self, algorithm: AE, irt_model: BaseIRTModel):
+    def test__impute_missing_thetaero(self, algorithm: AE, irt_model: BaseIRTModel):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)

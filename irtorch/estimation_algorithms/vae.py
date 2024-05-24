@@ -151,17 +151,17 @@ class VAE(AE):
         self.encoder.eval()
         model.eval()
 
-        # store the latent z scores of the training data
+        # store the latent theta scores of the training data
         # used for more efficient computation when using other methods
         if not self.one_hot_encoded:
             if train_data.isnan().any():
                 train_data[train_data.isnan()] = -1
             if model.model_missing:
-                train_data = train_data + 1 # handled in z_scores for nn
+                train_data = train_data + 1 # handled in theta_scores for nn
             else:
                 train_data[train_data == -1] = 0
                 
-        self.training_z_scores = self.z_scores(train_data).clone().detach()
+        self.training_theta_scores = self.theta_scores(train_data).clone().detach()
 
     def _train_batch(self, model: BaseIRTModel, batch):
         """
@@ -184,14 +184,14 @@ class VAE(AE):
         # takes iw_samples from the latent space for each data point (for importance weighting)
         mean = mean.repeat(self.iw_samples, 1)
         logvar = logvar.repeat(self.iw_samples, 1)
-        z_samples = self.reparameterize(mean, logvar)
+        theta_samples = self.reparameterize(mean, logvar)
 
-        batch_logits = model(z_samples)
+        batch_logits = model(theta_samples)
 
         if self.one_hot_encoded:
             # for running with loss_function
             batch = decode_one_hot_test_data(batch, model.modeled_item_responses)
-        batch_loss = self._loss_function(model, batch, batch_logits, z_samples, mean, logvar)
+        batch_loss = self._loss_function(model, batch, batch_logits, theta_samples, mean, logvar)
         return batch_loss
 
     def reparameterize(self, mean, logvar):
@@ -205,7 +205,7 @@ class VAE(AE):
         model: BaseIRTModel,
         data: torch.Tensor,
         logits: torch.Tensor,
-        z_samples: torch.Tensor,
+        theta_samples: torch.Tensor,
         mean: torch.Tensor,
         logvar: torch.Tensor,
     ):
@@ -221,7 +221,7 @@ class VAE(AE):
             The input data.
         logits : torch.Tensor
             The logits output by the model.
-        z_samples : torch.Tensor
+        theta_samples : torch.Tensor
             Samples from the encoder distribution
         mean : torch.Tensor
             Means from the encoder
@@ -233,7 +233,7 @@ class VAE(AE):
         torch.Tensor
             The calculated loss.
         """
-        log_p_x_z = model.log_likelihood(
+        log_p_x_theta = model.log_likelihood(
             data.repeat(self.iw_samples, 1),
             logits,
             loss_reduction="none",
@@ -241,9 +241,9 @@ class VAE(AE):
 
         # Reshape tensor by each iw-sample
         # we need to keep a dimension for each respondent, but we can sum over items
-        log_p_x_z = log_p_x_z.view(
+        log_p_x_theta = log_p_x_theta.view(
             self.iw_samples,
-            log_p_x_z.shape[0] // (self.iw_samples * data.shape[1]),
+            log_p_x_theta.shape[0] // (self.iw_samples * data.shape[1]),
             data.shape[1],
         ).sum(2)
 
@@ -251,16 +251,16 @@ class VAE(AE):
             # ELBO (1 sample) can be computed using the true means and variances
             # sum up kl div for each person (row)
             kl_div = 0.5 * torch.sum(mean.pow(2) + logvar.exp() - 1 - logvar, dim=1)
-            iwae_bound = log_p_x_z - self.annealing_factor * kl_div
+            iwae_bound = log_p_x_theta - self.annealing_factor * kl_div
         else:
-            log_p_z = Normal(0, 1).log_prob(z_samples)
-            log_q_z_x = Normal(mean, torch.exp(0.5 * logvar)).log_prob(z_samples)
-            kl_div = log_q_z_x - log_p_z
+            log_p_theta = Normal(0, 1).log_prob(theta_samples)
+            log_q_theta_x = Normal(mean, torch.exp(0.5 * logvar)).log_prob(theta_samples)
+            kl_div = log_q_theta_x - log_p_theta
             kl_div = kl_div.view(
                 self.iw_samples, kl_div.shape[0] // self.iw_samples, kl_div.shape[1]
             ).sum(2)
 
-            iwae_bound = log_p_x_z - self.annealing_factor * kl_div
+            iwae_bound = log_p_x_theta - self.annealing_factor * kl_div
             if self.iw_samples > 1:
                 iwae_bound = torch.logsumexp(iwae_bound, dim=0) - torch.log(
                     torch.tensor(self.iw_samples).float()
@@ -287,8 +287,8 @@ class VAE(AE):
         """
         encoder_mean, encoder_logvar = self.encoder(batch)
         output = model(encoder_mean)
-        z_sample = self.reparameterize(encoder_mean, encoder_logvar)
-        output_stochastic = model(z_sample)
+        theta_sample = self.reparameterize(encoder_mean, encoder_logvar)
+        output_stochastic = model(theta_sample)
 
         if self.one_hot_encoded:
             # for running with loss_function
@@ -351,12 +351,12 @@ class VAE(AE):
         return mean_scores
 
     @torch.inference_mode()
-    def z_scores(
+    def theta_scores(
         self,
         data: torch.Tensor,
     ):
         """
-        Get the z scores from an input
+        Get the theta scores from an input
 
         Parameters
         ----------

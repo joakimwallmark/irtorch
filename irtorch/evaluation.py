@@ -31,25 +31,25 @@ class Evaluation:
         self.model = model
         self.latent_density = None
 
-    def _evaluate_data_z_input(
+    def _evaluate_data_theta_input(
             self,
             data: torch.Tensor = None,
-            z: torch.Tensor = None,
-            z_estimation_method: str = "ML",
+            theta: torch.Tensor = None,
+            theta_estimation: str = "ML",
             ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
             lbfgs_learning_rate: float = 0.3,
         ):
         """"
-        Helper function for evaluating the data and z inputs for various performance measure methods.
+        Helper function for evaluating the data and theta inputs for various performance measure methods.
 
         Parameters
         ----------
         data : torch.Tensor
             The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         ml_map_device: str, optional
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
@@ -63,8 +63,8 @@ class Evaluation:
         if not self.model.model_missing:
             data = impute_missing(data, self.model.mc_correct, self.model.item_categories)
 
-        if z is None:
-            z = self.model.latent_scores(data=data, z_estimation_method=z_estimation_method, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
+        if theta is None:
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
 
         if self.model.model_missing:
             data[data.isnan()] = -1
@@ -72,13 +72,13 @@ class Evaluation:
 
         data = fix_missing_values(data)
         
-        return data, z
+        return data, theta
 
 
     @torch.inference_mode()
     def approximate_latent_density(
         self,
-        z_scores: torch.Tensor,
+        theta_scores: torch.Tensor,
         approximation: str = "qmvn",
         cv_n_components: list[int] = None,
     ) -> None:
@@ -87,8 +87,8 @@ class Evaluation:
 
         Parameters
         ----------
-        z_scores : torch.Tensor
-            A 2D tensor with z scores. Each row represents one respondent, and each column an item.
+        theta_scores : torch.Tensor
+            A 2D tensor with theta scores. Each row represents one respondent, and each column an item.
         approximation : str, optional
             The approximation method to use. (default is 'qmvn')
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
@@ -104,10 +104,10 @@ class Evaluation:
         """
         if approximation == "gmm":
             cv_n_components = [2, 3, 4, 5, 10] if cv_n_components is None else cv_n_components
-            self.latent_density = self._cv_gaussian_mixture_model(z_scores, cv_n_components)
+            self.latent_density = self._cv_gaussian_mixture_model(theta_scores, cv_n_components)
         elif approximation == "qmvn":
             self.latent_density = QuantileMVNormal()
-            self.latent_density.fit(z_scores)
+            self.latent_density.fit(theta_scores)
         else:
             raise ValueError("Invalid approximation method. Choose either 'qmvn' or 'gmm'.")
 
@@ -147,8 +147,8 @@ class Evaluation:
     def residuals(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
         average_over: str = "none",
     ) -> torch.Tensor:
         """
@@ -161,10 +161,10 @@ class Evaluation:
         ----------
         data : torch.Tensor
             The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         average_over: str = "none", optional
             Whether to average the residuals and over which level. Can be 'everything', 'items', 'respondents' or 'none'. Use 'none' for no average. For example, with 'respondent' the residuals are averaged over all respondents and is thus an average per item. (default is 'none')
             
@@ -173,11 +173,11 @@ class Evaluation:
         torch.Tensor
             The residuals.
         """
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         # 3D tensor with dimensions (respondents, items, item categories)
         if self.model.mc_correct is not None:
-            probabilities = self.model.item_probabilities(z)
+            probabilities = self.model.item_probabilities(theta)
             # Creating a range tensor for slice indices
             respndents = torch.arange(probabilities.size(0)).view(-1, 1)
             # Expand slices to match the shape of indices
@@ -185,7 +185,7 @@ class Evaluation:
             model_probs = probabilities[expanded_respondents, torch.arange(probabilities.size(1)), data.int()]
             residuals = 1 - model_probs
         else:
-            residuals = data - self.model.expected_scores(z, return_item_scores=True)
+            residuals = data - self.model.expected_scores(theta, return_item_scores=True)
 
         if average_over == "items":
             return residuals.mean(dim=1)
@@ -200,13 +200,13 @@ class Evaluation:
     def group_fit_residuals(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        scale: str = "z",
+        theta: torch.Tensor = None,
+        scale: str = "theta",
         latent_variable: int = 1,
         standardize: bool = True,
         groups: int = 10,
-        z_estimation_method: str = "ML",
-        population_z: torch.Tensor = None,
+        theta_estimation: str = "ML",
+        population_theta: torch.Tensor = None,
         **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -220,23 +220,23 @@ class Evaluation:
         ----------
         data : torch.Tensor, optional
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z : torch.Tensor, optional
-            A 2D tensor containing the pre-estimated z scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        theta : torch.Tensor, optional
+            A 2D tensor containing the pre-estimated theta scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'bit' are equivalent. (default is 'z')
+            The grouping method scale, which can either be 'bit' or 'theta'. Note: for uni-dimensional
+            models, 'theta' and 'bit' are equivalent. (default is 'theta')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         standardize : bool, optional
             Specifies whether the residuals should be standardized. (default is True)
         groups: int
             The number of groups. (default is 10)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
-        population_z : torch.Tensor, optional
-            Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        population_theta : torch.Tensor, optional
+            Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_scores_from_z method if scale is 'bit'. See :meth:`bit_scores_from_z` for details.
+            Additional keyword arguments to be passed to the bit_scores_from_theta method if scale is 'bit'. See :meth:`bit_scores_from_theta` for details.
             
         Returns
         -------
@@ -246,12 +246,12 @@ class Evaluation:
         grouped_data_probabilties, grouped_model_probabilties, group_mid_points = \
             self.latent_group_probabilities(
                 data=data,
-                z=z,
+                theta=theta,
                 scale=scale,
                 latent_variable=latent_variable,
                 groups=groups,
-                z_estimation_method=z_estimation_method,
-                population_z=population_z,
+                theta_estimation=theta_estimation,
+                population_theta=population_theta,
                 **kwargs
             )
 
@@ -275,8 +275,8 @@ class Evaluation:
     def accuracy(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
         level: str = "all",
     ):
         """
@@ -286,10 +286,10 @@ class Evaluation:
         ----------
         data : torch.Tensor
             The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         level: str = "all", optional
             Specifies the level at which the accuracy is calculated. Can be 'all', 'item' or 'respondent'. For example, for 'item' the accuracy is calculated for each item. (default is 'all')
 
@@ -298,9 +298,9 @@ class Evaluation:
         torch.Tensor
             The accuracy.
         """
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        probabilities = self.model.item_probabilities(z)
+        probabilities = self.model.item_probabilities(theta)
         accuracy = (torch.argmax(probabilities, dim=2) == data).float()
 
         if level == "item":
@@ -316,8 +316,8 @@ class Evaluation:
     def infit_outfit(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
         level: str = "item",
     ):
         """
@@ -329,10 +329,10 @@ class Evaluation:
         ----------
         data : torch.Tensor
             The input data.
-        z: torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method.
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
         level: str = "item", optional
             Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
 
@@ -365,10 +365,10 @@ class Evaluation:
         if level not in ["item", "respondent"]:
             raise ValueError("Invalid level. Choose either 'item' or 'respondent'.")
 
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        expected_scores = self.model.expected_scores(z, return_item_scores=True)
-        probabilities = self.model.item_probabilities(z)
+        expected_scores = self.model.expected_scores(theta, return_item_scores=True)
+        probabilities = self.model.item_probabilities(theta)
         observed_scores = data
         if self.model.mc_correct is not None:
             score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
@@ -400,8 +400,8 @@ class Evaluation:
     def log_likelihood(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
         reduction: str = "sum",
         level: str = "all",
     ):
@@ -414,10 +414,10 @@ class Evaluation:
         ----------
         data : torch.Tensor, optional
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z : torch.Tensor, optional
-            A 2D tensor containing latent variable z scores. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        theta : torch.Tensor, optional
+            A 2D tensor containing latent variable theta scores. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
         reduction : str, optional
             Specifies the reduction method for the log-likelihood. Can be 'sum', 'none' or 'mean'. (default is 'sum')
         level : str, optional
@@ -428,7 +428,7 @@ class Evaluation:
         torch.Tensor
             The log-likelihood for the provided data.
         """
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         if reduction != "none":
             if level == "item":
@@ -440,14 +440,14 @@ class Evaluation:
 
         likelihoods = self.model.log_likelihood(
             data,
-            self.model(z),
+            self.model(theta),
             loss_reduction="none"
         )
         
         if reduction in "mean":
-            return likelihoods.view(z.shape[0], -1).mean(dim=dim)
+            return likelihoods.view(theta.shape[0], -1).mean(dim=dim)
         if reduction == "sum":
-            return likelihoods.view(z.shape[0], -1).sum(dim=dim)
+            return likelihoods.view(theta.shape[0], -1).sum(dim=dim)
         
         return likelihoods
 
@@ -455,8 +455,8 @@ class Evaluation:
     def group_fit_log_likelihood(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        z_estimation_method: str = "ML",
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
         groups: int = 10,
         latent_variable: int = 1,
     ):
@@ -470,10 +470,10 @@ class Evaluation:
         ----------
         data : torch.Tensor, optional
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z : torch.Tensor, optional
-            A 2D tensor containing the pre-estimated z scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        theta : torch.Tensor, optional
+            A 2D tensor containing the pre-estimated theta scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
         groups: int
             The number of groups. (default is 10)
         latent_variable: int, optional
@@ -484,17 +484,17 @@ class Evaluation:
         torch.Tensor
             The average log-likelihood for each group.
         """
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        indicies = torch.sort(z[:, latent_variable - 1], dim=0)[1]
-        z = z[indicies]
+        indicies = torch.sort(theta[:, latent_variable - 1], dim=0)[1]
+        theta = theta[indicies]
         data = data[indicies]
         likelihoods = self.model.log_likelihood(
             data,
-            self.model(z),
+            self.model(theta),
             loss_reduction="none"
         )
-        respondent_likelihoods = likelihoods.view(z.shape[0], -1).sum(dim=1)
+        respondent_likelihoods = likelihoods.view(theta.shape[0], -1).sum(dim=1)
         group_mean_likelihoods = torch.zeros(groups)
         start_index = 0
         for group in range(groups):
@@ -510,12 +510,12 @@ class Evaluation:
     def latent_group_probabilities(
         self,
         data: torch.Tensor = None,
-        z: torch.Tensor = None,
-        scale: str = "z",
+        theta: torch.Tensor = None,
+        scale: str = "theta",
         latent_variable: int = 1,
         groups: int = 10,
-        z_estimation_method: str = "ML",
-        population_z: torch.Tensor = None,
+        theta_estimation: str = "ML",
+        population_theta: torch.Tensor = None,
         **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -527,22 +527,22 @@ class Evaluation:
         Parameters
         ----------
         data : torch.Tensor, optional
-        z : torch.Tensor, optional
-            The latent variable z scores for the provided data. If not provided, they will be computed using z_estimation_method. (default is None)
+        theta : torch.Tensor, optional
+            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation. (default is None)
         scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'z'. Note: for uni-dimensional
-            models, 'z' and 'bit' are equivalent. (default is 'z')
+            The grouping method scale, which can either be 'bit' or 'theta'. Note: for uni-dimensional
+            models, 'theta' and 'bit' are equivalent. (default is 'theta')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         groups: int
             The number of groups. (default is 10)
-        z_estimation_method : str, optional
-            Method used to obtain the z scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        population_z : torch.Tensor, optional
-            Only for bit scores. The latent variable z scores for the population. If not provided, they will be computed using z_estimation_method with the model training data. (default is None)
+        population_theta : torch.Tensor, optional
+            Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_scores_from_z method.
+            Additional keyword arguments to be passed to the bit_scores_from_theta method.
 
         Returns
         -------
@@ -554,19 +554,19 @@ class Evaluation:
             The third tensor contains the average latent variable values within each group along the specified latent_variable.
         """
 
-        if scale not in ["bit", "z"]:
-            raise ValueError("Invalid scale. Choose either 'z' or 'bit'.")
+        if scale not in ["bit", "theta"]:
+            raise ValueError("Invalid scale. Choose either 'theta' or 'bit'.")
 
-        data, z = self._evaluate_data_z_input(data, z, z_estimation_method)
+        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         if scale == "bit":
-            if population_z is None and data is self.model.algorithm.train_data:
-                population_z = z
+            if population_theta is None and data is self.model.algorithm.train_data:
+                population_theta = theta
             
-            bit_scores, _ = self.model.bit_scales.bit_scores_from_z(
-                z=z,
+            bit_scores, _ = self.model.bit_scales.bit_scores_from_theta(
+                theta=theta,
                 one_dimensional=False,
-                z_estimation_method=z_estimation_method,
+                theta_estimation=theta_estimation,
                 **kwargs
             )
 
@@ -576,10 +576,10 @@ class Evaluation:
             )
             # Use the indices to sort
             bit_scores = bit_scores[indices]
-            z = z[indices]
+            theta = theta[indices]
 
             grouped_bit = torch.chunk(bit_scores, groups)
-            grouped_z = torch.chunk(z, groups)
+            grouped_theta = torch.chunk(theta, groups)
 
             group_mid_points = torch.tensor(
                 [
@@ -587,18 +587,18 @@ class Evaluation:
                     for group in grouped_bit
                 ]
             )
-        elif scale == "z":
-            _, indices = torch.sort(z[:, latent_variable - 1], dim=0)
-            z = z[indices]
-            grouped_z = torch.chunk(z, groups)
+        elif scale == "theta":
+            _, indices = torch.sort(theta[:, latent_variable - 1], dim=0)
+            theta = theta[indices]
+            grouped_theta = torch.chunk(theta, groups)
             group_mid_points = torch.tensor(
-                [group[:, latent_variable - 1].median() for group in grouped_z]
+                [group[:, latent_variable - 1].median() for group in grouped_theta]
             )
 
         data = data[indices]
         grouped_data = torch.chunk(data, groups)
         grouped_data_probabilties = self._grouped_data_probabilities(grouped_data)
-        grouped_model_probabilties = self._grouped_z_probabilities(grouped_z)
+        grouped_model_probabilties = self._grouped_theta_probabilities(grouped_theta)
         return grouped_data_probabilties, grouped_model_probabilties, group_mid_points
 
     @torch.inference_mode()
@@ -617,14 +617,14 @@ class Evaluation:
         latent_density_method : str, optional
             Specifies the method used to approximate the latent space density.
             Possible options are
-            - 'data' averages over the z scores from the population data.
-            - 'encoder sampling' samples z scores from the encoder. Only available for VariationalAutoencoderIRT models
+            - 'data' averages over the theta scores from the population data.
+            - 'encoder sampling' samples theta scores from the encoder. Only available for VariationalAutoencoderIRT models
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
             - 'gmm' for a gaussian mixture model.
         population_data : torch.Tensor, optional
             The population data used for approximating sum score probabilities. Default is None and uses the training data.
         trapezoidal_segments : int, optional
-            The number of integration approximation intervals for each z dimension. (Default is 1000)
+            The number of integration approximation intervals for each theta dimension. (Default is 1000)
         sample_size : int, optional
             Sample size for the 'encoder sampling' method. (Default is 100000)
         Returns
@@ -633,10 +633,10 @@ class Evaluation:
             A 1D tensor with the probability for each total score.
         """
         self._validate_latent_density_method(latent_density_method)
-        z_scores, weights = self._get_z_scores_and_weights(
+        theta_scores, weights = self._get_theta_scores_and_weights(
             latent_density_method, population_data, trapezoidal_segments, sample_size
         )
-        probabilities = self.model.item_probabilities(z_scores)
+        probabilities = self.model.item_probabilities(theta_scores)
         # sum incorrect response option probabilities if MC
         if self.model.mc_correct is not None:
             probabilities = sum_incorrect_probabilities(
@@ -660,57 +660,57 @@ class Evaluation:
         return sum_score_probabilities.sum(dim=0)
 
     @torch.inference_mode()
-    def _min_max_z_for_integration(
+    def _min_max_theta_for_integration(
         self,
-        z: torch.Tensor = None,
+        theta: torch.Tensor = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Retrieve the minimum and maximum z score for approximating integrals over the latent space. Uses one standard deviation below/above the min/max of each z score vector.
+        Retrieve the minimum and maximum theta score for approximating integrals over the latent space. Uses one standard deviation below/above the min/max of each theta score vector.
 
         Parameters
         ----------
-        z : torch.Tensor, optional
-            A 2D tensor. Columns are each latent variable, rows are respondents. Default is None and uses training data z scores.
+        theta : torch.Tensor, optional
+            A 2D tensor. Columns are each latent variable, rows are respondents. Default is None and uses training data theta scores.
 
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            A tuple with 1D tensors, containing the min and max integration z scores of each latent variable.
+            A tuple with 1D tensors, containing the min and max integration theta scores of each latent variable.
         """
-        if z is None:
+        if theta is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                z = self.model.algorithm.training_z_scores
-                z_min = z.min(dim=0)[0]
-                z_max = z.max(dim=0)[0]
-                z_stds = z.std(dim=0)
+                theta = self.model.algorithm.training_theta_scores
+                theta_min = theta.min(dim=0)[0]
+                theta_max = theta.max(dim=0)[0]
+                theta_stds = theta.std(dim=0)
             elif isinstance(self.model.algorithm, MML):
-                z_min = torch.full((self.model.latent_variables,), -3)
-                z_max = torch.full((self.model.latent_variables,), 3)
-                z_stds = torch.ones(self.model.latent_variables)
+                theta_min = torch.full((self.model.latent_variables,), -3)
+                theta_max = torch.full((self.model.latent_variables,), 3)
+                theta_stds = torch.ones(self.model.latent_variables)
         else:
-            z_min = z.min(dim=0)[0]
-            z_max = z.max(dim=0)[0]
-            z_stds = z.std(dim=0)
+            theta_min = theta.min(dim=0)[0]
+            theta_max = theta.max(dim=0)[0]
+            theta_stds = theta.std(dim=0)
 
-        return z_min - z_stds, z_max + z_stds
+        return theta_min - theta_stds, theta_max + theta_stds
 
     @torch.inference_mode()
-    def _grouped_z_probabilities(self, grouped_z: tuple[torch.Tensor, ...]):
+    def _grouped_theta_probabilities(self, grouped_theta: tuple[torch.Tensor, ...]):
         """
         Computes the average probabilities for each potential item response for each group.
 
         Parameters
         ----------
-        grouped_z : tuple[torch.Tensor, ...]
-            A tuple containing 2D tensors. Each tensor represents a group of respondents, with the first dimension corresponding to the respondents and the second dimension representing their latent variables in the form of z-scores.
+        grouped_theta : tuple[torch.Tensor, ...]
+            A tuple containing 2D tensors. Each tensor represents a group of respondents, with the first dimension corresponding to the respondents and the second dimension representing their latent variables in the form of theta-scores.
 
         Returns
         -------
         torch.Tensor
             A 3D torch tensor with group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
         """
-        group_probabilities = torch.zeros(len(grouped_z), len(self.model.modeled_item_responses), max(self.model.modeled_item_responses))
-        for group_i, group in enumerate(grouped_z):
+        group_probabilities = torch.zeros(len(grouped_theta), len(self.model.modeled_item_responses), max(self.model.modeled_item_responses))
+        for group_i, group in enumerate(grouped_theta):
             item_probabilities = self.model.item_probabilities(group)
             group_probabilities[group_i, :, :] = item_probabilities.mean(dim=0)
         return group_probabilities
@@ -752,7 +752,7 @@ class Evaluation:
                 "Encoder sampling is only available for variational autoencoder models."
             )
 
-    def _get_z_scores_and_weights(
+    def _get_theta_scores_and_weights(
         self,
         latent_density_method: str,
         population_data: torch.Tensor,
@@ -763,37 +763,37 @@ class Evaluation:
     ):
         if population_data is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                z_scores = self.model.algorithm.training_z_scores
+                theta_scores = self.model.algorithm.training_theta_scores
             elif isinstance(self.model.algorithm, MML):
-                logger.info("Sampling from multivariate normal as population z scores.")
+                logger.info("Sampling from multivariate normal as population theta scores.")
                 mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.model.algorithm.covariance_matrix)
-                z_scores = mvn.sample((4000,)).to(dtype=torch.float32)
+                theta_scores = mvn.sample((4000,)).to(dtype=torch.float32)
         else:
-            z_scores = self.model.latent_scores(population_data, z_estimation_method="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
+            theta_scores = self.model.latent_scores(population_data, theta_estimation="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
 
         if latent_density_method in ["data", "encoder sampling"]:
             weights = (
-                torch.ones(z_scores.shape[0])
-                / z_scores.shape[0]
+                torch.ones(theta_scores.shape[0])
+                / theta_scores.shape[0]
             )
             if latent_density_method == "encoder sampling":
-                z_scores = self.model.algorithm.sample_latent_variables(
+                theta_scores = self.model.algorithm.sample_latent_variables(
                     sample_size=sample_size, input_data=population_data
                 )
         else:
             (
-                z_scores,
+                theta_scores,
                 weights,
-            ) = self._get_z_scores_and_weights_for_latent_density_methods(
-                latent_density_method, z_scores, population_data, trapezoidal_segments
+            ) = self._get_theta_scores_and_weights_for_latent_density_methods(
+                latent_density_method, theta_scores, population_data, trapezoidal_segments
             )
 
-        return z_scores, weights
+        return theta_scores, weights
 
-    def _get_z_scores_and_weights_for_latent_density_methods(
+    def _get_theta_scores_and_weights_for_latent_density_methods(
         self,
         latent_density_method: str,
-        z_scores: torch.Tensor,
+        theta_scores: torch.Tensor,
         population_data: torch.Tensor,
         trapezoidal_segments: int,
     ):
@@ -811,26 +811,26 @@ class Evaluation:
             )
         ):
             self.approximate_latent_density(
-                z_scores=z_scores, approximation=latent_density_method
+                theta_scores=theta_scores, approximation=latent_density_method
             )
 
         # get the min/max points for integration
-        min_z, max_z = self._min_max_z_for_integration(z_scores)
+        min_theta, max_theta = self._min_max_theta_for_integration(theta_scores)
 
         # Create a list of linspace tensors for each dimension
         lin_spaces = [
-            torch.linspace(min_z[i], max_z[i], trapezoidal_segments)
-            for i in range(len(min_z))
+            torch.linspace(min_theta[i], max_theta[i], trapezoidal_segments)
+            for i in range(len(min_theta))
         ]
 
         # Use torch.cartesian_prod to generate all combinations
-        z_scores = torch.cartesian_prod(*lin_spaces)
+        theta_scores = torch.cartesian_prod(*lin_spaces)
 
-        if z_scores.dim() == 1:
+        if theta_scores.dim() == 1:
             # Add an extra dimension for 1D models to make it a 2D tensor with 1 column
-            z_scores = z_scores.unsqueeze(1)
+            theta_scores = theta_scores.unsqueeze(1)
 
-        weights = self.latent_density.pdf(z_scores)
+        weights = self.latent_density.pdf(theta_scores)
         weights = weights / weights.sum()
 
-        return z_scores, weights
+        return theta_scores, weights

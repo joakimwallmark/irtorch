@@ -92,7 +92,7 @@ def latent_variables(request):
     return request.param
 
 @pytest.fixture(scope="module")
-def z_scores(latent_variables):
+def theta_scores(latent_variables):
     repeated_tensor = torch.randn(4, latent_variables)
 
     return repeated_tensor

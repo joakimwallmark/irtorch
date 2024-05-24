@@ -18,11 +18,11 @@ class MML(BaseIRTAlgorithm):
     Notes
     -----
     Estimates the model parameters using the Marginal Maximum Likelihood (MML) method. 
-    The marginal likelihood is calculated by integrating over an assumed latent variable distribution with density :math:`f(\mathbf{z})`.
+    The marginal likelihood is calculated by integrating over an assumed latent variable distribution with density :math:`f(\mathbf{\theta})`.
 
     .. math::
 
-        \log L(\phi) = \sum_{i=1}^N \log \left( \int P(\mathbf{X}_i = \mathbf{x}_i | \mathbf{z}, \phi)f(\mathbf{z})d\mathbf{z} \right)
+        \log L(\phi) = \sum_{i=1}^N \log \left( \int P(\mathbf{X}_i = \mathbf{x}_i | \mathbf{\theta}, \phi)f(\mathbf{\theta})d\mathbf{\theta} \right)
 
     where
 
@@ -30,7 +30,7 @@ class MML(BaseIRTAlgorithm):
     - :math:`\mathbf{X}_i` is the response vector of the :math:`i`-th respondent,
     - :math:`\mathbf{x}_i` is the observed response vector of the :math:`i`-th respondent,
     - :math:`\phi` are the model parameters,
-    - :math:`\mathbf{z}` is the latent variable vector,
+    - :math:`\mathbf{\theta}` is the latent variable vector,
 
     Gaussian quadratures are used to approximate the integral.
     """
@@ -40,7 +40,7 @@ class MML(BaseIRTAlgorithm):
         super().__init__()
         self.imputation_method = "zero"
         self.covariance_matrix = None
-        self.training_z_scores = None
+        self.training_theta_scores = None
         self.optimizer = None
         self.training_history = {
             "train_loss": [],

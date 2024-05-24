@@ -46,7 +46,7 @@ def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputati
         data[data.isnan()] = -1
 
     if model_missing:
-        data = data + 1 # handled in z_scores for nn
+        data = data + 1 # handled in theta_scores for nn
     else:
         if imputation_method == "zero":
             data[data == -1] = 0
@@ -135,12 +135,12 @@ def conditional_score_distribution(
     item_categories: list[int],
 ):
     """
-    Compute total score distribution conditional on z as by (Thissen et. al. 1995).
+    Compute total score distribution conditional on theta as by (Thissen et. al. 1995).
 
     Parameters
     ----------
     probabilities : torch.Tensor
-        A 3D tensor containing item score probabilities for each z quadrature point.
+        A 3D tensor containing item score probabilities for each theta quadrature point.
         The first dimension represents the quadrature points, the second dimension represents the items and the third dimension represents the item categories.
     item_categories : list[list]
         A list of integers where each integer is the number of possible responses for the corresponding item.
@@ -148,7 +148,7 @@ def conditional_score_distribution(
     Returns
     -------
     torch.Tensor
-        A 2D torch tensor of total score probabilities, rows being quadrature z points and columns being total scores. (rows sum to 1)
+        A 2D torch tensor of total score probabilities, rows being quadrature theta points and columns being total scores. (rows sum to 1)
     """
     no_items = probabilities.shape[1]
     q_points = probabilities.shape[0]
@@ -186,7 +186,7 @@ def sum_incorrect_probabilities(
     ----------
     probabilities : list[torch.Tensor]
         A list of 2D tensors containing item score probabilities for each item.
-        Rows are z quadrature points from the z density and columns correspond to item responses. (rows sum to 1)
+        Rows are theta quadrature points from the theta density and columns correspond to item responses. (rows sum to 1)
     modeled_item_responses : list[int]
         A list of integers where each integer is the number of possible responses for the corresponding item.
     mc_correct : list[int]

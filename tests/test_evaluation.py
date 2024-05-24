@@ -21,23 +21,23 @@ def algorithm(latent_variables):
         ],
         dim=1,
     )
-    mock_algorithm.training_z_scores = torch.randn(30, latent_variables)
-    # Mock z_scores method based on input
-    def z_scores_mock(input_tensor):
-        z_scores = torch.randn(input_tensor.shape[0], latent_variables)
-        return z_scores
+    mock_algorithm.training_theta_scores = torch.randn(30, latent_variables)
+    # Mock theta_scores method based on input
+    def theta_scores_mock(input_tensor):
+        theta_scores = torch.randn(input_tensor.shape[0], latent_variables)
+        return theta_scores
 
-    mock_algorithm.z_scores = MagicMock(side_effect=z_scores_mock)
+    mock_algorithm.theta_scores = MagicMock(side_effect=theta_scores_mock)
     return mock_algorithm
 
 @pytest.fixture
 def bit_scales():
     mock_bit_scales = MagicMock(spec=BitScales)
     # Mock bit_score_distance method based on input
-    def bit_scores_from_z_mock(z, **kwargs):
-        return torch.randn(z.shape[0], z.shape[1]).abs() * 10, torch.randn(1, z.shape[1])
+    def bit_scores_from_theta_mock(theta, **kwargs):
+        return torch.randn(theta.shape[0],theta.shape[1]).abs() * 10, torch.randn(1,theta.shape[1])
     
-    mock_bit_scales.bit_scores_from_z = MagicMock(side_effect=bit_scores_from_z_mock)
+    mock_bit_scales.bit_scores_from_theta = MagicMock(side_effect=bit_scores_from_theta_mock)
     return mock_bit_scales
 
 @pytest.fixture
@@ -58,10 +58,10 @@ def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
             logits[:, item_id, item_cats:] = -torch.inf
         return torch.softmax(logits, dim = 2)
     
-    # Mock z_scores method based on input
+    # Mock theta_scores method based on input
     def latent_scores(data, **kwargs):
-        z_scores = torch.randn(data.shape[0], latent_variables)
-        return z_scores
+        theta_scores = torch.randn(data.shape[0], latent_variables)
+        return theta_scores
     
     mock_model = MagicMock(spec=BaseIRTModel, side_effect=model_forward_mock)
     mock_model.algorithm = algorithm
@@ -78,8 +78,8 @@ def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
 
 @pytest.fixture
 def evaluation(irt_model: BaseIRTModel):
-    def pdf_mock(z):
-        return torch.rand(z.shape[0])
+    def pdf_mock(theta):
+        return torch.rand(theta.shape[0])
 
     evaluation = Evaluation(irt_model)
     evaluation.latent_density = QuantileMVNormal()
@@ -87,8 +87,8 @@ def evaluation(irt_model: BaseIRTModel):
 
     return evaluation
 
-# add test for the _evaluate_data_z_input method
-def test__evaluate_data_z_input(evaluation: Evaluation):
+# add test for the _evaluate_data_theta_input method
+def test__evaluate_data_theta_input(evaluation: Evaluation):
     # Create some synthetic test data
     data = torch.cat(
         [
@@ -98,30 +98,30 @@ def test__evaluate_data_z_input(evaluation: Evaluation):
         dim=1,
     )
 
-    # Call the method with data and z as None
-    result_data, result_z = evaluation._evaluate_data_z_input(data, None, "NN")
+    # Call the method with data and theta as None
+    result_data, result_theta = evaluation._evaluate_data_theta_input(data, None, "NN")
 
-    # Check the shape of the output data and z
+    # Check the shape of the output data and theta
     assert result_data.shape == data.shape
-    assert result_z.shape == evaluation.model.algorithm.training_z_scores.shape
+    assert result_theta.shape == evaluation.model.algorithm.training_theta_scores.shape
 
     # Call the method with data as None
-    result_data, result_z = evaluation._evaluate_data_z_input(None, None, "NN")
+    result_data, result_theta = evaluation._evaluate_data_theta_input(None, None, "NN")
 
-    # Check the shape of the output data and z
+    # Check the shape of the output data and theta
     assert result_data.shape == evaluation.model.algorithm.train_data.shape
-    assert result_z.shape == evaluation.model.algorithm.training_z_scores.shape
+    assert result_theta.shape == evaluation.model.algorithm.training_theta_scores.shape
 
-def test_probabilities_from_grouped_z(evaluation: Evaluation, latent_variables):
-    # Create some synthetic z scores
-    grouped_z = (
+def test_probabilities_from_grouped_theta(evaluation: Evaluation, latent_variables):
+    # Create some synthetic theta scores
+    grouped_theta = (
         torch.randn(10, latent_variables),
         torch.randn(10, latent_variables),
         torch.randn(10, latent_variables),
     )
 
     # Call the method
-    probabilities = evaluation._grouped_z_probabilities(grouped_z)
+    probabilities = evaluation._grouped_theta_probabilities(grouped_theta)
     assert probabilities.shape == (3, 2, 3)
     assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1]), atol=1e-7)
 
@@ -157,7 +157,7 @@ def test_probabilities_from_grouped_data(evaluation: Evaluation):
     assert probabilities.shape == torch.Size([3, 2, 3])
     assert torch.allclose(probabilities.sum(dim=2), torch.ones_like(probabilities[:, :, 0]), atol=1e-7)
 
-@pytest.mark.parametrize("scale", ["bit", "z"])
+@pytest.mark.parametrize("scale", ["bit", "theta"])
 def test_latent_group_probabilities(evaluation: Evaluation, scale):
     # Create some synthetic test data
     data = torch.cat(
@@ -186,7 +186,7 @@ def test_latent_group_probabilities(evaluation: Evaluation, scale):
 
     if scale == "bit":
         # check if bit score was called
-        evaluation.model.bit_scales.bit_scores_from_z.assert_called_once()
+        evaluation.model.bit_scales.bit_scores_from_theta.assert_called_once()
 
 def test_group_fit_residuals(evaluation: Evaluation):
     data = torch.cat(
@@ -253,7 +253,7 @@ def test_log_likelihood(evaluation: Evaluation):
     assert torch.allclose(group_mean_likelihoods[:5], torch.full((5,), -1.5)) # first half of groups
     assert torch.allclose(group_mean_likelihoods[5:], torch.full((5,), -0.3)) # second half of groups
     # Test with specified parameters
-    group_mean_likelihoods = evaluation.group_fit_log_likelihood(groups=5, latent_variable=1, data=data, z_estimation_method="ML")
+    group_mean_likelihoods = evaluation.group_fit_log_likelihood(groups=5, latent_variable=1, data=data, theta_estimation="ML")
     assert group_mean_likelihoods.shape == (5,)  # We specified 5 groups
     assert group_mean_likelihoods.dtype == torch.float32
     assert torch.allclose(group_mean_likelihoods[:2], torch.full((2,), -1.5)) # first half of groups
@@ -288,10 +288,10 @@ def test_accuracy(evaluation: Evaluation):
     )
 
     # Mock probabilities
-    def item_probabilities_mock(z):
+    def item_probabilities_mock(theta):
         # static 3D tensor with dimensions (respondents, items, item categories)
-        t1 = torch.tensor(([0.55, 0.45, 0.0], [0.2, 0.35, 0.45])).unsqueeze(0).repeat(z.shape[0] // 2, 1, 1)
-        t2 = torch.tensor(([0.15, 0.85, 0.0], [0.6, 0.05, 0.35])).unsqueeze(0).repeat(z.shape[0] - (z.shape[0] // 2), 1, 1)
+        t1 = torch.tensor(([0.55, 0.45, 0.0], [0.2, 0.35, 0.45])).unsqueeze(0).repeat(theta.shape[0] // 2, 1, 1)
+        t2 = torch.tensor(([0.15, 0.85, 0.0], [0.6, 0.05, 0.35])).unsqueeze(0).repeat(theta.shape[0] - (theta.shape[0] // 2), 1, 1)
         return torch.cat([t1, t2])
 
     evaluation.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
@@ -328,10 +328,10 @@ def test_residuals(evaluation: Evaluation):
     ).float()
 
     # Mock probabilities
-    def item_probabilities_mock(z):
+    def item_probabilities_mock(theta):
         # static 3D tensor with dimensions (respondents, items, item categories)
-        t1 = torch.tensor(([0.55, 0.45, 0.0], [0.2, 0.35, 0.45])).unsqueeze(0).repeat(z.shape[0] // 2, 1, 1)
-        t2 = torch.tensor(([0.15, 0.85, 0.0], [0.6, 0.05, 0.35])).unsqueeze(0).repeat(z.shape[0] - (z.shape[0] // 2), 1, 1)
+        t1 = torch.tensor(([0.55, 0.45, 0.0], [0.2, 0.35, 0.45])).unsqueeze(0).repeat(theta.shape[0] // 2, 1, 1)
+        t2 = torch.tensor(([0.15, 0.85, 0.0], [0.6, 0.05, 0.35])).unsqueeze(0).repeat(theta.shape[0] - (theta.shape[0] // 2), 1, 1)
         return torch.cat([t1, t2])
 
     evaluation.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
@@ -368,38 +368,38 @@ def test_residuals(evaluation: Evaluation):
 
 def test_infit_outfit(evaluation: Evaluation):
     data = torch.tensor([[0, 2], [1, 1]]).float()
-    z = torch.randn(2, evaluation.model.latent_variables)
+    theta = torch.randn(2, evaluation.model.latent_variables)
 
-    def item_probabilities_mock(z):
+    def item_probabilities_mock(theta):
         return torch.tensor([[[0.55, 0.45, 0.0], [0.2, 0.35, 0.45]], [[0.15, 0.85, 0.0], [0.6, 0.05, 0.35]]])
 
     
     evaluation.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     
-    def expected_scores_mock(z, **kwargs):
+    def expected_scores_mock(theta, **kwargs):
         return torch.tensor(([0.45, 0.35 + 2 * 0.45], [0.85, 0.05+2 * 0.35]))
 
     evaluation.model.expected_scores = MagicMock(side_effect=expected_scores_mock)
 
-    infit, outfit = evaluation.infit_outfit(data, z, level = "item")
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "item")
     assert torch.allclose(infit, torch.tensor([0.6000000, 0.4237288])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.4973261, 0.5139347])), "Outfit is incorrect"
 
-    infit, outfit = evaluation.infit_outfit(data, z, level = "respondent")
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "respondent")
     assert torch.allclose(infit, torch.tensor([0.9161677, 0.0837438])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.8878143, 0.1234465])), "Outfit is incorrect"
 
-    def expected_scores_mock_mc(z, **kwargs):
+    def expected_scores_mock_mc(theta, **kwargs):
         return torch.tensor(([0.55, 0.45], [0.15, 0.35]))
 
     evaluation.model.expected_scores = MagicMock(side_effect=expected_scores_mock_mc)
 
     evaluation.model.mc_correct = [1, 3]
-    infit, outfit = evaluation.infit_outfit(data, z, level = "item")
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "item")
     assert torch.allclose(infit, torch.tensor([0.6000000, 0.8947369])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.4973262, 0.8803419])), "Outfit is incorrect"
 
-    infit, outfit = evaluation.infit_outfit(data, z, level = "respondent")
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "respondent")
     assert torch.allclose(infit, torch.tensor([1.0202020, 0.4084507])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([1.0202019, 0.3574660])), "Outfit is incorrect"
 

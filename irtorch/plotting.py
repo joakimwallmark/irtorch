@@ -103,7 +103,7 @@ class Plotting:
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
         title : str, optional
@@ -150,8 +150,8 @@ class Plotting:
                 **kwargs
             )
             if scale == "bit":
-                scores = self.model.bit_scales.bit_scores_from_z(
-                    z=scores,
+                scores = self.model.bit_scales.bit_scores_from_theta(
+                    theta=scores,
                     **kwargs
                 )[0]
         else:
@@ -177,10 +177,10 @@ class Plotting:
         y_label: str = None,
         color: str = None,
         colorscale: str = "Plasma",
-        z_range: tuple[float, float] = None,
-        second_z_range: tuple[float, float] = None,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
         steps: int = None,
-        fixed_zs: torch.Tensor = None,
+        fixed_thetas: torch.Tensor = None,
         **kwargs
     ) -> go.Figure:
         """
@@ -191,7 +191,7 @@ class Plotting:
         item : int
             The item for which to plot the entropy.
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -204,16 +204,16 @@ class Plotting:
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
             Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
-        z_range : tuple[float, float], optional
-            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
-        second_z_range : tuple[float, float], optional
-            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+        second_theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
         steps : int, optional
-            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
-        fixed_zs: torch.Tensor, optional
+            The number of steps along each theta axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
 
         Returns
         -------
@@ -227,36 +227,36 @@ class Plotting:
             raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
         if not all(num <= model_dim for num in latent_variables):
             raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if z_range is not None and len(z_range) != 2:
-            raise TypeError("z_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
-            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
         if steps is None:
             steps = 100 if len(latent_variables) == 1 else 18
 
-        latent_indices = [z - 1 for z in latent_variables]
+        latent_indices = [theta - 1 for theta in latent_variables]
 
-        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
-        mean_output = self.model(z_grid)
+        mean_output = self.model(theta_grid)
         item_entropies = output_to_item_entropy(
             mean_output, self.model.modeled_item_responses
         )[:, item - 1]
 
         if scale == "bit":
-            scores_to_plot = self.model.bit_scales.bit_scores_from_z(
-                z=z_grid,
+            scores_to_plot = self.model.bit_scales.bit_scores_from_theta(
+                theta=theta_grid,
                 **kwargs
             )[0][:, latent_indices]
         else:
-            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
             min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
-            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
                 start_idx = min_indices[0].item()  # get the first index
                 scores_to_plot = scores_to_plot[:start_idx]
                 item_entropies = item_entropies[:start_idx]
@@ -281,11 +281,11 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                z = item_entropies.reshape((grid_size, grid_size)),
+                theta = item_entropies.reshape((grid_size, grid_size)),
                 title = title or f"Item {item} entropy",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                z_label = "Entropy",
+                theta_label = "Entropy",
                 colorscale = colorscale
             )
         
@@ -351,14 +351,14 @@ class Plotting:
         title: str = None,
         x_label: str = None,
         y_label: str = None,
-        z_range: tuple[float, float] = None,
-        second_z_range: tuple[float, float] = None,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
         steps: int = 300,
-        fixed_zs: torch.Tensor = None,
+        fixed_thetas: torch.Tensor = None,
         plot_group_fit: bool = False,
         group_fit_groups: int = 10,
         group_fit_data: int = None,
-        group_fit_population_z: torch.Tensor = None,
+        group_fit_population_theta: torch.Tensor = None,
         grayscale: bool = False,
         plot_derivative: bool = False,
         **kwargs
@@ -371,7 +371,7 @@ class Plotting:
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
         latent_variables : tuple, optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -380,13 +380,13 @@ class Plotting:
             The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
         y_label : str, optional
             The label for the Y-axis. (default is None and uses "Probability")
-        z_range : tuple, optional
-            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
-        second_z_range : tuple, optional
-            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        theta_range : tuple, optional
+            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+        second_theta_range : tuple, optional
+            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
         steps : int, optional
-            The number of steps along each z axis used for probability evaluation. (default is 300)
-        fixed_zs: torch.Tensor, optional
+            The number of steps along each theta axis used for probability evaluation. (default is 300)
+        fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         plot_group_fit : bool, optional
             Plot group average probabilities to assess fit. (default is False)
@@ -394,14 +394,14 @@ class Plotting:
             Only for plot_group_fit = True. The number of groups. (default is 10)
         group_fit_data: torch.tensor, optional
             Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
-        group_fit_population_z : torch.tensor, optional
-            Only for plot_group_fit = True. The z scores corresponding to group_fit_data. Will be estimated using group_z_estimation_method if not provided. (default is None)
+        group_fit_population_theta : torch.tensor, optional
+            Only for plot_group_fit = True. The theta scores corresponding to group_fit_data. Will be estimated using group_theta_estimation if not provided. (default is None)
         grayscale : bool, optional
             Plot the item probability curves in grey scale. (default is False)
         plot_derivative : bool, optional
             Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
 
         Returns
         -------
@@ -415,58 +415,58 @@ class Plotting:
             raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
         if not all(num <= model_dim for num in latent_variables):
             raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if z_range is not None and len(z_range) != 2:
-            raise TypeError("z_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
-            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
 
-        latent_indices = [z - 1 for z in latent_variables]
+        latent_indices = [theta - 1 for theta in latent_variables]
 
         mask = torch.ones(model_dim, dtype=bool)
         mask[latent_indices] = 0
-        if fixed_zs is None:
+        if fixed_thetas is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                fixed_zs = self.model.algorithm.training_z_scores[:, mask].median(dim=0).values
+                fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
             elif isinstance(self.model.algorithm, MML):
-                fixed_zs = torch.zeros(model_dim)
+                fixed_thetas = torch.zeros(model_dim)
 
-        elif len(fixed_zs) is not model_dim - len(latent_variables):
+        elif len(fixed_thetas) is not model_dim - len(latent_variables):
             raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")
 
-        min_z, max_z = self.model.evaluation._min_max_z_for_integration()
-        if z_range is None:
-            z_range = min_z[latent_indices[0]].item(), max_z[latent_indices[0]].item()
-        if second_z_range is None and len(latent_indices) > 1:
-            second_z_range = min_z[latent_indices[1]].item(), max_z[latent_indices[1]].item()
+        min_theta, max_theta = self.model.evaluation._min_max_theta_for_integration()
+        if theta_range is None:
+            theta_range = min_theta[latent_indices[0]].item(), max_theta[latent_indices[0]].item()
+        if second_theta_range is None and len(latent_indices) > 1:
+            second_theta_range = min_theta[latent_indices[1]].item(), max_theta[latent_indices[1]].item()
 
-        latent_z_1 = torch.linspace(z_range[0], z_range[1], steps=steps)
+        latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
         if len(latent_indices) == 1:
-            z_grid = latent_z_1.unsqueeze(1).repeat(1, model_dim)
-            z_grid[:, mask] = fixed_zs
+            theta_grid = latent_theta_1.unsqueeze(1).repeat(1, model_dim)
+            theta_grid[:, mask] = fixed_thetas
         else:
-            latent_z_2 = torch.linspace(second_z_range[0], second_z_range[1], steps=steps)
-            latent_z_1, latent_z_2 = torch.meshgrid(latent_z_1, latent_z_2, indexing="ij")
-            z_grid = torch.zeros(latent_z_1.numel(), model_dim)
-            z_grid[:, latent_indices[0]] = latent_z_1.flatten()
-            z_grid[:, latent_indices[1]] = latent_z_2.flatten()
-            z_grid[:, mask] = fixed_zs
+            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
+            latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
+            theta_grid = torch.zeros(latent_theta_1.numel(), model_dim)
+            theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
+            theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
+            theta_grid[:, mask] = fixed_thetas
             
         if scale == "bit":
-            scores_to_plot, start_z = self.model.bit_scales.bit_scores_from_z(
-                z=z_grid,
+            scores_to_plot, start_theta = self.model.bit_scales.bit_scores_from_theta(
+                theta=theta_grid,
                 one_dimensional=False,
                 **kwargs
             )
         else:
-            scores_to_plot = z_grid
+            scores_to_plot = theta_grid
 
         if plot_derivative and len(latent_variables) == 1:
-            prob_matrix = self.model.probability_gradients(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1], latent_variables[0] - 1]
+            prob_matrix = self.model.probability_gradients(theta_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1], latent_variables[0] - 1]
             if scale == "bit":
-                bit_z_gradients = self.model.bit_scales.bit_score_gradients(z_grid, independent_z=latent_variables[0], start_z=start_z, **kwargs)
-                prob_matrix = prob_matrix / bit_z_gradients[:, latent_variables[0] - 1].view(-1, 1)
+                bit_theta_gradients = self.model.bit_scales.bit_score_gradients(theta_grid, independent_theta=latent_variables[0], start_theta=start_theta, **kwargs)
+                prob_matrix = prob_matrix / bit_theta_gradients[:, latent_variables[0] - 1].view(-1, 1)
         else:
-            prob_matrix = self.model.item_probabilities(z_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
+            prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
 
         if len(latent_variables) == 1:
             if plot_group_fit:
@@ -476,7 +476,7 @@ class Plotting:
                     latent_group_means,
                 ) = self.model.evaluation.latent_group_probabilities(
                     data=group_fit_data,
-                    z=group_fit_population_z,
+                    theta=group_fit_population_theta,
                     scale=scale,
                     latent_variable=latent_variables[0],
                     groups=group_fit_groups,
@@ -509,14 +509,14 @@ class Plotting:
                 title=title or f"IRF - Item {item}",
                 x_label=x_label or f"Latent variable {latent_variables[0]}",
                 y_label=y_label or f"Latent variable {latent_variables[1]}",
-                z_label="Probability",
+                theta_label="Probability",
                 grayscale=grayscale
             )
 
     def plot_information(
         self,
         items: list[int] = None,
-        scale: str = "z",
+        scale: str = "theta",
         latent_variables: tuple[int] = (1,),
         degrees: list[int] = None,
         title: str = None,
@@ -524,10 +524,10 @@ class Plotting:
         y_label: str = None,
         color: str = None,
         colorscale: str = "Plasma",
-        z_range: tuple[float, float] = None,
-        second_z_range: tuple[float, float] = None,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
         steps: int = None,
-        fixed_zs: torch.Tensor = None,
+        fixed_thetas: torch.Tensor = None,
         **kwargs
     ) -> go.Figure:
         """
@@ -539,7 +539,7 @@ class Plotting:
         items : list[int], optional
             The items to plot. If None, the full test information is plotted. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         degrees : list[int], optional
@@ -556,16 +556,16 @@ class Plotting:
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
             Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
-        z_range : tuple[float, float], optional
-            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
-        second_z_range : tuple[float, float], optional
-            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+        second_theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
         steps : int, optional
-            The number of steps along each z axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
-        fixed_zs: torch.Tensor, optional
+            The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -574,31 +574,31 @@ class Plotting:
             raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
         if not all(num <= model_dim for num in latent_variables):
             raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if z_range is not None and len(z_range) != 2:
-            raise TypeError("z_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
-            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
         if degrees is None and model_dim > 1:
             raise ValueError("Degrees must be provided for multidimensional models.")
         if steps is None:
             steps = 100 if len(latent_variables) == 1 else 18
 
-        latent_indices = [z - 1 for z in latent_variables]
+        latent_indices = [theta - 1 for theta in latent_variables]
 
-        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
-        if z_grid.shape[0] > 2000:
+        if theta_grid.shape[0] > 2000:
             logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
         if scale == "bit":
-            scores_to_plot, start_z = self.model.bit_scales.bit_scores_from_z(
-                z=z_grid,
+            scores_to_plot, start_theta = self.model.bit_scales.bit_scores_from_theta(
+                theta=theta_grid,
                 **kwargs
             )
             scores_to_plot = scores_to_plot[:, latent_indices]
         else:
-            start_z = None
-            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            start_theta = None
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
 
@@ -606,20 +606,20 @@ class Plotting:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
             if scale == "bit":
-                information = self.model.bit_scales.bit_information(z_grid, item=True, degrees=degrees, start_z = start_z, **kwargs)[:, item_mask].sum(dim=1)
+                information = self.model.bit_scales.bit_information(theta_grid, item=True, degrees=degrees, start_theta = start_theta, **kwargs)[:, item_mask].sum(dim=1)
             else:
-                information = self.model.information(z_grid, item=True, degrees=degrees, **kwargs)[:, item_mask].sum(dim=1)
+                information = self.model.information(theta_grid, item=True, degrees=degrees, **kwargs)[:, item_mask].sum(dim=1)
 
         else:
             if scale == "bit":
-                information = self.model.bit_scales.bit_information(z_grid, item=False, degrees=degrees, start_z = start_z, **kwargs)
+                information = self.model.bit_scales.bit_information(theta_grid, item=False, degrees=degrees, start_theta = start_theta, **kwargs)
             else:
-                information = self.model.information(z_grid, item=False, degrees=degrees, **kwargs)
+                information = self.model.information(theta_grid, item=False, degrees=degrees, **kwargs)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
             min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
-            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
                 start_idx = min_indices[0].item()  # get the first index
                 scores_to_plot = scores_to_plot[:start_idx]
                 information = information.detach_().squeeze_()[:start_idx]
@@ -641,11 +641,11 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                z = information.reshape((grid_size, grid_size)),
+                theta = information.reshape((grid_size, grid_size)),
                 title = title or "Information",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                z_label = "Information",
+                theta_label = "Information",
                 colorscale = colorscale
             )
 
@@ -659,10 +659,10 @@ class Plotting:
         y_label: str = None,
         color: str = None,
         colorscale: str = "Plasma",
-        z_range: tuple[float, float] = None,
-        second_z_range: tuple[float, float] = None,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
         steps: int = None,
-        fixed_zs: torch.Tensor = None,
+        fixed_thetas: torch.Tensor = None,
         **kwargs
     ) -> go.Figure:
         """
@@ -674,7 +674,7 @@ class Plotting:
         items : list[int], optional
             The items used to compte the sum score. If None, all items are used. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'z'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -687,16 +687,16 @@ class Plotting:
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
             Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
-        z_range : tuple[float, float], optional
-            Only for scale = 'z'. The z range for plotting. (default is None and uses limits based on training data)
-        second_z_range : tuple[float, float], optional
-            Only for scale = 'z'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+        second_theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
         steps : int, optional
-            The number of steps along each z axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
-        fixed_zs: torch.Tensor, optional
+            The number of steps along each theta axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_z` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
 
         Returns
         -------
@@ -710,31 +710,31 @@ class Plotting:
             raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
         if not all(num <= model_dim for num in latent_variables):
             raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if z_range is not None and len(z_range) != 2:
-            raise TypeError("z_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_z_range is not None and len(second_z_range) != 2:
-            raise TypeError("second_z_range needs to have a length of 2 if specified.")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
         if steps is None:
             steps = 100 if len(latent_variables) == 1 else 18
 
-        latent_indices = [z - 1 for z in latent_variables]
+        latent_indices = [theta - 1 for theta in latent_variables]
 
-        z_grid = self._get_z_grid_for_plotting(latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
-            sum_scores = self.model.expected_scores(z_grid, return_item_scores=True)[:, [item - 1 for item in items]].sum(dim=1)
+            sum_scores = self.model.expected_scores(theta_grid, return_item_scores=True)[:, [item - 1 for item in items]].sum(dim=1)
         else:
-            sum_scores = self.model.expected_scores(z_grid, return_item_scores=False)
+            sum_scores = self.model.expected_scores(theta_grid, return_item_scores=False)
 
         if scale == "bit":
-            scores_to_plot = self.model.bit_scales.bit_scores_from_z(
-                z=z_grid,
+            scores_to_plot = self.model.bit_scales.bit_scores_from_theta(
+                theta=theta_grid,
                 **kwargs
             )[0][:, latent_indices]
         else:
-            scores_to_plot = z_grid[:, [var - 1 for var in latent_variables]]
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
 
@@ -746,7 +746,7 @@ class Plotting:
                 y_label = "Expected item score" if y_label is None else y_label
             scores_to_plot.squeeze_()
             min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
-            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed z scale
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
                 start_idx = min_indices[0].item()  # get the first index
                 scores_to_plot = scores_to_plot[:start_idx]
                 sum_scores = sum_scores[:start_idx]
@@ -771,53 +771,53 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                z = sum_scores.reshape((grid_size, grid_size)),
+                theta = sum_scores.reshape((grid_size, grid_size)),
                 title = title or "Expected sum score",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                z_label = "Expected sum score",
+                theta_label = "Expected sum score",
                 colorscale = colorscale
             )
 
-    def _get_z_grid_for_plotting(self, latent_variables, z_range, second_z_range, steps, fixed_zs, latent_indices):
+    def _get_theta_grid_for_plotting(self, latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices):
         mask = torch.ones(self.model.latent_variables, dtype=bool)
         mask[latent_indices] = 0
-        if fixed_zs is None:
+        if fixed_thetas is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                fixed_zs = self.model.algorithm.training_z_scores[:, mask].median(dim=0).values
+                fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
             elif isinstance(self.model.algorithm, MML):
-                fixed_zs = torch.zeros(self.model.latent_variables)
+                fixed_thetas = torch.zeros(self.model.latent_variables)
         
-        if z_range is None:
+        if theta_range is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                z_range = (
-                    self.model.algorithm.training_z_scores[:, latent_variables[0] - 1].min().item(),
-                    self.model.algorithm.training_z_scores[:, latent_variables[0] - 1].max().item()
+                theta_range = (
+                    self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].min().item(),
+                    self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].max().item()
                 )
             elif isinstance(self.model.algorithm, MML):
-                z_range = (-3, 3)
-        if second_z_range is None and len(latent_indices) > 1:
+                theta_range = (-3, 3)
+        if second_theta_range is None and len(latent_indices) > 1:
             if isinstance(self.model.algorithm, (AE, VAE)):
-                second_z_range = (
-                    self.model.algorithm.training_z_scores[:, latent_variables[1] - 1].min().item(),
-                    self.model.algorithm.training_z_scores[:, latent_variables[1] - 1].max().item()
+                second_theta_range = (
+                    self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].min().item(),
+                    self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].max().item()
                 )
             elif isinstance(self.model.algorithm, MML):
-                second_z_range = (-3, 3)
+                second_theta_range = (-3, 3)
 
-        latent_z_1 = torch.linspace(z_range[0], z_range[1], steps=steps)
+        latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
         if len(latent_indices) == 1:
-            z_grid = latent_z_1.unsqueeze(1).repeat(1, self.model.latent_variables)
-            z_grid[:, mask] = fixed_zs
+            theta_grid = latent_theta_1.unsqueeze(1).repeat(1, self.model.latent_variables)
+            theta_grid[:, mask] = fixed_thetas
         else:
-            latent_z_2 = torch.linspace(second_z_range[0], second_z_range[1], steps=steps)
-            latent_z_1, latent_z_2 = torch.meshgrid(latent_z_1, latent_z_2, indexing="ij")
-            z_grid = torch.zeros(latent_z_1.numel(), self.model.latent_variables)
-            z_grid[:, latent_indices[0]] = latent_z_1.flatten()
-            z_grid[:, latent_indices[1]] = latent_z_2.flatten()
-            z_grid[:, mask] = fixed_zs
+            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
+            latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
+            theta_grid = torch.zeros(latent_theta_1.numel(), self.model.latent_variables)
+            theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
+            theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
+            theta_grid[:, mask] = fixed_thetas
         
-        return z_grid
+        return theta_grid
 
     def _2d_line_plot(
         self,
@@ -840,25 +840,25 @@ class Plotting:
         self,
         x: torch.Tensor,
         y: torch.Tensor,
-        z: torch.Tensor,
+        theta: torch.Tensor,
         title: str,
         x_label: str,
         y_label: str,
-        z_label: str,
+        theta_label: str,
         colorscale: str
     ) -> go.Figure:
         x = x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy()
         y = y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
-        z = z.cpu().detach().numpy() if z.is_cuda else z.detach().numpy()
+        theta = theta.cpu().detach().numpy() if theta.is_cuda else theta.detach().numpy()
         fig = go.Figure(data=[
-            go.Surface(z=z, x=x, y=y, colorscale=colorscale)
+            go.Surface(theta=theta, x=x, y=y, colorscale=colorscale)
         ])
         fig.update_layout(
             title=title,
             scene = {
                 "xaxis": {"title": x_label},
                 "yaxis": {"title": y_label},
-                "zaxis": {"title": z_label}
+                "zaxis": {"title": theta_label}
             }
         )
 
@@ -906,7 +906,7 @@ class Plotting:
             The Plotly Figure object for the plot.
         """
         min_indices = (latent_scores == latent_scores.min()).nonzero().flatten()
-        if min_indices[-1] == len(latent_scores) - 1:  # if we have reversed z scale
+        if min_indices[-1] == len(latent_scores) - 1:  # if we have reversed theta scale
             start_idx = min_indices[0].item()  # get the first index
             latent_scores = latent_scores[:start_idx]
             prob_matrix = prob_matrix[:start_idx, :]
@@ -1001,7 +1001,7 @@ class Plotting:
         title: str = "IRF",
         x_label: str = "Latent variable",
         y_label: str = "Latent variable",
-        z_label: str = "Probability",
+        theta_label: str = "Probability",
         grayscale: bool = False,
     ) -> go.Figure:
         """
@@ -1019,7 +1019,7 @@ class Plotting:
             The label for the X-axis. (default is "Latent variable")
         y_label : str, optional
             The label for the Y-axis. (default is "Latent variable")
-        z_label : str, optional
+        theta_label : str, optional
             The label for the Z-axis. (default is "Probability")
         title : str, optional
             The title for the plot. (default is "IRF")
@@ -1053,16 +1053,16 @@ class Plotting:
 
         fig = go.Figure()
         for response_category in range(num_responses):
-            z = prob_matrix[:, response_category].reshape((steps, steps))
+            theta = prob_matrix[:, response_category].reshape((steps, steps))
             fig.add_trace(go.Surface(
-                x=x, y=y, z=z, 
+                x=x, y=y, theta=theta, 
                 name=f"Response {response_category}",
                 showscale=False,  # Optionally hide the color scale
                 colorscale=[(0, colors[response_category % len(colors)]), (1, colors[response_category % len(colors)])],
             ))
             # Dummy trace for legend
             fig.add_trace(go.Scatter3d(
-                x=[None], y=[None], z=[None], mode="markers",
+                x=[None], y=[None], theta=[None], mode="markers",
                 marker=dict(size=10, color=colors[response_category % len(colors)]),
                 showlegend=True, name=f"Response {response_category}"
             ))
@@ -1072,7 +1072,7 @@ class Plotting:
             scene=dict(
                 xaxis_title=x_label,
                 yaxis_title=y_label,
-                zaxis_title=z_label,
+                zaxis_title=theta_label,
             ),
             legend_title="Item responses",
             autosize=True,
@@ -1168,7 +1168,7 @@ class Plotting:
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         fig = go.Figure(data =
             go.Contour(
-                z=histogram2d,
+                theta=histogram2d,
                 x=x_centers, # Centers of bins (x-axis)
                 y=y_centers, # Centers of bins (y-axis)
                 colorscale=contour_colorscale

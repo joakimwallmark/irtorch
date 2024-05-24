@@ -127,11 +127,11 @@ class SoftplusLinear(nn.Module):
         return output
 
 class NegationLayer(nn.Module):
-    def __init__(self, item_z_relationships: torch.Tensor, inputs_per_items: int, zero_outputs: torch.Tensor):
+    def __init__(self, item_theta_relationships: torch.Tensor, inputs_per_items: int, zero_outputs: torch.Tensor):
         """
         Parameters
         ----------
-        item_z_relationships : torch.Tensor
+        item_theta_relationships : torch.Tensor
             An integer tensor of shape (items,) that determines for which weights should be trained. Mostly used for training multidimensional IRT models for which each item or item category has a separate network and some of the item/latent variable relationships are set to be 0.
         inputs_per_items : int
             Number of inputs per item. One weight for all inputs per item.
@@ -141,12 +141,12 @@ class NegationLayer(nn.Module):
         super().__init__()
 
         self.inputs_per_items = inputs_per_items
-        self.item_z_relationships = item_z_relationships
+        self.item_theta_relationships = item_theta_relationships
         self.zero_outputs = zero_outputs
-        self.zero_weights = (1-item_z_relationships).repeat_interleave(inputs_per_items).bool()
-        self.register_buffer("weight", torch.zeros(item_z_relationships.numel() * inputs_per_items))
+        self.zero_weights = (1-item_theta_relationships).repeat_interleave(inputs_per_items).bool()
+        self.register_buffer("weight", torch.zeros(item_theta_relationships.numel() * inputs_per_items))
         # One weight for each item related to the latent variable
-        self.weight_param = nn.Parameter(torch.Tensor(sum(item_z_relationships).item()))
+        self.weight_param = nn.Parameter(torch.Tensor(sum(item_theta_relationships).item()))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -167,7 +167,7 @@ class NegationLayer(nn.Module):
         weight : torch.Tensor
             All layer weights, including the unused ones.
         """
-        weights = torch.zeros(self.item_z_relationships.numel())
-        mask = (1 - self.item_z_relationships).bool()
+        weights = torch.zeros(self.item_theta_relationships.numel())
+        mask = (1 - self.item_theta_relationships).bool()
         weights[~mask] = self.weight_param
         return weights

@@ -4,40 +4,69 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class GeneralizedPartialCredit(BaseIRTModel):
-    """
+    r"""
     Generalized Partial Credit IRT model.
 
     Parameters
     ----------
     latent_variables : int
         Number of latent variables.
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
     item_categories : list[int]
         Number of categories for each item. One integer for each item. Missing responses exluded.
-    item_z_relationships : torch.Tensor, optional
+    item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+
+    Notes
+    -----
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+
+    .. math::
+
+        P(X_j=x | \mathbf{\theta}) = \begin{cases}
+            \dfrac{1}
+            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{if } x = 0\\
+            \dfrac{\exp \left( x\mathbf{a}_{j}^\top \mathbf{\theta}+\sum_{m=1}^{x}d_{jm}\right)}
+            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{otherwise}
+        \end{cases}
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}_{j}` is a vector of weights for item :math:`j`.
+    - :math:`d_{jm}` is the bias term for item :math:`j` and response category :math:`m`.
     """
     def __init__(
         self,
-        latent_variables: int,
-        item_categories: list[int],
-        item_z_relationships: torch.Tensor = None,
+        latent_variables: int = 1,
+        data: torch.Tensor = None,
+        item_categories: list[int] = None,
+        item_theta_relationships: torch.Tensor = None,
     ):
+        if item_categories is None:
+            if data is None:
+                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+            else:
+                # replace nan with -inf to get max
+                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+
         super().__init__(latent_variables=latent_variables, item_categories=item_categories)
-        if item_z_relationships is not None:
-            if item_z_relationships.shape != (len(item_categories), latent_variables):
+        if item_theta_relationships is not None:
+            if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
                     f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_z_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
-            assert(torch.all(item_z_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         self.output_size = self.items * self.max_item_responses
 
         free_weights = torch.ones(self.items, latent_variables)
         self.register_buffer("gpc_weight_multiplier", torch.arange(0, self.max_item_responses).repeat(self.items))
-        if item_z_relationships is not None:
+        if item_theta_relationships is not None:
             for item, item_cat in enumerate(self.modeled_item_responses):
-                free_weights[item, :] = item_z_relationships[item, :]
+                free_weights[item, :] = item_theta_relationships[item, :]
 
         self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
 
@@ -61,13 +90,13 @@ class GeneralizedPartialCredit(BaseIRTModel):
         nn.init.normal_(self.weight_param, mean=1., std=0.01)
         nn.init.zeros_(self.bias_param)
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
 
         Parameters
         ----------
-        z : torch.Tensor
+        theta : torch.Tensor
             2D tensor with latent variables. Rows are respondents and latent variables are columns. 
 
         Returns
@@ -75,15 +104,15 @@ class GeneralizedPartialCredit(BaseIRTModel):
         output : torch.Tensor
             2D tensor. Rows are respondents and columns are item category logits.
         """
-        bias = torch.zeros(self.output_size, device=z.device)
+        bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
         
-        weights = torch.zeros(self.items, self.latent_variables, device=z.device)
+        weights = torch.zeros(self.items, self.latent_variables, device=theta.device)
         weights[self.free_weights] = self.weight_param
-        weighted_z = torch.matmul(z, weights.T).repeat_interleave(self.max_item_responses, dim=1)
-        weighted_z *= self.gpc_weight_multiplier
+        weighted_theta = torch.matmul(theta, weights.T).repeat_interleave(self.max_item_responses, dim=1)
+        weighted_theta *= self.gpc_weight_multiplier
 
-        output = weighted_z + bias
+        output = weighted_theta + bias
         # stop gradients from flowing through the missing categories
         output[:, self.missing_category] = -torch.inf
 
@@ -126,13 +155,13 @@ class GeneralizedPartialCredit(BaseIRTModel):
         return parameters
 
     @torch.inference_mode()
-    def item_z_relationship_directions(self, z:torch.Tensor = None) -> torch.Tensor:
+    def item_theta_relationship_directions(self, theta:torch.Tensor = None) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.
 
         Parameters
         ----------
-        z : torch.Tensor, optional
+        theta : torch.Tensor, optional
             Not needed for this model. (default is None)
 
         Returns

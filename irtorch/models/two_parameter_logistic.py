@@ -4,7 +4,7 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class TwoParameterLogistic(BaseIRTModel):
-    """
+    r"""
     Two parametric logistic (2PL) IRT model.
 
     Parameters
@@ -13,26 +13,44 @@ class TwoParameterLogistic(BaseIRTModel):
         Number of latent variables.
     items : int
         Number of items.
-    item_z_relationships : torch.Tensor, optional
+    item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+    
+    Notes
+    -----
+    For an item :math:`j`, the model defines the probability for responding correctly as:
+
+    .. math::
+
+        \frac{
+            \exp(\mathbf{a}_j^\top \mathbf{\theta} + d_j)
+        }{
+            1+\exp(\mathbf{a}_j^\top \mathbf{\theta} + d_j)
+        },
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}_j` is a vector of weights for item :math:`j`.
+    - :math:`d_j` is the bias term for item :math:`j`.
     """
     def __init__(
         self,
         latent_variables: int,
         items: int,
-        item_z_relationships: torch.Tensor = None
+        item_theta_relationships: torch.Tensor = None
     ):
         super().__init__(latent_variables=latent_variables, item_categories = [2] * items)
-        if item_z_relationships is not None:
-            if item_z_relationships.shape != (items, latent_variables):
+        if item_theta_relationships is not None:
+            if item_theta_relationships.shape != (items, latent_variables):
                 raise ValueError(
                     f"latent_item_connections must have shape ({items}, {latent_variables})."
                 )
-            assert(item_z_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
-            assert(torch.all(item_z_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         self.output_size = self.items * 2
-        self.weight_param = nn.Parameter(torch.zeros(item_z_relationships.sum().int()))
+        self.weight_param = nn.Parameter(torch.zeros(item_theta_relationships.sum().int()))
         self.bias_param = nn.Parameter(torch.zeros(self.items))
 
         first_category = torch.zeros(self.items, 2)
@@ -40,7 +58,7 @@ class TwoParameterLogistic(BaseIRTModel):
         first_category = first_category.reshape(-1)
 
         free_bias = 1 - first_category
-        self.register_buffer("free_weights", item_z_relationships.bool())
+        self.register_buffer("free_weights", item_theta_relationships.bool())
         self.register_buffer("free_bias", free_bias.bool())
         self.register_buffer("first_category", first_category.bool())
         self.reset_parameters()
@@ -49,13 +67,13 @@ class TwoParameterLogistic(BaseIRTModel):
         nn.init.normal_(self.weight_param, mean=1., std=0.01)
         nn.init.zeros_(self.bias_param)
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
 
         Parameters
         ----------
-        z : torch.Tensor
+        theta : torch.Tensor
             2D tensor with latent variables. Rows are respondents and latent variables are columns. 
 
         Returns
@@ -63,14 +81,14 @@ class TwoParameterLogistic(BaseIRTModel):
         output : torch.Tensor
             2D tensor. Rows are respondents and columns are item category logits.
         """
-        bias = torch.zeros(self.output_size, device=z.device)
+        bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
         
-        weights = torch.zeros(self.items, self.latent_variables, device=z.device)
+        weights = torch.zeros(self.items, self.latent_variables, device=theta.device)
         weights[self.free_weights] = self.weight_param
-        weighted_z = torch.matmul(z, weights.T).repeat_interleave(self.max_item_responses, dim=1)
+        weighted_theta = torch.matmul(theta, weights.T).repeat_interleave(self.max_item_responses, dim=1)
 
-        output = weighted_z + bias
+        output = weighted_theta + bias
         output[:, self.first_category] = 0
 
         return output
@@ -111,13 +129,13 @@ class TwoParameterLogistic(BaseIRTModel):
         return parameters
 
     @torch.inference_mode()
-    def item_z_relationship_directions(self, z:torch.Tensor = None) -> torch.Tensor:
+    def item_theta_relationship_directions(self, theta:torch.Tensor = None) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.
 
         Parameters
         ----------
-        z : torch.Tensor, optional
+        theta : torch.Tensor, optional
             Not needed for this model. (default is None)
             
         Returns

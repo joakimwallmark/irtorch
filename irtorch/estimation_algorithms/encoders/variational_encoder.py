@@ -10,7 +10,7 @@ class VariationalEncoder(BaseEncoder):
         input_dim: int,
         latent_variables: int,
         hidden_dim: list[int],
-        batch_normalization: bool,
+        batch_normalization: bool = False,
         nonlinear=nn.ReLU(),
     ):
         super().__init__(input_dim, latent_variables)

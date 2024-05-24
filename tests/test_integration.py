@@ -43,25 +43,25 @@
 
 # @pytest.mark.integration
 # def test_latent_scores(model: IRT, data, latent_variables):
-#     z_nn_scores = model.scorer.latent_scores(data, scale="z", z_estimation_method="NN")
-#     z_ml_scores = model.scorer.latent_scores(data, scale="z", z_estimation_method="ML")
-#     multi_bit_score_nn_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="NN", bit_score_one_dimensional=False)
-#     multi_bit_score_ml_scores = model.scorer.latent_scores(data, scale="bit", z = z_ml_scores, z_estimation_method="ML", bit_score_population_z=z_ml_scores, bit_score_one_dimensional=False)
-#     one_bit_score_nn_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="NN", bit_score_one_dimensional=True)
-#     one_bit_score_ml_scores = model.scorer.latent_scores(data, scale="bit", z = z_ml_scores, z_estimation_method="ML", bit_score_population_z=z_ml_scores, bit_score_one_dimensional=True)
+#     theta_nn_scores = model.scorer.latent_scores(data, theta_estimation="NN")
+#     theta_ml_scores = model.scorer.latent_scores(data, theta_estimation="ML")
+#     multi_bit_score_nn_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="NN", bit_score_one_dimensional=False)
+#     multi_bit_score_ml_scores = model.scorer.latent_scores(data, scale="bit", theta = theta_ml_scores, theta_estimation="ML", bit_score_population_theta=theta_ml_scores, bit_score_one_dimensional=False)
+#     one_bit_score_nn_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="NN", bit_score_one_dimensional=True)
+#     one_bit_score_ml_scores = model.scorer.latent_scores(data, scale="bit", theta = theta_ml_scores, theta_estimation="ML", bit_score_population_theta=theta_ml_scores, bit_score_one_dimensional=True)
 
 #     # TODO Add map and EAP again
-#     # multi_bit_score_map_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="MAP", bit_score_one_dimensional=False)
-#     # multi_bit_score_eap_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="EAP", bit_score_one_dimensional=False)
-#     # z_map_scores = model.scorer.latent_scores(data, scale="z", z_estimation_method="MAP")
-#     # z_eap_scores = model.scorer.latent_scores(data, scale="z", z_estimation_method="EAP")
-#     # one_bit_score_map_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="MAP", bit_score_one_dimensional=True)
-#     # one_bit_score_eap_scores = model.scorer.latent_scores(data, scale="bit", z_estimation_method="EAP", bit_score_one_dimensional=True)
+#     # multi_bit_score_map_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="MAP", bit_score_one_dimensional=False)
+#     # multi_bit_score_eap_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="EAP", bit_score_one_dimensional=False)
+#     # theta_map_scores = model.scorer.latent_scores(data, theta_estimation="MAP")
+#     # theta_eap_scores = model.scorer.latent_scores(data, theta_estimation="EAP")
+#     # one_bit_score_map_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="MAP", bit_score_one_dimensional=True)
+#     # one_bit_score_eap_scores = model.scorer.latent_scores(data, scale="bit", theta_estimation="EAP", bit_score_one_dimensional=True)
 
-#     assert z_nn_scores.shape == torch.Size([data.shape[0], latent_variables])
-#     assert z_ml_scores.shape == torch.Size([data.shape[0], latent_variables])
-#     # assert z_map_scores.shape == torch.Size([data.shape[0], latent_variables])
-#     # assert z_eap_scores.shape == torch.Size([data.shape[0], latent_variables])
+#     assert theta_nn_scores.shape == torch.Size([data.shape[0], latent_variables])
+#     assert theta_ml_scores.shape == torch.Size([data.shape[0], latent_variables])
+#     # assert theta_map_scores.shape == torch.Size([data.shape[0], latent_variables])
+#     # assert theta_eap_scores.shape == torch.Size([data.shape[0], latent_variables])
 #     assert multi_bit_score_nn_scores.shape == torch.Size([data.shape[0], latent_variables])
 #     assert multi_bit_score_ml_scores.shape == torch.Size([data.shape[0], latent_variables])
 #     # assert multi_bit_score_map_scores.shape == torch.Size([data.shape[0], latent_variables])
@@ -77,25 +77,25 @@
 #         sorted_scores, indices = multi_bit_score_nn_scores[:, latent_var].sort()
 #         unique_a, counts = sorted_scores.unique(sorted=True, return_counts = True)
 #         first_occurrences = torch.cumsum(counts, dim=0) - counts
-#         unique_b = z_nn_scores[indices, latent_var][first_occurrences]
+#         unique_b = theta_nn_scores[indices, latent_var][first_occurrences]
 #         corr = spearman_correlation(unique_a, unique_b)
 #         assert (torch.isclose(corr, torch.tensor(1.0), atol = 1e-5) or torch.isclose(corr, torch.tensor(-1.0), atol = 1e-5))
 #         sorted_scores, indices = multi_bit_score_ml_scores[:,latent_var].sort()
 #         unique_a, counts = sorted_scores.unique(sorted=True, return_counts = True)
 #         first_occurrences = torch.cumsum(counts, dim=0) - counts
-#         unique_b = z_ml_scores[indices, latent_var][first_occurrences]
+#         unique_b = theta_ml_scores[indices, latent_var][first_occurrences]
 #         corr = spearman_correlation(unique_a, unique_b)
 #         assert (torch.isclose(corr, torch.tensor(1.0), atol = 1e-5) or torch.isclose(corr, torch.tensor(-1.0), atol = 1e-5))
 #         # sorted_scores, indices = multi_bit_score_map_scores[:,latent_var].sort()
 #         # unique_a, counts = sorted_scores.unique(sorted=True, return_counts = True)
 #         # first_occurrences = torch.cumsum(counts, dim=0) - counts
-#         # unique_b = z_map_scores[indices, latent_var][first_occurrences]
+#         # unique_b = theta_map_scores[indices, latent_var][first_occurrences]
 #         # corr = spearman_correlation(unique_a, unique_b)
 #         # assert (torch.isclose(corr, torch.tensor(1.0), atol = 1e-5) or torch.isclose(corr, torch.tensor(-1.0), atol = 1e-5))
 #         # sorted_scores, indices = multi_bit_score_eap_scores[:,latent_var].sort()
 #         # unique_a, counts = sorted_scores.unique(sorted=True, return_counts = True)
 #         # first_occurrences = torch.cumsum(counts, dim=0) - counts
-#         # unique_b = z_eap_scores[indices, latent_var][first_occurrences]
+#         # unique_b = theta_eap_scores[indices, latent_var][first_occurrences]
 #         # corr = spearman_correlation(unique_a, unique_b)
 #         # assert (torch.isclose(corr, torch.tensor(1.0), atol = 1e-5) or torch.isclose(corr, torch.tensor(-1.0), atol = 1e-5))
 
@@ -107,42 +107,42 @@
 
 # @pytest.mark.integration
 # def test_plot_item_probabilities(model: IRT, latent_variables):
-#     model.plot_item_probabilities(10, scale = "z")
-#     model.plot_item_probabilities(12, scale = "z", group_fit_groups=8, plot_group_fit=True)
+#     model.plot_item_probabilities(10, scale = "theta")
+#     model.plot_item_probabilities(12, scale = "theta", group_fit_groups=8, plot_group_fit=True)
 #     model.plot_item_probabilities(12, scale = "entropy", steps=40, group_fit_groups=8, plot_group_fit=True)
 #     model.plot_item_probabilities(12, scale = "entropy", steps=40)
 #     if latent_variables > 1:
-#         model.plot_item_probabilities(10, scale = "z", latent_variables=(2, ))
-#         model.plot_item_probabilities(10, scale = "z", latent_variables=(1, 2))
+#         model.plot_item_probabilities(10, scale = "theta", latent_variables=(2, ))
+#         model.plot_item_probabilities(10, scale = "theta", latent_variables=(1, 2))
 #         if latent_variables == 2:
 #             with pytest.raises(TypeError):
-#                 model.plot_item_probabilities(10, scale = "z", latent_variables=(2, ), fixed_zs=(1, 0.5))
+#                 model.plot_item_probabilities(10, scale = "theta", latent_variables=(2, ), fixed_thetas=(1, 0.5))
 #         else:
-#             model.plot_item_probabilities(10, scale = "z", latent_variables=(1, 2), fixed_zs=(1, ))
+#             model.plot_item_probabilities(10, scale = "theta", latent_variables=(1, 2), fixed_thetas=(1, ))
 
 #     # TODO add bit scores plots
 
 # @pytest.mark.integration
-# def test_bit_score_starting_z(model: IRT):
+# def test_bit_score_starting_theta(model: IRT):
 #     guessing_probabilities = [0.5] * len(model.scorer.algorithm.model.modeled_item_responses)
 
 #     # Test with no guessing (or default guessing for multiple choice)
-#     starting_z = model.scorer.bit_score_starting_z(guessing_iterations=200)
-#     assert starting_z.shape == (1, model.model.latent_variables)
+#     starting_theta = model.scorer.bit_score_starting_theta(guessing_iterations=200)
+#     assert starting_theta.shape == (1, model.model.latent_variables)
 
 #     # Test with guessing for dichotomous items
-#     starting_z = model.scorer.bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
-#     assert starting_z.shape == (1, model.model.latent_variables)
+#     starting_theta = model.scorer.bit_score_starting_theta(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
+#     assert starting_theta.shape == (1, model.model.latent_variables)
 
 #     # Test with guessing and MC correct
 #     model.scorer.algorithm.model.mc_correct = [1] * len(model.scorer.algorithm.model.modeled_item_responses)
-#     starting_z = model.scorer.bit_score_starting_z(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
-#     assert starting_z.shape == (1, model.model.latent_variables)
+#     starting_theta = model.scorer.bit_score_starting_theta(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
+#     assert starting_theta.shape == (1, model.model.latent_variables)
 #     model.scorer.algorithm.model.mc_correct = None
 
 # @pytest.mark.integration
 # def test_probability_gradients(model: IRT, latent_variables):
 #     # This makes sure we can run torch.vmap inside probability_gradients, as it is not compatible with some tensor operations
-#     z = torch.randn((40, latent_variables))
-#     gradients = model.model.probability_gradients(z)
-#     assert gradients.shape == torch.Size([z.shape[0], model.model.items, model.model.max_item_responses, model.model.latent_variables])
+#     theta = torch.randn((40, latent_variables))
+#     gradients = model.model.probability_gradients(theta)
+#     assert gradients.shape == torch.Size([theta.shape[0], model.model.items, model.model.max_item_responses, model.model.latent_variables])

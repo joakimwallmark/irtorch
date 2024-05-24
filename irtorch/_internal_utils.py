@@ -24,48 +24,36 @@ def linear_regression(x, y):
 
     return w
 
-
-def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_categories: list[int] = None):
+def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputation_method: str = "zero"):
     """
-    Impute missing values in the data. For multiple choice data for which missing is not modeled, imputes randomly from incorrect responses.
+    Deal with missing values so that the data can be used for fitting.
 
     Parameters
-    -----------
+    ----------
     data : torch.Tensor
-        A 2D tensor where each row represents one respondent and each column represents an item.
-        The values should be the scores/possible responses on the items, starting from 0.
-        Missing item responses need to be coded as -1 or "nan".
-    mc_correct : list[int], optional
-        A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
-    item_categories : list[int], optional
-        A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
+        The data to fix.
+    model_missing : bool, optional
+        Whether the model can handle missing values. If True, missing values are encoded as -1. If False, missing values are imputed. (default is False)
+    imputation_method : str, optional
+        The method to use for imputing missing values. The default is "zero".
 
     Returns
-    ----------
+    -------
     torch.Tensor
-        A 2D tensor with missing values imputed. Rows are respondents and columns are items.
+        The data with missing values imputed.
     """
     if data.isnan().any():
         data[data.isnan()] = -1
 
-    if mc_correct is None:
-        data[data==-1] = 0
-        return data
-    else: 
-        if item_categories is None:
-            raise ValueError("item_categories are required for multiple choice imputation")
-        for col in range(data.shape[1]):
-            # Get the incorrect non-missing responses from the column
-            incorrect_responses = torch.arange(0, item_categories[col])
-            incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]-1]
+    if model_missing:
+        data = data + 1 # handled in theta_scores for nn
+    else:
+        if imputation_method == "zero":
+            data[data == -1] = 0
+        else:
+            raise NotImplementedError("Imputation methods not implemented yet")
 
-            # Find the indices of -1 values in the column
-            missing_indices = (data[:, col] == -1).squeeze()
-
-            # randomly sample from the incorrect responses and replace missing
-            data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))].float()
-
-        return data
+    return data
 
 def random_guessing_data(
     item_categories: list[int],
@@ -147,12 +135,12 @@ def conditional_score_distribution(
     item_categories: list[int],
 ):
     """
-    Compute total score distribution conditional on z as by (Thissen et. al. 1995).
+    Compute total score distribution conditional on theta as by (Thissen et. al. 1995).
 
     Parameters
     ----------
     probabilities : torch.Tensor
-        A 3D tensor containing item score probabilities for each z quadrature point.
+        A 3D tensor containing item score probabilities for each theta quadrature point.
         The first dimension represents the quadrature points, the second dimension represents the items and the third dimension represents the item categories.
     item_categories : list[list]
         A list of integers where each integer is the number of possible responses for the corresponding item.
@@ -160,7 +148,7 @@ def conditional_score_distribution(
     Returns
     -------
     torch.Tensor
-        A 2D torch tensor of total score probabilities, rows being quadrature z points and columns being total scores. (rows sum to 1)
+        A 2D torch tensor of total score probabilities, rows being quadrature theta points and columns being total scores. (rows sum to 1)
     """
     no_items = probabilities.shape[1]
     q_points = probabilities.shape[0]
@@ -198,7 +186,7 @@ def sum_incorrect_probabilities(
     ----------
     probabilities : list[torch.Tensor]
         A list of 2D tensors containing item score probabilities for each item.
-        Rows are z quadrature points from the z density and columns correspond to item responses. (rows sum to 1)
+        Rows are theta quadrature points from the theta density and columns correspond to item responses. (rows sum to 1)
     modeled_item_responses : list[int]
         A list of integers where each integer is the number of possible responses for the corresponding item.
     mc_correct : list[int]
@@ -298,6 +286,7 @@ class PytorchIRTDataset(torch.utils.data.Dataset):
         # set missing responses to 0 in the response mask (all non-missing are ones)
         self.mask = torch.zeros_like(data, dtype=torch.int)
         self.mask[data == -1] = 1
+        self.mask[data.isnan()] = 1
 
     def __len__(self) -> int:
         return len(self.data)

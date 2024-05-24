@@ -1,7 +1,6 @@
 import logging
-from .irt import IRT
 
-__version__ = "0.0.5"
+__version__ = "0.1.0"
 
 logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s: %(message)s",

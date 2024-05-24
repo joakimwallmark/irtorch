@@ -82,7 +82,7 @@ def test_forward_ordered(separate):
         hidden_dim=hidden_dim,
         mc_correct=None,
         separate=separate,
-        item_z_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
+        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
         negative_latent_variable_item_relationships=True,
         use_bounded_activation=True
     )
@@ -92,11 +92,11 @@ def test_forward_ordered(separate):
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [1, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
 
         loss = -model.log_likelihood(data=data, output=output)
@@ -117,7 +117,7 @@ def test_forward_mc(separate):
         hidden_dim=hidden_dim,
         mc_correct=[2, 1, 3],
         separate=separate,
-        item_z_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
+        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
         use_bounded_activation=True
     )
 
@@ -126,11 +126,11 @@ def test_forward_mc(separate):
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [1, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
 
         loss = -model.log_likelihood(data=data, output=output)
@@ -148,55 +148,55 @@ def test_probabilities_from_output():
         latent_variables = 2,
         item_categories=[2, 3, 4],
         hidden_dim=[6],
-        item_z_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
+        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
         use_bounded_activation=True
     )
 
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [0, 1, 1], [1, 2, 1], [1, 2, 3]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         assert output.shape == (4, 12), "Incorrect output shape"
 
         loss = -model.log_likelihood(data=data, output=output)
         loss.backward()
         optimizer.step()
 
-    probabilities = model.probabilities_from_output(model(z))
+    probabilities = model.probabilities_from_output(model(theta))
     assert probabilities.shape == (4, 3, 4), "Incorrect probabilities shape"
     assert torch.all(probabilities[:, 0, 2:4] == 0.0), "probabilities for missing categories should be 0"
     assert torch.all(probabilities[:, 1, 3:4] == 0.0), "probabilities for missing categories should be 0"
     assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1])), "probabilities for missing categories should be 0"
 
-def test_item_z_relationship_directions():
+def test_item_theta_relationship_directions():
     torch.manual_seed(0)
     model = MonotoneNN(
         latent_variables = 2,
         item_categories=[2, 3, 4],
         hidden_dim=[6],
-        item_z_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
+        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
         use_bounded_activation=True
     )
 
     optimizer = torch.optim.Adam(
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
-    z = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
+    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 2, 0], [0, 1, 1], [1, 0, 1], [1, 0, 3]]).float()
     for _ in range(2): # update two times with the same data
         optimizer.zero_grad()
-        output = model.forward(z)
+        output = model.forward(theta)
         loss = -model.log_likelihood(data=data, output=output)
         loss.backward()
         optimizer.step()
 
-    item_z_relationship_directions = model.item_z_relationship_directions()
-    assert item_z_relationship_directions.shape == (3, 2), "Incorrect item_z_relationship_directions shape"
-    assert torch.all(item_z_relationship_directions[0, :] == 1), "item_z_relationship_directions should be 1 for the first item"
-    assert torch.all(item_z_relationship_directions[1, :] == -1), "item_z_relationship_directions should be -1 the second item"
-    assert item_z_relationship_directions[2, 0] == 1, "item_z_relationship_directions should be 1 the third and first latent variable"
-    assert item_z_relationship_directions[2, 1] == 0, "item_z_relationship_directions should be 0 the third and second latent variable"
+    item_theta_relationship_directions = model.item_theta_relationship_directions()
+    assert item_theta_relationship_directions.shape == (3, 2), "Incorrect item_theta_relationship_directions shape"
+    assert torch.all(item_theta_relationship_directions[0, :] == 1), "item_theta_relationship_directions should be 1 for the first item"
+    assert torch.all(item_theta_relationship_directions[1, :] == -1), "item_theta_relationship_directions should be -1 the second item"
+    assert item_theta_relationship_directions[2, 0] == 1, "item_theta_relationship_directions should be 1 the third and first latent variable"
+    assert item_theta_relationship_directions[2, 1] == 0, "item_theta_relationship_directions should be 0 the third and second latent variable"

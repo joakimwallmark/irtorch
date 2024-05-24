@@ -4,7 +4,7 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class OneParameterLogistic(BaseIRTModel):
-    """
+    r"""
     One parametric logistic (2PL) IRT model.
 
     Parameters
@@ -13,23 +13,41 @@ class OneParameterLogistic(BaseIRTModel):
         Number of latent variables.
     items : int
         Number of items.
-    item_z_relationships : torch.Tensor, optional
+    item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+    
+    Notes
+    -----
+    For an item :math:`j`, the model defines the probability for responding correctly as:
+
+    .. math::
+
+        \frac{
+            \exp(\mathbf{a}^\top \mathbf{\theta} + d_j)
+        }{
+            1+\exp(\mathbf{a}^\top \mathbf{\theta} + d_j)
+        },
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}` is a vector of weights. This is the same for all items.
+    - :math:`d_j` is the bias term for item :math:`j`.
     """
     def __init__(
         self,
         latent_variables: int,
         items: int,
-        item_z_relationships: torch.Tensor = None
+        item_theta_relationships: torch.Tensor = None
     ):
         super().__init__(latent_variables=latent_variables, item_categories = [2] * items)
-        if item_z_relationships is not None:
-            if item_z_relationships.shape != (items, latent_variables):
+        if item_theta_relationships is not None:
+            if item_theta_relationships.shape != (items, latent_variables):
                 raise ValueError(
                     f"latent_item_connections must have shape ({items}, {latent_variables})."
                 )
-            assert(item_z_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
-            assert(torch.all(item_z_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         self.output_size = self.items * 2
         self.weight_param = nn.Parameter(torch.zeros(latent_variables))
@@ -49,13 +67,13 @@ class OneParameterLogistic(BaseIRTModel):
         nn.init.normal_(self.weight_param, mean=1., std=0.01)
         nn.init.zeros_(self.bias_param)
     
-    def forward(self, z: torch.Tensor) -> torch.Tensor:
+    def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
 
         Parameters
         ----------
-        z : torch.Tensor
+        theta : torch.Tensor
             2D tensor with latent variables. Rows are respondents and latent variables are columns. 
 
         Returns
@@ -63,11 +81,11 @@ class OneParameterLogistic(BaseIRTModel):
         output : torch.Tensor
             2D tensor. Rows are respondents and columns are item category logits.
         """
-        bias = torch.zeros(self.output_size, device=z.device)
+        bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
-        weighted_z = (self.weight_param * z).sum(dim=1, keepdim=True)
+        weighted_theta = (self.weight_param * theta).sum(dim=1, keepdim=True)
 
-        output = weighted_z + bias
+        output = weighted_theta + bias
         output[:, self.first_category] = 0
 
         return output
@@ -107,13 +125,13 @@ class OneParameterLogistic(BaseIRTModel):
         return parameters
 
     @torch.inference_mode()
-    def item_z_relationship_directions(self, z:torch.Tensor = None) -> torch.Tensor:
+    def item_theta_relationship_directions(self, theta:torch.Tensor = None) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.
 
         Parameters
         ----------
-        z : torch.Tensor, optional
+        theta : torch.Tensor, optional
             Not needed for this model. (default is None)
             
         Returns

@@ -1,10 +1,27 @@
 import pytest
 import torch
-from irtorch.utils import get_item_categories, one_hot_encode_test_data, decode_one_hot_test_data, split_data
+from irtorch.utils import get_item_categories, one_hot_encode_test_data, decode_one_hot_test_data, split_data, impute_missing
 
 def test_get_item_categories(test_data, item_categories):
     result = get_item_categories(test_data)
     assert result == item_categories
+
+def test_impute_missing():
+    data = torch.tensor([[1, 2, 1, -1], [-1, float("nan"), 0, 2], [-1, float("nan"), 1, 2]])
+    # mc_correct is corresponds to correct item category and not correct score (2 means score 1 is correct)
+    mc_correct = [2, 3, 2, 3]
+    imputed_data = impute_missing(data = data.clone())
+    assert (imputed_data == torch.tensor([[1, 2, 1, 0], [0, 0, 0, 2], [0, 0, 1, 2]])).all()
+
+    imputed_data = impute_missing(data = data, mc_correct=mc_correct, item_categories=[3, 3, 2, 3])
+    missing_mask = torch.logical_or(data == -1, data.isnan())
+    assert (imputed_data[missing_mask] > -1).all() # all missing are replaced
+    assert (imputed_data[~missing_mask] == data[~missing_mask]).all() # non missing are still the same
+    assert imputed_data[0, 3] != 2 # we did not replace with true values
+    assert imputed_data[1, 0] != 1
+    assert imputed_data[1, 1] != 2
+    assert imputed_data[2, 0] != 1
+    assert imputed_data[2, 1] != 2
 
 def test_one_hot_encode_test_data(device):
     # Define a small tensor of test scores and a list of maximum scores

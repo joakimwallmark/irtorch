@@ -18,6 +18,50 @@ def get_item_categories(data: torch.Tensor):
     """
     return [int(data[~data.isnan().any(dim=1)][:, col].max()) + 1 for col in range(data.shape[1])]
 
+def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_categories: list[int] = None):
+    """
+    Impute missing values in the data. 
+    For multiple choice data for which missing is not modeled, imputes randomly from incorrect responses.
+    For non-multiple choice data, imputes missing values as 0.
+
+    Parameters
+    -----------
+    data : torch.Tensor
+        A 2D tensor where each row represents one respondent and each column represents an item.
+        The values should be the scores/possible responses on the items, starting from 0.
+        Missing item responses need to be coded as -1 or "nan".
+    mc_correct : list[int], optional
+        A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
+    item_categories : list[int], optional
+        A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
+
+    Returns
+    ----------
+    torch.Tensor
+        A 2D tensor with missing values imputed. Rows are respondents and columns are items.
+    """
+    if data.isnan().any():
+        data[data.isnan()] = -1
+
+    if mc_correct is None:
+        data[data==-1] = 0
+        return data
+    else: 
+        if item_categories is None:
+            item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+        for col in range(data.shape[1]):
+            # Get the incorrect non-missing responses from the column
+            incorrect_responses = torch.arange(0, item_categories[col])
+            incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]-1]
+
+            # Find the indices of -1 values in the column
+            missing_indices = (data[:, col] == -1).squeeze()
+
+            # randomly sample from the incorrect responses and replace missing
+            data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))].float()
+
+        return data
+
 def split_data(data, train_ratio=0.8, shuffle=True):
     """
     Splits a tensor into training and testing datasets.

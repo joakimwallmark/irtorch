@@ -48,19 +48,19 @@ class MonotoneNN(BaseIRTModel):
     .. math::
 
         P(X_j=x | \mathbf{\theta}) = \frac{
-            \exp(theta_{jx}(\mathbf{\theta}))
+            \exp(\delta_{jx}(\mathbf{\theta}))
         }{
             \sum_{m=0}^{M_j}
-                \exp(theta_{jm}(\mathbf{\theta}))
+                \exp(\delta_{jm}(\mathbf{\theta}))
         },
 
     where:
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - When mc_correct is not specified: 
-        - :math:`theta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
+        - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
     - When mc_correct is specified:
-        - :math:`theta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`theta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
+        - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
     - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic neural network with ELU based activation functions as per :cite:t:`Runje2023`.
     """
     def __init__(

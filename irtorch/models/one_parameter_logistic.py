@@ -4,7 +4,7 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class OneParameterLogistic(BaseIRTModel):
-    """
+    r"""
     One parametric logistic (2PL) IRT model.
 
     Parameters
@@ -15,6 +15,24 @@ class OneParameterLogistic(BaseIRTModel):
         Number of items.
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+    
+    Notes
+    -----
+    For an item :math:`j`, the model defines the probability for responding correctly as:
+
+    .. math::
+
+        \frac{
+            \exp(\mathbf{a}^\top \mathbf{\theta} + d_j)
+        }{
+            1+\exp(\mathbf{a}^\top \mathbf{\theta} + d_j)
+        },
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}` is a vector of weights. This is the same for all items.
+    - :math:`d_j` is the bias term for item :math:`j`.
     """
     def __init__(
         self,

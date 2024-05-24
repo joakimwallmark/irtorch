@@ -4,7 +4,7 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class NominalResponse(BaseIRTModel):
-    """
+    r"""
     Nominal response IRT model.
 
     Parameters
@@ -22,7 +22,26 @@ class NominalResponse(BaseIRTModel):
     mc_correct : list[int], optional
         The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
     reference_category : bool, optional
-        Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by Bock(1972))
+        Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by :cite:t:`bock1972`)
+
+    Notes
+    -----
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+
+    .. math::
+
+        P(X_j=x | \mathbf{\theta}) = \frac{
+            \exp(\mathbf{a}_{jm}^\top \mathbf{\theta} + d_{jm})
+        }{
+            \sum_{m=0}^{M_j}
+                \exp(\mathbf{a}_{jm}^\top \mathbf{\theta} + d_{jm})
+        },
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}_{jm}` is a vector of weights for item :math:`j` and response category :math:`m`.
+    - :math:`d_{jm}` is the bias term for item :math:`j` and response category :math:`m`.
     """
     def __init__(
         self,

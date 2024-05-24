@@ -4,7 +4,7 @@ import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class GeneralizedPartialCredit(BaseIRTModel):
-    """
+    r"""
     Generalized Partial Credit IRT model.
 
     Parameters
@@ -17,6 +17,25 @@ class GeneralizedPartialCredit(BaseIRTModel):
         Number of categories for each item. One integer for each item. Missing responses exluded.
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+
+    Notes
+    -----
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+
+    .. math::
+
+        P(X_j=x | \mathbf{\theta}) = \begin{cases}
+            \dfrac{1}
+            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{if } x = 0\\
+            \dfrac{\exp \left( x\mathbf{a}_{j}^\top \mathbf{\theta}+\sum_{m=1}^{x}d_{jm}\right)}
+            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{otherwise}
+        \end{cases}
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`\mathbf{a}_{j}` is a vector of weights for item :math:`j`.
+    - :math:`d_{jm}` is the bias term for item :math:`j` and response category :math:`m`.
     """
     def __init__(
         self,

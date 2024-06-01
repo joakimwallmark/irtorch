@@ -5,11 +5,43 @@ import torch.nn.functional as F
 
 logger = logging.getLogger("irtorch")
 
+class MonotonicPolynomial(nn.Module):
+    """
+    A polynomial with monotonicity constraints.
+
+    Parameters
+    ----------
+    degree: int
+        Degree of the polynomial. Needs to be an uneven number.
+    """
+    def __init__(self, degree: int) -> None:
+        super().__init__()
+        if degree % 2 == 0:
+            raise ValueError("Degree must be an uneven number.")
+        self.k = (degree - 1) // 2
+        self.intercept = nn.Parameter(torch.randn(1, requires_grad=True))
+        self.omega = nn.Parameter(torch.randn(1, requires_grad=True))
+        self.alphas = nn.Parameter(torch.randn(self.k, requires_grad=True))
+        self.taus = nn.Parameter(torch.randn(self.k, requires_grad=True))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        sp_taus = F.softplus(self.taus)
+        
+        b = F.softplus(self.omega)
+        for i in range(self.k):
+            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1), device=x.device)
+            range_indices = torch.arange(2*(i+1)-1, device=x.device)
+            matrix[range_indices, range_indices] = 1
+            matrix[range_indices + 1, range_indices] = -2 * self.alphas[i]
+            matrix[range_indices + 2, range_indices] = self.alphas[i] ** 2 + sp_taus[i]
+            b = torch.matmul(matrix, b) / (i + 1)
+
+        return  torch.sum(x * b, dim=1, keepdim=True) + self.intercept
+
 class SoftplusLinear(nn.Module):
     """
     A linear layer with positive weights ensured using the softplus function. Should be more stable than squaring and maintains gradients in contrast to clipping/abs.
     """
-
     def __init__(
             self,
             in_features,

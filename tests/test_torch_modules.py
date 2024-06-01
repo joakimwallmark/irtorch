@@ -1,6 +1,29 @@
 import pytest
 import torch
-from irtorch.layers import NegationLayer, SoftplusLinear
+from irtorch.torch_modules import NegationLayer, SoftplusLinear, MonotonicPolynomial
+
+def test_MonotonicPolynomial_init():
+    # Test if the MonotonicPolynomial initializes correctly with a valid degree.
+    degree = 3
+    model = MonotonicPolynomial(degree)
+    assert isinstance(model, MonotonicPolynomial)
+    assert model.k == 1
+    assert model.intercept.shape == (1,)
+    assert model.omega.shape == (1,)
+    assert model.alphas.shape == (model.k,)
+    assert model.taus.shape == (model.k,)
+    degree = 4
+    # Test if the MonotonicPolynomial raises a ValueError for an even degree.
+    with pytest.raises(ValueError, match="Degree must be an uneven number."):
+        MonotonicPolynomial(degree)
+
+def test_MonotonicPolynomial_forward():
+    """Test the forward method with a sample input."""
+    degree = 3
+    model = MonotonicPolynomial(degree)
+    x = torch.randn(5, 1)  # Sample input tensor
+    output = model.forward(x)
+    assert output.shape == (5, 1)
 
 def test_SoftplusLinear_forward():
     zero_outputs=torch.tensor([1, 1, 1, 0, 0, 0, 0, 1, 1])

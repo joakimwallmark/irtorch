@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
-from irtorch.layers import SoftplusLinear, NegationLayer
+from irtorch.torch_modules import SoftplusLinear, NegationLayer
 from irtorch.activation_functions import BoundedELU
 
 logger = logging.getLogger("irtorch")

@@ -25,6 +25,33 @@ def test_MonotonicPolynomial_forward():
     output = model.forward(x)
     assert output.shape == (5, 1)
 
+    # Testing with specific input to check for monotonicity constraints
+    x_test = torch.tensor([[1.0], [2.0], [3.0]], requires_grad=True)
+    output_test = model(x_test)
+    
+    # Check if the output shape is as expected
+    assert output_test.shape == (3, 1), "Incorrect output shape"
+
+    # Ensure the output increases for increasing input (monotonic constraint)
+    assert torch.all(output_test[1:] >= output_test[:-1]), "Output is not monotonic"
+
+    # Perform a backward pass to ensure gradients are computed
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    optimizer.zero_grad()
+    loss = output_test.sum()
+    loss.backward()
+
+    # Ensure gradients are not None
+    for param in model.parameters():
+        assert param.grad is not None, "Gradients not computed for all parameters"
+
+    # Ensure the model parameters are updated
+    original_params = [param.clone() for param in model.parameters()]
+    optimizer.step()
+    for original, updated in zip(original_params, model.parameters()):
+        assert not torch.equal(original, updated), "Model parameters did not update"
+
+
 def test_SoftplusLinear_forward():
     zero_outputs=torch.tensor([1, 1, 1, 0, 0, 0, 0, 1, 1])
     sp_linear = SoftplusLinear(

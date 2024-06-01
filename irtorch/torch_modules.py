@@ -19,10 +19,10 @@ class MonotonicPolynomial(nn.Module):
         if degree % 2 == 0:
             raise ValueError("Degree must be an uneven number.")
         self.k = (degree - 1) // 2
-        self.intercept = nn.Parameter(torch.randn(1, requires_grad=True))
-        self.omega = nn.Parameter(torch.randn(1, requires_grad=True))
-        self.alphas = nn.Parameter(torch.randn(self.k, requires_grad=True))
-        self.taus = nn.Parameter(torch.randn(self.k, requires_grad=True))
+        self.intercept = nn.Parameter(torch.zeros(1, requires_grad=True))
+        self.omega = nn.Parameter(torch.zeros(1, requires_grad=True))
+        self.alphas = nn.Parameter(torch.zeros(self.k, requires_grad=True))
+        self.taus = nn.Parameter(torch.full((self.k, ), -5.0, requires_grad=True))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sp_taus = F.softplus(self.taus)
@@ -36,7 +36,23 @@ class MonotonicPolynomial(nn.Module):
             matrix[range_indices + 2, range_indices] = self.alphas[i] ** 2 + sp_taus[i]
             b = torch.matmul(matrix, b) / (i + 1)
 
-        return  torch.sum(x * b, dim=1, keepdim=True) + self.intercept
+        x_powers = x ** torch.arange(1, 2*self.k+2, device=x.device).unsqueeze(0)
+        return  torch.sum(x_powers * b, dim=1, keepdim=True) + self.intercept
+    
+    @torch.inference_mode()
+    def get_polynomial_parameters(self) -> torch.Tensor:
+        sp_taus = F.softplus(self.taus)
+        
+        b = F.softplus(self.omega)
+        for i in range(self.k):
+            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1))
+            range_indices = torch.arange(2*(i+1)-1)
+            matrix[range_indices, range_indices] = 1
+            matrix[range_indices + 1, range_indices] = -2 * self.alphas[i]
+            matrix[range_indices + 2, range_indices] = self.alphas[i] ** 2 + sp_taus[i]
+            b = torch.matmul(matrix, b) / (i + 1)
+
+        return torch.cat((self.intercept, b))
 
 class SoftplusLinear(nn.Module):
     """

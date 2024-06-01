@@ -136,30 +136,30 @@ class MonotoneNN(BaseIRTModel):
             input_dim = 1
             if separate == "items":
                 output_dim = self.items * hidden_dim[0]
-                layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[0])
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[0])
             elif separate == "categories":
                 output_dim = self.output_length * hidden_dim[0]
                 # missing categories output 0
                 missing_category_out = missing_categories.repeat_interleave(hidden_dim[0]).int()
-                layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[0] * self.max_item_responses)
-                layer_thetaero_out = torch.bitwise_or(missing_category_out, layer_thetaero_out)
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[0] * self.max_item_responses)
+                layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
 
-            self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_thetaero_out))
+            self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_theta_zero_out))
 
             # Hidden layers
             for i in range(1, len(hidden_dim)):
                 if separate == "items":
                     output_dim = self.items * hidden_dim[i]
-                    layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[i])
+                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i])
                     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.items)
                     separate_outputs = torch.tensor([hidden_dim[i]] * self.items)
                     input_dim = hidden_dim[i - 1] * self.items
                 if separate == "categories":
                     output_dim = self.output_length * hidden_dim[i]
                     missing_category_out = missing_categories.repeat_interleave(hidden_dim[i]).int()
-                    layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
+                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
                     # missing categories output 0
-                    layer_thetaero_out = torch.bitwise_or(missing_category_out, layer_thetaero_out)
+                    layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
                     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.output_length)
                     separate_outputs = torch.tensor([hidden_dim[i]] * self.output_length)
                     input_dim = hidden_dim[i - 1] * self.output_length
@@ -170,7 +170,7 @@ class MonotoneNN(BaseIRTModel):
                     separate_inputs=separate_inputs,
                     separate_outputs=separate_outputs,
                     zero_inputs=getattr(self, f"linear{i-1}_dim{theta_dim}").zero_outputs,
-                    zero_outputs=layer_thetaero_out,
+                    zero_outputs=layer_theta_zero_out,
                 ))
 
             if negative_latent_variable_item_relationships:

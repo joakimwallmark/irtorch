@@ -3,7 +3,6 @@ import torch
 from irtorch.torch_modules import NegationLayer, SoftplusLinear, MonotonicPolynomial
 
 def test_MonotonicPolynomial_init():
-    # Test if the MonotonicPolynomial initializes correctly with a valid degree.
     degree = 3
     model = MonotonicPolynomial(degree)
     assert isinstance(model, MonotonicPolynomial)
@@ -18,8 +17,7 @@ def test_MonotonicPolynomial_init():
         MonotonicPolynomial(degree)
 
 def test_MonotonicPolynomial_forward():
-    """Test the forward method with a sample input."""
-    degree = 3
+    degree = 5
     model = MonotonicPolynomial(degree)
     x = torch.randn(5, 1)  # Sample input tensor
     output = model.forward(x)

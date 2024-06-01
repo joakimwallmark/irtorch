@@ -58,7 +58,7 @@ class TestAE:
         assert isinstance(log_likelihood, float)
         assert log_likelihood > 0
 
-    def test__impute_missing_thetaero(self, algorithm: AE, irt_model: BaseIRTModel):
+    def test__impute_missing_theta_zero(self, algorithm: AE, irt_model: BaseIRTModel):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)

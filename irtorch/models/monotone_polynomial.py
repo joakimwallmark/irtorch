@@ -8,12 +8,12 @@ from irtorch.activation_functions import BoundedELU
 
 logger = logging.getLogger("irtorch")
 
-class MonotoneNN(BaseIRTModel):
+class MonotonicPolynomial(BaseIRTModel):
     r"""
-    Monotone Neural Network IRT model.
-    The model is a feedforward neural network separate monotone functions for each item or item category.
+    Monotonic Polynomial IRT model.
+    The model is a feedforward neural network separate monotonic functions for each item or item category.
 
-    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice Neural Network (MMCNN) model.
+    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice (MMC) model.
     
     If mc_correct is not specified, the item response categories are treated as ordered, and the latent variable effect for an item response category is the cumulative sum of the effects for the lower categories.
 
@@ -25,8 +25,8 @@ class MonotoneNN(BaseIRTModel):
         A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
     item_categories : list[int], optional
         Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
-    hidden_dim : list[int]
-        Number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
+    degree : int, optional
+        The degree of the monotonic polynomials. (default is 3)
     model_missing : bool, optional
         Whether to model missing item responses as separate item response categories. (Default: False)
     mc_correct : list[int], optional
@@ -38,38 +38,14 @@ class MonotoneNN(BaseIRTModel):
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     negative_latent_variable_item_relationships : bool, optional
         Whether to allow for negative latent variable item relationships. (Default: True)
-    use_bounded_activation : bool, optional
-        Whether to use bounded activation functions. (Default: True)
 
-    Notes
-    -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
-
-    .. math::
-
-        P(X_j=x | \mathbf{\theta}) = \frac{
-            \exp(\delta_{jx}(\mathbf{\theta}))
-        }{
-            \sum_{m=0}^{M_j}
-                \exp(\delta_{jm}(\mathbf{\theta}))
-        },
-
-    where:
-
-    - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - When mc_correct is not specified: 
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - When mc_correct is specified:
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
-    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic neural network with ELU based activation functions as per :cite:t:`Runje2023`.
-    - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     """
     def __init__(
         self,
         latent_variables: int = 1,
         data: torch.Tensor = None,
         item_categories: list[int] = None,
-        hidden_dim: list[int] = None,
+        degree: int = 3,
         model_missing: bool = False,
         mc_correct: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
@@ -144,34 +120,57 @@ class MonotoneNN(BaseIRTModel):
                 layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[0] * self.max_item_responses)
                 layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
 
-            self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_theta_zero_out))
 
-            # Hidden layers
-            for i in range(1, len(hidden_dim)):
-                if separate == "items":
-                    output_dim = self.items * hidden_dim[i]
-                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i])
-                    separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.items)
-                    separate_outputs = torch.tensor([hidden_dim[i]] * self.items)
-                    input_dim = hidden_dim[i - 1] * self.items
-                if separate == "categories":
-                    output_dim = self.output_length * hidden_dim[i]
-                    missing_category_out = missing_categories.repeat_interleave(hidden_dim[i]).int()
-                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
-                    # missing categories output 0
-                    layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
-                    separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.output_length)
-                    separate_outputs = torch.tensor([hidden_dim[i]] * self.output_length)
-                    input_dim = hidden_dim[i - 1] * self.output_length
+            if separate == "items":
+                output_dim = self.items * hidden_dim[i]
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i])
+                separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.items)
+                separate_outputs = torch.tensor([hidden_dim[i]] * self.items)
+                input_dim = hidden_dim[i - 1] * self.items
+            if separate == "categories":
+                output_dim = self.output_length * hidden_dim[i]
+                missing_category_out = missing_categories.repeat_interleave(hidden_dim[i]).int()
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
+                # missing categories output 0
+                layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
+                separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.output_length)
+                separate_outputs = torch.tensor([hidden_dim[i]] * self.output_length)
+                input_dim = hidden_dim[i - 1] * self.output_length
 
-                self.add_module(f"linear{i}_dim{theta_dim}", SoftplusLinear(
-                    input_dim,
-                    output_dim,
-                    separate_inputs=separate_inputs,
-                    separate_outputs=separate_outputs,
-                    zero_inputs=getattr(self, f"linear{i-1}_dim{theta_dim}").zero_outputs,
-                    zero_outputs=layer_theta_zero_out,
-                ))
+            self.add_module(f"linear{i}_dim{theta_dim}", SoftplusLinear(
+                input_dim,
+                output_dim,
+                separate_inputs=separate_inputs,
+                separate_outputs=separate_outputs,
+                zero_inputs=getattr(self, f"linear{i-1}_dim{theta_dim}").zero_outputs,
+                zero_outputs=layer_theta_zero_out,
+            ))
+            # self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_theta_zero_out))
+
+                # if separate == "items":
+                #     output_dim = self.items * hidden_dim[i]
+                #     layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i])
+                #     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.items)
+                #     separate_outputs = torch.tensor([hidden_dim[i]] * self.items)
+                #     input_dim = hidden_dim[i - 1] * self.items
+                # if separate == "categories":
+                #     output_dim = self.output_length * hidden_dim[i]
+                #     missing_category_out = missing_categories.repeat_interleave(hidden_dim[i]).int()
+                #     layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
+                #     # missing categories output 0
+                #     layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
+                #     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.output_length)
+                #     separate_outputs = torch.tensor([hidden_dim[i]] * self.output_length)
+                #     input_dim = hidden_dim[i - 1] * self.output_length
+
+                # self.add_module(f"linear{i}_dim{theta_dim}", SoftplusLinear(
+                #     input_dim,
+                #     output_dim,
+                #     separate_inputs=separate_inputs,
+                #     separate_outputs=separate_outputs,
+                #     zero_inputs=getattr(self, f"linear{i-1}_dim{theta_dim}").zero_outputs,
+                #     zero_outputs=layer_theta_zero_out,
+                # ))
 
             if negative_latent_variable_item_relationships:
                 inputs_per_items = 1 if separate == "items" else self.max_item_responses

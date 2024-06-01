@@ -13,46 +13,65 @@ class MonotonicPolynomial(nn.Module):
     ----------
     degree: int
         Degree of the polynomial. Needs to be an uneven number.
+    input_dim: int
+        Number of input features (a).
+    output_dim: int
+        Number of output features (b).
+    intercept: bool
+        Whether to include an intercept term. (Default: False)
     """
-    def __init__(self, degree: int) -> None:
+    def __init__(self, degree: int, input_dim: int = 1, output_dim: int = 1, intercept: int = False) -> None:
         super().__init__()
         if degree % 2 == 0:
             raise ValueError("Degree must be an uneven number.")
         self.k = (degree - 1) // 2
-        self.intercept = nn.Parameter(torch.zeros(1, requires_grad=True))
-        self.omega = nn.Parameter(torch.zeros(1, requires_grad=True))
-        self.alphas = nn.Parameter(torch.zeros(self.k, requires_grad=True))
-        self.taus = nn.Parameter(torch.full((self.k, ), -5.0, requires_grad=True))
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        self.omega = nn.Parameter(torch.zeros(1, input_dim, output_dim, requires_grad=True))
+        self.alpha = nn.Parameter(torch.zeros(self.k, input_dim, output_dim, requires_grad=True))
+        self.tau = nn.Parameter(torch.full((self.k, input_dim, output_dim), -5.0, requires_grad=True))
+        if intercept:
+            self.intercept = nn.Parameter(torch.zeros(output_dim, requires_grad=True))
+        else:
+            self.register_buffer('intercept', None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        sp_taus = F.softplus(self.taus)
+        sp_tau = F.softplus(self.tau)
         
         b = F.softplus(self.omega)
         for i in range(self.k):
-            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1), device=x.device)
+            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1, self.input_dim, self.output_dim), device=x.device)
             range_indices = torch.arange(2*(i+1)-1, device=x.device)
-            matrix[range_indices, range_indices] = 1
-            matrix[range_indices + 1, range_indices] = -2 * self.alphas[i]
-            matrix[range_indices + 2, range_indices] = self.alphas[i] ** 2 + sp_taus[i]
-            b = torch.matmul(matrix, b) / (i + 1)
+            matrix[range_indices, range_indices, :, :] = 1
+            matrix[range_indices + 1, range_indices, :, :] = -2 * self.alpha[i]
+            matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
+            b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
 
-        x_powers = x ** torch.arange(1, 2*self.k+2, device=x.device).unsqueeze(0)
-        return  torch.sum(x_powers * b, dim=1, keepdim=True) + self.intercept
+        x_powers = x.unsqueeze(2) ** torch.arange(1, 2*self.k+2, device=x.device)
+        # x_powers dimensions: (batch, input_dim, degree)
+        # b dimensions: (degree, input_dim, output_dim)
+        result = torch.einsum('abc,cbd->ad', x_powers, b)
+        if self.intercept is not None:
+            result += self.intercept
+        return result
     
     @torch.inference_mode()
     def get_polynomial_parameters(self) -> torch.Tensor:
-        sp_taus = F.softplus(self.taus)
+        sp_tau = F.softplus(self.tau)
         
         b = F.softplus(self.omega)
         for i in range(self.k):
-            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1))
+            matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1, self.input_dim, self.output_dim))
             range_indices = torch.arange(2*(i+1)-1)
-            matrix[range_indices, range_indices] = 1
-            matrix[range_indices + 1, range_indices] = -2 * self.alphas[i]
-            matrix[range_indices + 2, range_indices] = self.alphas[i] ** 2 + sp_taus[i]
-            b = torch.matmul(matrix, b) / (i + 1)
+            matrix[range_indices, range_indices, :, :] = 1
+            matrix[range_indices + 1, range_indices, :, :] = -2 * self.alpha[i]
+            matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
+            b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
 
-        return torch.cat((self.intercept, b))
+        if self.intercept is not None:
+            return torch.cat((self.intercept, b))
+        return b
 
 class SoftplusLinear(nn.Module):
     """

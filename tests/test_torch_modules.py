@@ -9,8 +9,8 @@ def test_MonotonicPolynomial_init():
     assert model.k == 1
     assert model.intercept.shape == (1,)
     assert model.omega.shape == (1,)
-    assert model.alphas.shape == (model.k,)
-    assert model.taus.shape == (model.k,)
+    assert model.alpha.shape == (model.k,)
+    assert model.tau.shape == (model.k,)
     degree = 4
     # Test if the MonotonicPolynomial raises a ValueError for an even degree.
     with pytest.raises(ValueError, match="Degree must be an uneven number."):

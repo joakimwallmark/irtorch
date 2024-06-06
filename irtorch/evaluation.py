@@ -413,9 +413,9 @@ class Evaluation:
         Parameters
         ----------
         data : torch.Tensor, optional
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None and uses the model's training data)
         theta : torch.Tensor, optional
-            A 2D tensor containing latent variable theta scores. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            A 2D tensor containing latent variable theta scores. Each row corresponds to one respondent and each column represents a latent variable. If not provided, will be computed using theta_estimation. (default is None)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
         reduction : str, optional

@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 logger = logging.getLogger("irtorch")
 
-class MonotonicPolynomial(nn.Module):
+class MonotonePolynomialModule(nn.Module):
     """
     A polynomial with monotonicity constraints.
 
@@ -13,26 +13,36 @@ class MonotonicPolynomial(nn.Module):
     ----------
     degree: int
         Degree of the polynomial. Needs to be an uneven number.
-    input_dim: int
+    in_features: int
         Number of input features (a).
-    output_dim: int
+    out_features: int
         Number of output features (b).
     intercept: bool
         Whether to include an intercept term. (Default: False)
+    relationship_matrix : torch.Tensor, optional
+        A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item cateogires and latent traits. (Default: None)
     """
-    def __init__(self, degree: int, input_dim: int = 1, output_dim: int = 1, intercept: int = False) -> None:
+    def __init__(
+        self,
+        degree: int,
+        in_features: int = 1,
+        out_features: int = 1,
+        intercept: int = False,
+        relationship_matrix: torch.Tensor = None
+    ) -> None:
         super().__init__()
         if degree % 2 == 0:
             raise ValueError("Degree must be an uneven number.")
         self.k = (degree - 1) // 2
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.input_dim = in_features
+        self.output_dim = out_features
+        self.relationship_matrix = relationship_matrix
 
-        self.omega = nn.Parameter(torch.zeros(1, input_dim, output_dim, requires_grad=True))
-        self.alpha = nn.Parameter(torch.zeros(self.k, input_dim, output_dim, requires_grad=True))
-        self.tau = nn.Parameter(torch.full((self.k, input_dim, output_dim), -5.0, requires_grad=True))
+        self.omega = nn.Parameter(torch.zeros(1, in_features, out_features, requires_grad=True))
+        self.alpha = nn.Parameter(torch.zeros(self.k, in_features, out_features, requires_grad=True))
+        self.tau = nn.Parameter(torch.full((self.k, in_features, out_features), -5.0, requires_grad=True))
         if intercept:
-            self.intercept = nn.Parameter(torch.zeros(output_dim, requires_grad=True))
+            self.intercept = nn.Parameter(torch.zeros(out_features, requires_grad=True))
         else:
             self.register_buffer('intercept', None)
 
@@ -47,7 +57,10 @@ class MonotonicPolynomial(nn.Module):
             matrix[range_indices + 1, range_indices, :, :] = -2 * self.alpha[i]
             matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
             b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
-
+        
+        # remove relationship between some items and latent variables
+        if self.relationship_matrix is not None:
+            b[:, ~self.relationship_matrix] = 0.0
         x_powers = x.unsqueeze(2) ** torch.arange(1, 2*self.k+2, device=x.device)
         # x_powers dimensions: (batch, input_dim, degree)
         # b dimensions: (degree, input_dim, output_dim)
@@ -57,7 +70,15 @@ class MonotonicPolynomial(nn.Module):
         return result
     
     @torch.inference_mode()
-    def get_polynomial_parameters(self) -> torch.Tensor:
+    def get_polynomial_coefficients(self) -> torch.Tensor:
+        """
+        Returns the polynomial coefficients.
+
+        Returns
+        -------
+        parameters: torch.Tensor
+            The polynomial parameters.
+        """
         sp_tau = F.softplus(self.tau)
         
         b = F.softplus(self.omega)

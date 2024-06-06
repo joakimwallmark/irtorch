@@ -1,11 +1,11 @@
 import pytest
 import torch
-from irtorch.torch_modules import NegationLayer, SoftplusLinear, MonotonicPolynomial
+from irtorch.torch_modules import NegationLayer, SoftplusLinear, MonotonePolynomialModule
 
-def test_MonotonicPolynomial_init():
+def test_MonotonePolynomialModule_init():
     degree = 3
-    model = MonotonicPolynomial(degree)
-    assert isinstance(model, MonotonicPolynomial)
+    model = MonotonePolynomialModule(degree)
+    assert isinstance(model, MonotonePolynomialModule)
     assert model.k == 1
     assert model.intercept.shape == (1,)
     assert model.omega.shape == (1,)
@@ -14,11 +14,11 @@ def test_MonotonicPolynomial_init():
     degree = 4
     # Test if the MonotonicPolynomial raises a ValueError for an even degree.
     with pytest.raises(ValueError, match="Degree must be an uneven number."):
-        MonotonicPolynomial(degree)
+        MonotonePolynomialModule(degree)
 
-def test_MonotonicPolynomial_forward():
+def test_MonotonePolynomialModule_forward():
     degree = 5
-    model = MonotonicPolynomial(degree)
+    model = MonotonePolynomialModule(degree)
     x = torch.randn(5, 1)  # Sample input tensor
     output = model.forward(x)
     assert output.shape == (5, 1)

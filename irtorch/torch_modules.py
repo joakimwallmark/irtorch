@@ -14,9 +14,9 @@ class MonotonePolynomialModule(nn.Module):
     degree: int
         Degree of the polynomial. Needs to be an uneven number.
     in_features: int
-        Number of input features (a).
+        Number of input features.
     out_features: int
-        Number of output features (b).
+        Number of output features.
     intercept: bool
         Whether to include an intercept term. (Default: False)
     relationship_matrix : torch.Tensor, optional
@@ -58,7 +58,7 @@ class MonotonePolynomialModule(nn.Module):
             if shared_directions == 0:
                 raise ValueError("shared_directions must be greater than 0.")
             if out_features % shared_directions != 0:
-                raise ValueError("out_features must be divisible with shared_directions.")
+                raise ValueError("out_features must be divisible by shared_directions.")
             self.directions = nn.Parameter(torch.zeros(in_features, int(out_features / shared_directions), requires_grad=True))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -94,8 +94,8 @@ class MonotonePolynomialModule(nn.Module):
 
         Returns
         -------
-        parameters: torch.Tensor
-            The polynomial parameters.
+        tuple[torch.Tensor, torch.Tensor]
+            Tuple of tensors containing the coefficients of the polynomial with dimensions (degree, input_dim, output_dim), the second tensor contains the intercept if it exists and None otherwise.
         """
         sp_tau = F.softplus(self.tau)
         
@@ -115,9 +115,7 @@ class MonotonePolynomialModule(nn.Module):
         if self.relationship_matrix is not None:
             b[:, ~self.relationship_matrix] = 0.0
 
-        if self.intercept is not None:
-            return torch.cat((self.intercept, b))
-        return b
+        return b, self.intercept
 
 class SoftplusLinear(nn.Module):
     """

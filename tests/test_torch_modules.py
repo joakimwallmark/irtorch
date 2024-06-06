@@ -28,17 +28,17 @@ def test_MonotonePolynomialModule_init():
 
 def test_MonotonePolynomialModule_forward():
     degree = 5
-    model = MonotonePolynomialModule(degree)
-    x = torch.randn(5, 1)  # Sample input tensor
+    relationship_matrix=torch.tensor([[1, 1, 0], [1, 1, 1]], dtype=torch.bool)
+    model = MonotonePolynomialModule(degree, in_features=2, out_features=3, relationship_matrix=relationship_matrix, shared_directions=3)
+    x = torch.randn(5, 2)  # Sample input tensor
     output = model.forward(x)
-    assert output.shape == (5, 1)
+    assert output.shape == (5, 3), "Incorrect output shape"
 
     # Testing with specific input to check for monotonicity constraints
-    x_test = torch.tensor([[1.0], [2.0], [3.0]], requires_grad=True)
+    original_parameter_dictionary = {k: v.clone() for k, v in model.named_parameters()}
+    x_test = torch.tensor([[1.0, 1.2], [2.0, 1.5], [3.0, 2.8]], requires_grad=True)
     output_test = model(x_test)
-    
-    # Check if the output shape is as expected
-    assert output_test.shape == (3, 1), "Incorrect output shape"
+    assert output_test.shape == (3, 3), "Incorrect output shape"
 
     # Ensure the output increases for increasing input (monotonic constraint)
     assert torch.all(output_test[1:] >= output_test[:-1]), "Output is not monotonic"
@@ -48,16 +48,21 @@ def test_MonotonePolynomialModule_forward():
     optimizer.zero_grad()
     loss = output_test.sum()
     loss.backward()
+    optimizer.step()
 
     # Ensure gradients are not None
     for param in model.parameters():
         assert param.grad is not None, "Gradients not computed for all parameters"
 
-    # Ensure the model parameters are updated
-    original_params = [param.clone() for param in model.parameters()]
-    optimizer.step()
-    for original, updated in zip(original_params, model.parameters()):
-        assert not torch.equal(original, updated), "Model parameters did not update"
+    # Assert that the parameters have updated
+    for name, param in model.named_parameters():
+        original_parameters = original_parameter_dictionary[name]
+        if name in ["omega", "alpha", "tau"]:
+            assert torch.all(original_parameters[:, relationship_matrix] != param[:, relationship_matrix]), f"Parameters for {name} should have changed"
+        elif name == "directions":
+            assert torch.all(original_parameters[relationship_matrix] != param[relationship_matrix]), f"Parameters for {name} should have changed"
+        else:
+            assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
 
 def test_MonotonePolynomialModule_get_polynomial_coefficients():
     degree = 3

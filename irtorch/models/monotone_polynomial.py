@@ -120,7 +120,7 @@ class MonotonePolynomial(BaseIRTModel):
             in_features=latent_variables,
             out_features=self.separations,
             intercept=False,
-            relationship_matrix=item_theta_relationships.transpose(0, 1),
+            relationship_matrix=item_theta_relationships.transpose(0, 1).repeat_interleave(shared_directions, dim=1),
             negative_relationships=negative_latent_variable_item_relationships,
             shared_directions=shared_directions
         ))

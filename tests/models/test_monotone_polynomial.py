@@ -1,24 +1,20 @@
 import pytest
 import torch
-from irtorch.models import MonotoneNN
+from irtorch.models import MonotonePolynomial
 
 def test_mc_correct_output_idx():
-    model = MonotoneNN(
+    model = MonotonePolynomial(
         latent_variables = 2,
-        hidden_dim=[6],
         item_categories=[3, 4],
-        use_bounded_activation=True,
         mc_correct=[2, 1],
         model_missing=True
     )
 
     assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, False,  True, False, False, False,  True, False, False, False]))
 
-    model = MonotoneNN(
+    model = MonotonePolynomial(
         latent_variables = 2,
-        hidden_dim=[6],
         item_categories=[3, 4],
-        use_bounded_activation=True,
         mc_correct=[2, 1],
         model_missing=False
     )
@@ -27,11 +23,9 @@ def test_mc_correct_output_idx():
 
 
 def test_log_likelihood():
-    model = MonotoneNN(
+    model = MonotonePolynomial(
         latent_variables = 2,
-        hidden_dim=[6],
-        item_categories=[3, 4],
-        use_bounded_activation=True
+        item_categories=[3, 4]
     )
 
     data = torch.tensor([[0, 2], [1, 3], [2, 3]]).float()
@@ -47,44 +41,17 @@ def test_log_likelihood():
     assert torch.equal(result[3], result[5]), "same responses should be equal"
     assert torch.isclose(result[1], torch.tensor(-1.6722826)), "incorrect item likelihood"
 
-
-def test_split_activation():
-    model = MonotoneNN(2, [2, 2, 2], [6], use_bounded_activation=True)
-
-    input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
-    output_tensor_true = model.split_activation(input_tensor)
-    output_tensor_true.sum().backward()
-    assert output_tensor_true.shape == input_tensor.shape, "Output shape is incorrect with use_bounded_activation=True"
-    assert input_tensor.grad is not None, "Gradients are not being tracked"
-    assert torch.allclose(output_tensor_true, torch.tensor([
-        [ 1.0000,  0.6321,  1.0000, -0.6321, -1.0000, -1.0000],
-        [ 1.0000,  0.6321,  1.0000, -0.6321, -1.0000, -1.0000]
-    ]), atol=1e-4), "Incorrect output values"
-
-    # Test when use_bounded_activation is False
-    input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
-    model.use_bounded_activation=False
-    output_tensor_false = model.split_activation(input_tensor)
-    output_tensor_false.sum().backward()
-    assert output_tensor_false.shape == input_tensor.shape, "Output shape is incorrect with use_bounded_activation=False"
-    assert input_tensor.grad is not None, "Gradients are not being tracked"
-    assert torch.allclose(output_tensor_false, torch.tensor([
-        [ 1.0000,  0.6321,  1.0000, -1.0000, -0.6321, -1.0000],
-        [ 1.0000,  0.6321,  1.0000, -1.0000, -0.6321, -1.0000]
-    ]), atol=1e-4), "Incorrect output values"
-
 @pytest.mark.parametrize("separate", ["items", "categories"])
 def test_forward_ordered(separate):
-    hidden_dim = [3, 6]
-    model = MonotoneNN(
+    item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool)
+    model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[2, 3, 3],
-        hidden_dim=hidden_dim,
+        degree=3,
         mc_correct=None,
         separate=separate,
-        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
+        item_theta_relationships=item_theta_relationships,
         negative_latent_variable_item_relationships=True,
-        use_bounded_activation=True
     )
 
     original_parameter_dictionary = {k: v.clone() for k, v in model.named_parameters()}
@@ -93,8 +60,8 @@ def test_forward_ordered(separate):
         [{"params": model.parameters()}], lr=0.02, amsgrad=True
     )
     theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
-    data = torch.tensor([[0, 1, 0], [1, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
-    for _ in range(2): # update two times with the same data
+    data = torch.tensor([[0, 1, 0], [1, 0, 1], [1, 2, 1], [1, 2, 2]]).float()
+    for _ in range(100): # update many times, otherwise tau may not change
         optimizer.zero_grad()
         output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
@@ -104,21 +71,28 @@ def test_forward_ordered(separate):
         optimizer.step()
         
     # Assert that the parameters have updated
+    changed_indices = item_theta_relationships.transpose(0, 1)
+    if separate == "categories":
+        changed_indices = changed_indices.repeat_interleave(3, dim=1)
+        changed_indices[:, 2] = False
     for name, param in model.named_parameters():
         original_parameters = original_parameter_dictionary[name]
-        assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
+        if name in ["mono_poly.omega", "mono_poly.alpha", "mono_poly.tau"]:
+            assert torch.all(original_parameters[:, changed_indices] != param[:, changed_indices]), f"Parameters for {name} should have changed"
+        elif name == "mono_poly.directions":
+            assert torch.all(original_parameters[item_theta_relationships.transpose(0, 1)] != param[item_theta_relationships.transpose(0, 1)]), f"Parameters for {name} should have changed"
+        else:
+            assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
 
 @pytest.mark.parametrize("separate", ["items", "categories"])
 def test_forward_mc(separate):
-    hidden_dim = [3, 6]
-    model = MonotoneNN(
+    item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool)
+    model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[2, 3, 3],
-        hidden_dim=hidden_dim,
         mc_correct=[2, 1, 3],
         separate=separate,
-        item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
-        use_bounded_activation=True
+        item_theta_relationships=item_theta_relationships,
     )
 
     original_parameter_dictionary = {k: v.clone() for k, v in model.named_parameters()}
@@ -128,7 +102,7 @@ def test_forward_mc(separate):
     )
     theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
     data = torch.tensor([[0, 1, 0], [1, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
-    for _ in range(2): # update two times with the same data
+    for _ in range(100): # update many times, otherwise tau may not change
         optimizer.zero_grad()
         output = model.forward(theta)
         assert output.shape == (4, 9), "Incorrect output shape"
@@ -138,18 +112,25 @@ def test_forward_mc(separate):
         optimizer.step()
         
     # Assert that the parameters have updated
+    changed_indices = item_theta_relationships.transpose(0, 1)
+    if separate == "categories":
+        changed_indices = changed_indices.repeat_interleave(3, dim=1)
+        changed_indices[:, 2] = False
     for name, param in model.named_parameters():
         original_parameters = original_parameter_dictionary[name]
-        assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
+        if name in ["mono_poly.omega", "mono_poly.alpha", "mono_poly.tau"]:
+            assert torch.all(original_parameters[:, changed_indices] != param[:, changed_indices]), f"Parameters for {name} should have changed"
+        elif name == "mono_poly.directions":
+            assert torch.all(original_parameters[item_theta_relationships.transpose(0, 1)] != param[item_theta_relationships.transpose(0, 1)]), f"Parameters for {name} should have changed"
+        else:
+            assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
 
 
 def test_probabilities_from_output():
-    model = MonotoneNN(
+    model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[2, 3, 4],
-        hidden_dim=[6],
         item_theta_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
-        use_bounded_activation=True
     )
 
     optimizer = torch.optim.Adam(
@@ -174,12 +155,10 @@ def test_probabilities_from_output():
 
 def test_item_theta_relationship_directions():
     torch.manual_seed(0)
-    model = MonotoneNN(
+    model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[2, 3, 4],
-        hidden_dim=[6],
         item_theta_relationships=torch.tensor([[1, 1], [1, 1], [1, 0]], dtype=torch.bool),
-        use_bounded_activation=True
     )
 
     optimizer = torch.optim.Adam(

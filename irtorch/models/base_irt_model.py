@@ -72,6 +72,14 @@ class BaseIRTModel(ABC, nn.Module):
 
     @property
     def evaluation(self):
+        """
+        Various methods for IRT model evaluation as described in :class:`irtorch.Evaluation`.
+
+        Returns
+        -------
+        Evaluation
+            An instance of the :class:`irtorch.Evaluation` class.
+        """
         if self._evaluation is None:
             from ..evaluation import Evaluation
             self._evaluation = Evaluation(self)
@@ -79,6 +87,14 @@ class BaseIRTModel(ABC, nn.Module):
 
     @property
     def plotting(self):
+        """
+        Methods for IRT model plotting :class:`irtorch.Plotting`.
+
+        Returns
+        -------
+        BitScales
+            An instance of the :class:`irtorch.Plotting` class.
+        """
         if self._plotting is None:
             from ..plotting import Plotting
             self._plotting = Plotting(self)
@@ -114,7 +130,7 @@ class BaseIRTModel(ABC, nn.Module):
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         algorithm : BaseIRTAlgorithm
-            The algorithm to use for training the model. Needs to inherit irtorch.estimation_algorithms.BaseIRTAlgorithm.
+            The algorithm to use for training the model. Needs to inherit :class:`irtorch.estimation_algorithms.BaseIRTAlgorithm`
         **kwargs
             Additional keyword arguments to pass to the algorithm's fit method.
         """

@@ -10,8 +10,7 @@ logger = logging.getLogger("irtorch")
 
 class MonotonePolynomial(BaseIRTModel):
     r"""
-    Monotonic Polynomial IRT model.
-    The model is a feedforward neural network separate monotonic functions for each item or item category.
+    Monotonic Polynomial IRT model with monotonic polynomials for each item or item response category.
 
     If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice (MMC) model.
     
@@ -39,6 +38,28 @@ class MonotonePolynomial(BaseIRTModel):
     negative_latent_variable_item_relationships : bool, optional
         Whether to allow for negative latent variable item relationships. (Default: True)
 
+    Notes
+    -----
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+
+    .. math::
+
+        P(X_j=x | \mathbf{\theta}) = \frac{
+            \exp(\delta_{jx}(\mathbf{\theta}))
+        }{
+            \sum_{m=0}^{M_j}
+                \exp(\delta_{jm}(\mathbf{\theta}))
+        },
+
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - When mc_correct is not specified: 
+        - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
+    - When mc_correct is specified:
+        - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
+    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
+    - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     """
     def __init__(
         self,

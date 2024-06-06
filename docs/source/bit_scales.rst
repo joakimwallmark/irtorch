@@ -1,5 +1,6 @@
 Bit scales
 =====================
 
-.. automodule:: irtorch.bit_scales
+.. autoclass:: irtorch.BitScales
+    :show-inheritance:
     :members:

@@ -1,5 +1,6 @@
 Plotting
 =====================
 
-.. automodule:: irtorch.plotting
+.. autoclass:: irtorch.Plotting
+    :show-inheritance:
     :members:

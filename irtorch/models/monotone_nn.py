@@ -11,7 +11,7 @@ logger = logging.getLogger("irtorch")
 class MonotoneNN(BaseIRTModel):
     r"""
     Monotone Neural Network IRT model.
-    The model is a feedforward neural network separate monotone functions for each item or item category.
+    The model is a feedforward neural network separate with monotone functions for each item or item category.
 
     If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice Neural Network (MMCNN) model.
     

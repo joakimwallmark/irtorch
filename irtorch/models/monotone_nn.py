@@ -3,15 +3,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
-from irtorch.layers import SoftplusLinear, NegationLayer
+from irtorch.torch_modules import SoftplusLinear, NegationLayer
 from irtorch.activation_functions import BoundedELU
 
 logger = logging.getLogger("irtorch")
 
 class MonotoneNN(BaseIRTModel):
     r"""
-    Nonparametric Monotone Neural Network IRT model.
-    The model is a feedforward neural network separate monotone functions for each item or item category.
+    Monotone Neural Network IRT model.
+    The model is a feedforward neural network separate with monotone functions for each item or item category.
 
     If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice Neural Network (MMCNN) model.
     
@@ -30,9 +30,9 @@ class MonotoneNN(BaseIRTModel):
     model_missing : bool, optional
         Whether to model missing item responses as separate item response categories. (Default: False)
     mc_correct : list[int], optional
-        The correct response category for each item. (Default: None)
+        For multiple choice tests. The correct response category for each item. (Default: None)
     separate : str, optional
-        Whether to fit separate latent trait weight functions for items or items categories. Can be 'items' or 'categories'. 
+        Whether to fit separate latent trait functions for items or items categories. Can be 'items' or 'categories'. 
         Note that 'categories' results in a more flexible model with more parameters. (Default: 'categories')
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
@@ -62,6 +62,7 @@ class MonotoneNN(BaseIRTModel):
     - When mc_correct is specified:
         - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
     - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic neural network with ELU based activation functions as per :cite:t:`Runje2023`.
+    - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     """
     def __init__(
         self,
@@ -135,30 +136,30 @@ class MonotoneNN(BaseIRTModel):
             input_dim = 1
             if separate == "items":
                 output_dim = self.items * hidden_dim[0]
-                layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[0])
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[0])
             elif separate == "categories":
                 output_dim = self.output_length * hidden_dim[0]
                 # missing categories output 0
                 missing_category_out = missing_categories.repeat_interleave(hidden_dim[0]).int()
-                layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[0] * self.max_item_responses)
-                layer_thetaero_out = torch.bitwise_or(missing_category_out, layer_thetaero_out)
+                layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[0] * self.max_item_responses)
+                layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
 
-            self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_thetaero_out))
+            self.add_module(f"linear0_dim{theta_dim}", SoftplusLinear(input_dim, output_dim, zero_outputs=layer_theta_zero_out))
 
             # Hidden layers
             for i in range(1, len(hidden_dim)):
                 if separate == "items":
                     output_dim = self.items * hidden_dim[i]
-                    layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[i])
+                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i])
                     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.items)
                     separate_outputs = torch.tensor([hidden_dim[i]] * self.items)
                     input_dim = hidden_dim[i - 1] * self.items
                 if separate == "categories":
                     output_dim = self.output_length * hidden_dim[i]
                     missing_category_out = missing_categories.repeat_interleave(hidden_dim[i]).int()
-                    layer_thetaero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
+                    layer_theta_zero_out = zero_outputs.repeat_interleave(hidden_dim[i] * self.max_item_responses)
                     # missing categories output 0
-                    layer_thetaero_out = torch.bitwise_or(missing_category_out, layer_thetaero_out)
+                    layer_theta_zero_out = torch.bitwise_or(missing_category_out, layer_theta_zero_out)
                     separate_inputs = torch.tensor([hidden_dim[i - 1]] * self.output_length)
                     separate_outputs = torch.tensor([hidden_dim[i]] * self.output_length)
                     input_dim = hidden_dim[i - 1] * self.output_length
@@ -169,7 +170,7 @@ class MonotoneNN(BaseIRTModel):
                     separate_inputs=separate_inputs,
                     separate_outputs=separate_outputs,
                     zero_inputs=getattr(self, f"linear{i-1}_dim{theta_dim}").zero_outputs,
-                    zero_outputs=layer_thetaero_out,
+                    zero_outputs=layer_theta_zero_out,
                 ))
 
             if negative_latent_variable_item_relationships:
@@ -180,7 +181,7 @@ class MonotoneNN(BaseIRTModel):
                     f"negation_dim{theta_dim}",
                     NegationLayer(
                         item_theta_relationships=item_relationships,
-                        inputs_per_items=inputs_per_items,
+                        inputs_per_item=inputs_per_items,
                         zero_outputs=missing_cats
                     )
                 )

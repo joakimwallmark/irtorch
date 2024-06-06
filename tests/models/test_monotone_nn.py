@@ -170,7 +170,7 @@ def test_probabilities_from_output():
     assert probabilities.shape == (4, 3, 4), "Incorrect probabilities shape"
     assert torch.all(probabilities[:, 0, 2:4] == 0.0), "probabilities for missing categories should be 0"
     assert torch.all(probabilities[:, 1, 3:4] == 0.0), "probabilities for missing categories should be 0"
-    assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1])), "probabilities for missing categories should be 0"
+    assert torch.allclose(probabilities.sum(dim=2), torch.ones(probabilities.shape[0], probabilities.shape[1])), "probabilities should sum to 1"
 
 def test_item_theta_relationship_directions():
     torch.manual_seed(0)

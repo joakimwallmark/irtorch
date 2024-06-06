@@ -26,3 +26,7 @@ IRT models
 .. autoclass:: irtorch.models.MonotoneNN
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.models.MonotonePolynomial
+    :show-inheritance:
+    :members:

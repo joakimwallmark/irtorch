@@ -281,11 +281,11 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                theta = item_entropies.reshape((grid_size, grid_size)),
+                z = item_entropies.reshape((grid_size, grid_size)),
                 title = title or f"Item {item} entropy",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                theta_label = "Entropy",
+                z_label = "Entropy",
                 colorscale = colorscale
             )
         
@@ -509,7 +509,7 @@ class Plotting:
                 title=title or f"IRF - Item {item}",
                 x_label=x_label or f"Latent variable {latent_variables[0]}",
                 y_label=y_label or f"Latent variable {latent_variables[1]}",
-                theta_label="Probability",
+                z_label="Probability",
                 grayscale=grayscale
             )
 
@@ -641,11 +641,11 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                theta = information.reshape((grid_size, grid_size)),
+                z = information.reshape((grid_size, grid_size)),
                 title = title or "Information",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                theta_label = "Information",
+                z_label = "Information",
                 colorscale = colorscale
             )
 
@@ -771,11 +771,11 @@ class Plotting:
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                theta = sum_scores.reshape((grid_size, grid_size)),
+                z = sum_scores.reshape((grid_size, grid_size)),
                 title = title or "Expected sum score",
                 x_label = x_label or "Latent variable 1",
                 y_label = y_label or "Latent variable 2",
-                theta_label = "Expected sum score",
+                z_label = "Expected sum score",
                 colorscale = colorscale
             )
 
@@ -840,25 +840,25 @@ class Plotting:
         self,
         x: torch.Tensor,
         y: torch.Tensor,
-        theta: torch.Tensor,
+        z: torch.Tensor,
         title: str,
         x_label: str,
         y_label: str,
-        theta_label: str,
+        z_label: str,
         colorscale: str
     ) -> go.Figure:
         x = x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy()
         y = y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
-        theta = theta.cpu().detach().numpy() if theta.is_cuda else theta.detach().numpy()
+        z = z.cpu().detach().numpy() if z.is_cuda else z.detach().numpy()
         fig = go.Figure(data=[
-            go.Surface(theta=theta, x=x, y=y, colorscale=colorscale)
+            go.Surface(z=z, x=x, y=y, colorscale=colorscale)
         ])
         fig.update_layout(
             title=title,
             scene = {
                 "xaxis": {"title": x_label},
                 "yaxis": {"title": y_label},
-                "zaxis": {"title": theta_label}
+                "zaxis": {"title": z_label}
             }
         )
 
@@ -1001,7 +1001,7 @@ class Plotting:
         title: str = "IRF",
         x_label: str = "Latent variable",
         y_label: str = "Latent variable",
-        theta_label: str = "Probability",
+        z_label: str = "Probability",
         grayscale: bool = False,
     ) -> go.Figure:
         """
@@ -1019,7 +1019,7 @@ class Plotting:
             The label for the X-axis. (default is "Latent variable")
         y_label : str, optional
             The label for the Y-axis. (default is "Latent variable")
-        theta_label : str, optional
+        z_label : str, optional
             The label for the Z-axis. (default is "Probability")
         title : str, optional
             The title for the plot. (default is "IRF")
@@ -1053,16 +1053,16 @@ class Plotting:
 
         fig = go.Figure()
         for response_category in range(num_responses):
-            theta = prob_matrix[:, response_category].reshape((steps, steps))
+            z = prob_matrix[:, response_category].reshape((steps, steps))
             fig.add_trace(go.Surface(
-                x=x, y=y, theta=theta, 
+                x=x, y=y, z=z,
                 name=f"Response {response_category}",
                 showscale=False,  # Optionally hide the color scale
                 colorscale=[(0, colors[response_category % len(colors)]), (1, colors[response_category % len(colors)])],
             ))
             # Dummy trace for legend
             fig.add_trace(go.Scatter3d(
-                x=[None], y=[None], theta=[None], mode="markers",
+                x=[None], y=[None], z=[None], mode="markers",
                 marker=dict(size=10, color=colors[response_category % len(colors)]),
                 showlegend=True, name=f"Response {response_category}"
             ))
@@ -1072,7 +1072,7 @@ class Plotting:
             scene=dict(
                 xaxis_title=x_label,
                 yaxis_title=y_label,
-                zaxis_title=theta_label,
+                zaxis_title=z_label,
             ),
             legend_title="Item responses",
             autosize=True,

@@ -63,7 +63,7 @@ class TestMML:
             assert loss <= previous_loss  # Loss should decrease
             previous_loss = loss
 
-    def test__impute_missing_thetaero(self, algorithm: MML, irt_model: MonotoneNN):
+    def test__impute_missing_theta_zero(self, algorithm: MML, irt_model: MonotoneNN):
         a, b = 5, 5
         data = torch.full((a, b), 5)
         no_missing_mask = torch.full((a, b), 0)

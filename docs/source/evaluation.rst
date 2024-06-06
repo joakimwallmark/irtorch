@@ -1,5 +1,6 @@
 Model evaluation
 =====================
 
-.. automodule:: irtorch.evaluation
+.. autoclass:: irtorch.Evaluation
+    :show-inheritance:
     :members:

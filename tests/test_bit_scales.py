@@ -100,7 +100,7 @@ def test_bit_scores(bit_scales: BitScales, one_dimensional, latent_variables, bi
         assert bit_scores.shape == (4, latent_variables)
 
     if bit_score_theta_grid_method == "ML":
-        bit_scales.model.latent_scores.assert_called_once_with(bit_scales.model.algorithm.train_data, theta_estimation="ML", ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.3)
+        bit_scales.model.latent_scores.assert_called_once_with(bit_scales.model.algorithm.train_data, theta_estimation="ML", ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.25)
 
 def test_compute_1d_bit_scores(bit_scales: BitScales, latent_variables):
     torch.manual_seed(4)

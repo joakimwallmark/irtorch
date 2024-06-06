@@ -13,6 +13,6 @@ Estimation algorithms
     :members:
     :show-inheritance:
 
-.. autoclass:: irtorch.estimation_algorithms.base_irt_algorithm.BaseIRTAlgorithm
+.. autoclass:: irtorch.estimation_algorithms.BaseIRTAlgorithm
     :members:
     :show-inheritance:

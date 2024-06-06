@@ -28,7 +28,7 @@ class BitScales:
         self,
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
         items: list[int] = None,
         start_all_incorrect: bool = False,
         train_theta: torch.Tensor = None,
@@ -150,7 +150,7 @@ class BitScales:
         one_dimensional: bool = False,
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
         grid_points: int = 300,
         items: list[int] = None,
         start_theta_guessing_probabilities: list[float] = None,
@@ -216,6 +216,8 @@ class BitScales:
         if start_theta is None:
             start_theta = self.bit_score_starting_theta(
                 theta_estimation=theta_estimation,
+                ml_map_device=ml_map_device,
+                lbfgs_learning_rate=lbfgs_learning_rate,
                 items=items,
                 start_all_incorrect=one_dimensional,
                 train_theta=population_theta,

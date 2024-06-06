@@ -120,7 +120,7 @@ def test_SoftplusLinear_forward_with_separate_groups():
 def test_NegationLayer_forward():
     neg_layer = NegationLayer(
         item_theta_relationships=torch.tensor([1, 0, 1]),
-        inputs_per_items=3,
+        inputs_per_item=3,
         zero_outputs=torch.tensor([0, 0, 1, 0, 0, 0, 0, 0, 1]).bool(),
     )
     with torch.no_grad():
@@ -144,7 +144,7 @@ def test_NegationLayer_forward():
 def test_NegationLayer_all_item_weights():
     neg_layer = NegationLayer(
         item_theta_relationships=torch.tensor([1, 0, 1]),
-        inputs_per_items=3,
+        inputs_per_item=3,
         zero_outputs=torch.tensor([0, 0, 1, 0, 0, 0, 0, 0, 1]).bool(),
     )
     with torch.no_grad():

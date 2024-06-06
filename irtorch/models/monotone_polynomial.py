@@ -93,12 +93,15 @@ class MonotonePolynomial(BaseIRTModel):
         self.register_buffer("free_bias", (1 - missing_categories).bool())
         self.bias_param = nn.Parameter(torch.zeros(sum(self.modeled_item_responses)))
 
+        shared_directions = self.max_item_responses if separate == "categories" else 1
         self.add_module("mono_poly", MonotonePolynomialModule(
             degree=degree,
             in_features=latent_variables,
             out_features=self.separations,
             intercept=False,
             relationship_matrix=item_theta_relationships.transpose(0, 1),
+            negative_relationships=negative_latent_variable_item_relationships,
+            shared_directions=shared_directions
         ))
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
@@ -144,4 +147,6 @@ class MonotonePolynomial(BaseIRTModel):
         torch.Tensor
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
+        if self.negative_latent_variable_item_relationships:
+            return self._modules["mono_poly"].directions.transpose(0, 1).sign().int()
         return torch.ones(self.items, self.latent_variables).int()

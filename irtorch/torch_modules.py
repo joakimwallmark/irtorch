@@ -21,6 +21,10 @@ class MonotonePolynomialModule(nn.Module):
         Whether to include an intercept term. (Default: False)
     relationship_matrix : torch.Tensor, optional
         A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item cateogires and latent traits. (Default: None)
+    negative_relationships : bool, optional
+        Whether to allow for negative relationships. (Default: False)
+    shared_directions : int, optional
+        Only when negative_relationships is true. Number of out_features with shared relationship directions. out_features needs to be divisible with this. (Default: 1)
     """
     def __init__(
         self,
@@ -28,7 +32,9 @@ class MonotonePolynomialModule(nn.Module):
         in_features: int = 1,
         out_features: int = 1,
         intercept: int = False,
-        relationship_matrix: torch.Tensor = None
+        relationship_matrix: torch.Tensor = None,
+        negative_relationships: bool = False,
+        shared_directions: int = 1
     ) -> None:
         super().__init__()
         if degree % 2 == 0:
@@ -37,6 +43,8 @@ class MonotonePolynomialModule(nn.Module):
         self.input_dim = in_features
         self.output_dim = out_features
         self.relationship_matrix = relationship_matrix
+        self.negative_relationships = negative_relationships
+        self.shared_directions = shared_directions
 
         self.omega = nn.Parameter(torch.zeros(1, in_features, out_features, requires_grad=True))
         self.alpha = nn.Parameter(torch.zeros(self.k, in_features, out_features, requires_grad=True))
@@ -45,6 +53,13 @@ class MonotonePolynomialModule(nn.Module):
             self.intercept = nn.Parameter(torch.zeros(out_features, requires_grad=True))
         else:
             self.register_buffer('intercept', None)
+
+        if negative_relationships:
+            if shared_directions == 0:
+                raise ValueError("shared_directions must be greater than 0.")
+            if out_features % shared_directions != 0:
+                raise ValueError("out_features must be divisible with shared_directions.")
+            self.directions = nn.Parameter(torch.zeros(in_features, int(out_features / shared_directions), requires_grad=True))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sp_tau = F.softplus(self.tau)
@@ -58,6 +73,9 @@ class MonotonePolynomialModule(nn.Module):
             matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
             b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
         
+        if self.negative_relationships:
+            b.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
+
         # remove relationship between some items and latent variables
         if self.relationship_matrix is not None:
             b[:, ~self.relationship_matrix] = 0.0
@@ -89,6 +107,13 @@ class MonotonePolynomialModule(nn.Module):
             matrix[range_indices + 1, range_indices, :, :] = -2 * self.alpha[i]
             matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
             b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
+
+        if self.negative_relationships:
+            b.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
+
+        # remove relationship between some items and latent variables
+        if self.relationship_matrix is not None:
+            b[:, ~self.relationship_matrix] = 0.0
 
         if self.intercept is not None:
             return torch.cat((self.intercept, b))
@@ -215,24 +240,24 @@ class SoftplusLinear(nn.Module):
         return output
 
 class NegationLayer(nn.Module):
-    def __init__(self, item_theta_relationships: torch.Tensor, inputs_per_items: int, zero_outputs: torch.Tensor):
+    def __init__(self, item_theta_relationships: torch.Tensor, inputs_per_item: int, zero_outputs: torch.Tensor):
         """
         Parameters
         ----------
         item_theta_relationships : torch.Tensor
             An integer tensor of shape (items,) that determines for which weights should be trained. Mostly used for training multidimensional IRT models for which each item or item category has a separate network and some of the item/latent variable relationships are set to be 0.
-        inputs_per_items : int
+        inputs_per_item : int
             Number of inputs per item. One weight for all inputs per item.
         zero_outputs : torch.Tensor
             A boolean tensor of shape (out_features,) that determines which outputs should be 0. Typically used for the final layer for IRT models with polytomously scored items where different items have differing number of response categories. Items with fewer categories should set the outputs for nonexisting categories to 0.
         """
         super().__init__()
 
-        self.inputs_per_items = inputs_per_items
+        self.inputs_per_item = inputs_per_item
         self.item_theta_relationships = item_theta_relationships
         self.zero_outputs = zero_outputs
-        self.zero_weights = (1-item_theta_relationships).repeat_interleave(inputs_per_items).bool()
-        self.register_buffer("weight", torch.zeros(item_theta_relationships.numel() * inputs_per_items))
+        self.zero_weights = (1-item_theta_relationships).repeat_interleave(inputs_per_item).bool()
+        self.register_buffer("weight", torch.zeros(item_theta_relationships.numel() * inputs_per_item))
         # One weight for each item related to the latent variable
         self.weight_param = nn.Parameter(torch.Tensor(sum(item_theta_relationships).item()))
         self.reset_parameters()
@@ -244,7 +269,7 @@ class NegationLayer(nn.Module):
         # break the gradients for weights for non-used categories
         x[:, self.zero_outputs] = 0.0
         weight = self.weight.clone().detach()
-        weight[~self.zero_weights] = self.weight_param.repeat_interleave(self.inputs_per_items)
+        weight[~self.zero_weights] = self.weight_param.repeat_interleave(self.inputs_per_item)
         x.multiply_(weight)
         return x
 

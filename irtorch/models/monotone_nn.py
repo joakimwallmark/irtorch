@@ -181,7 +181,7 @@ class MonotoneNN(BaseIRTModel):
                     f"negation_dim{theta_dim}",
                     NegationLayer(
                         item_theta_relationships=item_relationships,
-                        inputs_per_items=inputs_per_items,
+                        inputs_per_item=inputs_per_items,
                         zero_outputs=missing_cats
                     )
                 )

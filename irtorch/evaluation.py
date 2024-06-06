@@ -37,7 +37,7 @@ class Evaluation:
             theta: torch.Tensor = None,
             theta_estimation: str = "ML",
             ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-            lbfgs_learning_rate: float = 0.3,
+            lbfgs_learning_rate: float = 0.25,
         ):
         """"
         Helper function for evaluating the data and theta inputs for various performance measure methods.
@@ -759,7 +759,7 @@ class Evaluation:
         trapezoidal_segments: int,
         sample_size: int,
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.3,
+        lbfgs_learning_rate: float = 0.25,
     ):
         if population_data is None:
             if isinstance(self.model.algorithm, (AE, VAE)):

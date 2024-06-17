@@ -212,7 +212,8 @@ class Evaluation:
         """
         Group the respondents based on their ordered latent variable scores.
         Calculate the residuals between the model estimated and observed data within each group.
-        See ch. 20 in Handbook of Item Response Theory, Volume Two: Statistical Tools for more details.
+        See :cite:t:`VanderLinden2016`, Chapter 20 for more details.
+        
 
         If 'data' is not supplied, the function defaults to using the model's training data.
 

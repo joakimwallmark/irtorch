@@ -1,4 +1,67 @@
 import torch
+import numpy as np
+import itertools
+
+def gauss_hermite(n, mean, covariance):
+    r"""
+    Calculate the Gauss-Hermite quadrature points and weights for a multivariate normal distribution.
+
+    Parameters
+    ----------
+    n : int
+        Number of quadrature points.
+    mean : torch.Tensor
+        Mean of the distribution.
+    covariance : torch.Tensor
+        Covariance matrix of the distribution.
+
+    Returns
+    -------
+    x : torch.Tensor
+        Quadrature points.
+    w : torch.Tensor
+        Quadrature weights.
+
+    Notes
+    -----
+    To integrate a function against a multivariate Gaussian distribution, one can employ Gauss-Hermite quadrature with an appropriate change of variables. Beginning with the integral:
+
+    .. math::
+        \int \frac{1}{\sqrt{\operatorname{det}(2 \pi \mathbf{\Sigma})}} e^{-\frac{1}{2}(\mathbf{y}-\boldsymbol{\mu})^{\top} \mathbf{\Sigma}^{-1}(\mathbf{y}-\boldsymbol{\mu})} f(\mathbf{y}) d \mathbf{y}
+
+    We use the transformation :math:`\mathbf{x}=\frac{1}{\sqrt{2}} \mathbf{L}^{-1}(\mathbf{y}-\boldsymbol{\mu})`, where :math:`\boldsymbol{\Sigma}=\mathbf{L} \mathbf{L}^{\top}`, leading to:
+
+    .. math::
+        \int \frac{1}{\sqrt{\operatorname{det}(2 \pi \mathbf{\Sigma})}} e^{\mathbf{x}^{\top} \mathbf{x}} f(\sqrt{2} \mathbf{L} \mathbf{x}+\boldsymbol{\mu}) \operatorname{det}(\sqrt{2} \mathbf{L}) d \mathbf{x}=\int \pi^{-\frac{N}{2}} e^{-\mathbf{x}^{\top} \mathbf{x}} f(\sqrt{2} \mathbf{L} \mathbf{x}+\boldsymbol{\mu}) d \mathbf{x}
+
+    For an :math:`N`-dimensional vector :math:`\boldsymbol{x}`, the integral can be decomposed into :math:`N` nested Gauss-Hermite integrals, since the inner product in the exponent, :math:`\exp \left(\sum_{n=1}^N x_n^2\right)`, can be represented as a product.
+
+    Examples
+    --------
+    Computing mean and variance of a multivariate normal distribution using 8 Gauss-Hermite quadrature points:
+
+    >>> import torch
+    >>> from irtorch.utils import gauss_hermite
+    >>> mu = torch.tensor([1, 0])
+    >>> cov = torch.tensor([[1.3, -0.213], [-0.213, 1.2]])
+    >>> points, weights = gauss_hermite(8, mu, cov)
+    >>> mean = torch.sum(weights[:, None] * points, dim=0)
+    >>> variance = torch.sum(weights[:, None] * (points - mu)**2, dim=0)
+    >>> print(f"Mean: {mean}")
+    >>> print(f"Variance: {variance}")
+    """
+    mvn_dim = len(mean) #dimesions of the multivariate normal distribution
+    x, w = np.polynomial.hermite.hermgauss(n)
+    x = torch.tensor(x, dtype=torch.float64)
+    w = torch.tensor(w, dtype=torch.float64)
+    const = torch.pi**(-0.5 * mvn_dim)
+    xn = torch.tensor(list(itertools.product(*(x,)*mvn_dim)), dtype=torch.float64)
+    wn = torch.prod(torch.tensor(list(itertools.product(*(w,)*mvn_dim)), dtype=torch.float64), dim=1)
+    chol_decomp = torch.linalg.cholesky(covariance).to(torch.float64)
+    # Transformation of the quadrature points
+    # See change of variables in the docstring
+    yn = 2.0**0.5 * (chol_decomp @ xn.T).T + mean[None, :]
+    return yn, wn * const
 
 def get_item_categories(data: torch.Tensor):
     """

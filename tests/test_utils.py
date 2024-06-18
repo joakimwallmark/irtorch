@@ -1,6 +1,30 @@
 import pytest
 import torch
-from irtorch.utils import get_item_categories, one_hot_encode_test_data, decode_one_hot_test_data, split_data, impute_missing
+from irtorch.utils import gauss_hermite, get_item_categories, one_hot_encode_test_data, decode_one_hot_test_data, split_data, impute_missing
+
+def test_gauss_hermite():
+    n_points = 4
+    mu = torch.tensor([1, 0])
+    Sigma = torch.tensor([[1.3, -0.213], [-0.213, 1.2]])
+    points, weights = gauss_hermite(n_points, mu, Sigma)
+
+    # Calculations
+    mean = torch.sum((weights)[:, None] * points, dim=0)
+    variance = torch.sum((weights)[:, None] * (points - mu)**2, dim=0)
+    # Covariance calculation using outer product
+    covfunc = lambda x: torch.ger(x - mu, x - mu)
+    covariance = torch.sum((weights)[:, None, None] * torch.stack(list(map(covfunc, points))), dim=0)
+    # Polynomial calculation
+    polynomial = torch.sum((weights)[:, None] * (4 + 2 * points - 0.5 * points**2), dim=0)
+    # Logistic function calculation
+    logistic = torch.sum((weights)[:, None] * (1 / (1 + torch.exp(-points))), dim=0)
+    # Assertions
+    assert torch.allclose(mean, torch.tensor([1.0000, 0.0000], dtype=torch.float64), atol=1e-4)
+    assert torch.allclose(variance, torch.tensor([1.3000, 1.2000], dtype=torch.float64), atol=1e-4)
+    assert torch.allclose(covariance, torch.tensor([[1.3000, -0.2130], [-0.2130, 1.2000]], dtype=torch.float64), atol=1e-4)
+    assert torch.allclose(polynomial, torch.tensor([4.8500, 3.4000], dtype=torch.float64), atol=1e-4)
+    assert torch.allclose(logistic, torch.tensor([0.6888, 0.5000], dtype=torch.float64), atol=1e-4)
+
 
 def test_get_item_categories(test_data, item_categories):
     result = get_item_categories(test_data)

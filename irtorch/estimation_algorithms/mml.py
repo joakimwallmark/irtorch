@@ -19,7 +19,7 @@ class MML(BaseIRTAlgorithm):
     Notes
     -----
     Estimates the model parameters using the Marginal Maximum Likelihood (MML) method. 
-    The marginal likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
+    The marginal log-likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
 
     .. math::
 
@@ -33,6 +33,8 @@ class MML(BaseIRTAlgorithm):
     - :math:`\phi` are the model parameters,
     - :math:`\mathbf{\theta}` is the latent variable vector,
 
+    The integral is approximated using Gauss-Hermite quadratures or a Quasi-Monte Carlo method. 
+    :math:`\log L(\phi)` is then maximized using stochastic gradient descent. These steps are repeated until convergence.
     """
     def __init__(
         self,
@@ -40,7 +42,6 @@ class MML(BaseIRTAlgorithm):
         super().__init__()
         self.imputation_method = "zero"
         self.covariance_matrix = None
-        self.training_theta_scores = None
         self.optimizer = None
         self.training_history = {
             "train_loss": [],

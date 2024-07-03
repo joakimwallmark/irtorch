@@ -23,7 +23,7 @@ class BaseIRTModel(ABC, nn.Module):
     latent_variables : int
         The number of latent variables.
     item_categories : list[int]
-        A list of the number of categories for each item.
+        A list of the number of response categories for each item.
     mc_correct : list[int], optional
         A list of the correct response category for each multiple choice item. (default is None)
     model_missing : bool, optional

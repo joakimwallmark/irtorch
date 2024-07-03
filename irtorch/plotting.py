@@ -82,7 +82,7 @@ class Plotting:
         self,
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
-        scale: str = "bit",
+        scale: str = "theta",
         latent_variables_to_plot: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
@@ -103,7 +103,7 @@ class Plotting:
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
         title : str, optional
@@ -170,7 +170,7 @@ class Plotting:
     def plot_item_entropy(
         self,
         item: int,
-        scale: str = "bit",
+        scale: str = "theta",
         latent_variables: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
@@ -191,7 +191,7 @@ class Plotting:
         item : int
             The item for which to plot the entropy.
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -346,7 +346,7 @@ class Plotting:
     def plot_item_probabilities(
         self,
         item: int,
-        scale: str = "bit",
+        scale: str = "theta",
         latent_variables: tuple = (1, ),
         title: str = None,
         x_label: str = None,
@@ -371,7 +371,7 @@ class Plotting:
         item : int
             The item to plot.
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
         latent_variables : tuple, optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -652,7 +652,7 @@ class Plotting:
     def plot_expected_sum_score(
         self,
         items: list[int] = None,
-        scale: str = "bit",
+        scale: str = "theta",
         latent_variables: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
@@ -674,7 +674,7 @@ class Plotting:
         items : list[int], optional
             The items used to compte the sum score. If None, all items are used. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional

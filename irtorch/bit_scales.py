@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import logging
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch._internal_utils import output_to_item_entropy, random_guessing_data, linear_regression
+from irtorch._internal_utils import entropy, random_guessing_data, linear_regression
 from irtorch.outlier_detector import OutlierDetector
 from irtorch.estimation_algorithms import AE, VAE, MML
 
@@ -556,7 +556,8 @@ class BitScales:
         # convert back to non-inverted theta scale and compute grid entropies
         grid = grid.view(-1, grid.shape[2]) * inverted_scale
         output = self.model(grid)
-        entropies = output_to_item_entropy(output, self.model.modeled_item_responses)
+        entropies = entropy(self.model.probabilities_from_output(output))
+
         # the goal is to get the entropies to the dimensions required for bit_score_distance
         # we need to transpose for view to order them correctly
         # and change positioning of each dimension in the end using permute
@@ -623,7 +624,7 @@ class BitScales:
 
             # Convert back to non-inverted theta scale and compute grid entropies
             output = self.model(latent_variable_grid * inverted_scale)
-            entropies = output_to_item_entropy(output, self.model.modeled_item_responses)
+            entropies = entropy(self.model.probabilities_from_output(output))
 
             # Compute the absolute difference between each grid point entropy and the previous one
             diff = torch.zeros_like(entropies)

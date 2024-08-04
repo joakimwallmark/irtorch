@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
 from irtorch.estimation_algorithms import AE, VAE, MML
-from irtorch._internal_utils import output_to_item_entropy
+from irtorch._internal_utils import entropy
 
 if TYPE_CHECKING:
     from irtorch.models.base_irt_model import BaseIRTModel
@@ -239,9 +239,7 @@ class Plotting:
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
         mean_output = self.model(theta_grid)
-        item_entropies = output_to_item_entropy(
-            mean_output, self.model.modeled_item_responses
-        )[:, item - 1]
+        entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
         if scale == "bit":
             scores_to_plot = self.model.bit_scales.bit_scores_from_theta(

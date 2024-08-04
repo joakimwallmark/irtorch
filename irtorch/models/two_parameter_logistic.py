@@ -48,6 +48,8 @@ class TwoParameterLogistic(BaseIRTModel):
                 )
             assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+        else:
+            item_theta_relationships = torch.ones(items, latent_variables, dtype=torch.bool)
 
         self.output_size = self.items * 2
         self.weight_param = nn.Parameter(torch.zeros(item_theta_relationships.sum().int()))

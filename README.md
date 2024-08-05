@@ -23,7 +23,7 @@ Citations hold great value to us since they allow us to explore the various ways
 
 To cite IRTorch in publications use:
 
-Wallmark, J. (2024). IRTorch: Item response theory with Python (Version X.X) [Software]. GitHub. https://github.com/joakimwallmark/irtorch
+Wallmark, J. (2024). IRTorch: Item response theory with Python (Version X.X) https://github.com/joakimwallmark/irtorch
 
 Or use the following BibTeX entry:
 

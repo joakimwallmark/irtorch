@@ -33,7 +33,6 @@ class ConcreteIRTModel(BaseIRTModel):
 def base_irt_model(latent_variables):
     return ConcreteIRTModel(latent_variables, [3, 4])
 
-
 def test_expected_scores(base_irt_model: BaseIRTModel):
     # Create a mock for item_probabilities() method
     def item_probabilities_mock(*args, **kwargs):

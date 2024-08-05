@@ -49,7 +49,6 @@ class BaseIRTModel(ABC, nn.Module):
         self.model_missing = model_missing
         self.algorithm = None
 
-        # self._scoring = None
         self._bit_scales = None
         self._evaluation = None
         self._plotting = None

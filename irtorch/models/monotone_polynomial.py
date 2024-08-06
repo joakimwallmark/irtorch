@@ -60,6 +60,15 @@ class MonotonePolynomial(BaseIRTModel):
         - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
     - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
     - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
+    
+    Examples
+    --------
+    >>> from irtorch.models import MonotonePolynomial
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.load_dataset import swedish_national_mathematics_1
+    >>> data = swedish_national_mathematics_1()
+    >>> model = MonotonePolynomial(1, data)
+    >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,

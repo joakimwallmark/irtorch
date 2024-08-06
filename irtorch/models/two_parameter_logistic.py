@@ -33,6 +33,16 @@ class TwoParameterLogistic(BaseIRTModel):
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_j` is a vector of weights for item :math:`j`.
     - :math:`d_j` is the bias term for item :math:`j`.
+
+    Examples
+    --------
+    >>> from irtorch.models import TwoParameterLogistic
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.load_dataset import swedish_sat_binary
+    >>> # Use quantitative part of the SAT data
+    >>> data = swedish_sat_binary()[:, :80]
+    >>> model = TwoParameterLogistic(1, items=80)
+    >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,

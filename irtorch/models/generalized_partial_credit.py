@@ -36,6 +36,15 @@ class GeneralizedPartialCredit(BaseIRTModel):
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_{j}` is a vector of weights for item :math:`j`.
     - :math:`d_{jm}` is the bias term for item :math:`j` and response category :math:`m`.
+
+    Examples
+    --------
+    >>> from irtorch.models import GeneralizedPartialCredit
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.load_dataset import swedish_national_mathematics_1
+    >>> data = swedish_national_mathematics_1()
+    >>> model = GeneralizedPartialCredit(1, data)
+    >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,

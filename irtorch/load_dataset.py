@@ -104,6 +104,7 @@ def swedish_sat() -> tuple[torch.Tensor, list[int]]:
 def swedish_sat_binary() -> torch.Tensor:
     """
     Load a sample from Swedish SAT dataset coded as incorrect/correct. 
+    The first 40 items are from the quantitative part of the test. The last 40 items are from the verbal part.
 
     Returns
     -------
@@ -116,7 +117,7 @@ def swedish_sat_binary() -> torch.Tensor:
     # concatenate the correct item responses
     correct_category = correct_quant + correct_verb
 
-    correct_scores = torch.tensor(correct_category)
+    correct_scores = torch.tensor(correct_category) - 1
     binary_data = (data == correct_scores).float()
 
     return binary_data

@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 
 class TwoParameterLogistic(BaseIRTModel):
     r"""
-    Two parametric logistic (2PL) IRT model.
+    Two parametric logistic (2PL) IRT model :cite:p:`Birnbaum1968`.
 
     Parameters
     ----------
@@ -33,6 +33,16 @@ class TwoParameterLogistic(BaseIRTModel):
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_j` is a vector of weights for item :math:`j`.
     - :math:`d_j` is the bias term for item :math:`j`.
+
+    Examples
+    --------
+    >>> from irtorch.models import TwoParameterLogistic
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.load_dataset import swedish_sat_binary
+    >>> # Use quantitative part of the SAT data
+    >>> data = swedish_sat_binary()[:, :80]
+    >>> model = TwoParameterLogistic(1, items=80)
+    >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,
@@ -48,6 +58,8 @@ class TwoParameterLogistic(BaseIRTModel):
                 )
             assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+        else:
+            item_theta_relationships = torch.ones(items, latent_variables, dtype=torch.bool)
 
         self.output_size = self.items * 2
         self.weight_param = nn.Parameter(torch.zeros(item_theta_relationships.sum().int()))

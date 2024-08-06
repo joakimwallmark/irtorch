@@ -245,40 +245,6 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
     entropies = (probabilities * surprisal).sum(dim=-1)
     return entropies
 
-
-def output_to_item_entropy(output, item_categories: list[int]):
-    """
-    Calculate the entropy for each respondent for each item from autoencoder output logits.
-
-    Parameters
-    ----------
-    output : torch.Tensor
-        The outputted logits from the autoencoder. It should be a 2D tensor where the first dimension
-        is the number of respondents and the second dimension is the number of items times the number of categories.
-    item_categories : list of int
-        A list of integers where each integer represents the number of categories for an item. The list length should
-        be equal to the number of items.
-
-    Returns
-    -------
-    torch.Tensor
-        A 2D tensor with the entropy for each respondent for each item. The first dimension is the number of test
-        takers and the second dimension is the number of items.
-
-    Raises
-    ------
-    ValueError
-        If the length of item_categories is not equal to the second dimension of output divided by the sum of item_categories.
-    """
-    if output.shape[1] != max(item_categories)*len(item_categories):
-        raise ValueError(
-            "Length of item_categories must be equal to the second dimension of output divided by the sum of item_categories."
-        )
-
-    reshaped_output = output.reshape(output.shape[0], len(item_categories), max(item_categories))
-    probabilities = reshaped_output.softmax(dim=2)
-    return entropy(probabilities)
-
 class PytorchIRTDataset(torch.utils.data.Dataset):
     def __init__(self, data: torch.Tensor):
         super().__init__()

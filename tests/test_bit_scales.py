@@ -30,7 +30,6 @@ def bit_scales(theta_scores, latent_variables):
         else:
             return torch.randn(input_tensor.shape[0], latent_variables)
 
-    # Mock decoder forward method
     def forward_mock(input_tensor):
         # Find the unique rows in the input_tensor and their inverse indices
         unique_rows, inverse_indices = torch.unique(input_tensor, dim=0, return_inverse=True)
@@ -47,9 +46,12 @@ def bit_scales(theta_scores, latent_variables):
         
         return logits_all_rows
 
-    # Mock decoder log_likelihood method
-    def log_likelihood_mock(replicated_data, replicated_logits, loss_reduction = "none"):    
+    def log_likelihood_mock(replicated_data, replicated_logits, loss_reduction = "none"):
         return torch.randn(replicated_data.shape[0], len(item_categories))
+
+    def probabilities_from_output_mock(output: torch.Tensor) -> torch.Tensor:
+        reshaped_output = output.reshape(-1, 3)
+        return torch.functional.F.softmax(reshaped_output, dim=1).reshape(output.shape[0], len(item_categories), 3)
 
     mock_model = MagicMock(spec=BaseIRTModel)
     mock_model.mc_correct = None
@@ -59,6 +61,7 @@ def bit_scales(theta_scores, latent_variables):
     mock_model.side_effect = forward_mock
     mock_model.model_missing = False
     mock_model.log_likelihood = MagicMock(side_effect=log_likelihood_mock)
+    mock_model.probabilities_from_output = MagicMock(side_effect=probabilities_from_output_mock)
     mock_model.algorithm = MagicMock(spec=AE)
     mock_model.algorithm.theta_scores = MagicMock(side_effect=theta_scores_mock)
     mock_model.algorithm.training_theta_scores = theta_scores.clone().detach()

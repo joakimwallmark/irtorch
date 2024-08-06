@@ -108,3 +108,14 @@ class TestMML:
 
             # Check if inner functions are called
             assert mocked_train_step.call_count == 5
+
+    def test__quasi_mc(self, algorithm: MML):
+        algorithm.covariance_matrix = torch.eye(1)
+        points, log_weights = algorithm._quasi_mc(5, 1)
+        assert points.size() == (5, 1)
+        assert log_weights.size() == (5,)
+
+        algorithm.covariance_matrix = torch.eye(2)
+        points, log_weights = algorithm._quasi_mc(5, 2)
+        assert points.size() == (25, 2)
+        assert log_weights.size() == (25,)

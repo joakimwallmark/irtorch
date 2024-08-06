@@ -8,7 +8,6 @@ from irtorch._internal_utils import (
     conditional_score_distribution,
     sum_incorrect_probabilities,
     entropy,
-    output_to_item_entropy,
     random_guessing_data,
 )
 
@@ -178,18 +177,6 @@ def test_entropy():
             [[0.5, 0.6], [0.1, 0.9]]
         )  # probabilities do not sum to 1
         entropy(invalid_probabilities)
-
-
-def test_output_to_item_entropy():
-    # Test with valid input
-    output = torch.randn(100, 10)
-    item_categories = [2, 2, 2, 2, 2]
-    entropies = output_to_item_entropy(output, item_categories)
-    assert entropies.shape == (100, 5)
-
-    # Test with invalid input (length of item_categories is not equal to the second dimension of output divided by the sum of item_categories)
-    with pytest.raises(ValueError):
-        output_to_item_entropy(output, [2, 2, 3, 2, 2])
 
 def test_random_guessing_data():
     # Test non multiple choice data

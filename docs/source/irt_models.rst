@@ -30,3 +30,7 @@ IRT models
 .. autoclass:: irtorch.models.MonotonePolynomial
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.models.ModelMix
+    :show-inheritance:
+    :members:

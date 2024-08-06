@@ -3,6 +3,7 @@ import copy
 import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models import BaseIRTModel
+from irtorch.utils import gauss_hermite
 from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
@@ -18,7 +19,7 @@ class MML(BaseIRTAlgorithm):
     Notes
     -----
     Estimates the model parameters using the Marginal Maximum Likelihood (MML) method. 
-    The marginal likelihood is calculated by integrating over an assumed latent variable distribution with density :math:`f(\mathbf{\theta})`.
+    The marginal log-likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
 
     .. math::
 
@@ -32,7 +33,8 @@ class MML(BaseIRTAlgorithm):
     - :math:`\phi` are the model parameters,
     - :math:`\mathbf{\theta}` is the latent variable vector,
 
-    Gaussian quadratures are used to approximate the integral.
+    The integral is approximated using Gauss-Hermite quadratures or a Quasi-Monte Carlo method. 
+    :math:`\log L(\phi)` is then maximized using stochastic gradient descent. These steps are repeated until convergence.
     """
     def __init__(
         self,
@@ -40,7 +42,6 @@ class MML(BaseIRTAlgorithm):
         super().__init__()
         self.imputation_method = "zero"
         self.covariance_matrix = None
-        self.training_theta_scores = None
         self.optimizer = None
         self.training_history = {
             "train_loss": [],
@@ -51,6 +52,7 @@ class MML(BaseIRTAlgorithm):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         max_epochs: int = 1000,
+        integration_method: str = "gauss_hermite",
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
         learning_rate: float = 0.2,
@@ -70,8 +72,11 @@ class MML(BaseIRTAlgorithm):
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 1000)
+        integration_method : str, optional
+            The method to use for approximating integrals over the latent variables. Can be either "gauss_hermite" for Gauss-Hermite quadrature
+            or "quasi_mc" for quasi-Monte Carlo. (default is "gauss_hermite").
         quadrature_points : int, optional
-            The number of quadrature points to use for latent variable integration. Large datasets may lead to memory issues if quadratures points are too high. (default is 'None' and uses a function of the number of latent variables)
+            The number of quadrature points to use for latent variable integration. Note that large datasets may lead to memory issues if quadratures points are too high. (default is 'None' and uses a function of the number of latent variables)
         covariance_matrix : torch.Tensor, optional
             The covariance matrix for the multivariate normal distribution for the latent variables. (default is None and uses uncorrelated variables)
         learning_rate : float, optional
@@ -97,13 +102,11 @@ class MML(BaseIRTAlgorithm):
             if model.latent_variables > 3:
                 raise ValueError("MML is not implemented for models with more than 3 latent variables because of large integration grid.")
             quadrature_points = {
-                1: 20,
-                2: 8,
+                1: 15,
+                2: 7,
                 3: 5
             }.get(model.latent_variables, 20)
 
-        latent_grid = torch.linspace(-3, 3, quadrature_points).view(-1, 1)
-        latent_grid = latent_grid.expand(-1, model.latent_variables).contiguous()
         if covariance_matrix is not None:
             if covariance_matrix.shape[0] != model.latent_variables or covariance_matrix.shape[1] != model.latent_variables:
                 raise ValueError("Covariance matrix must have the same dimensions as the latent variables.")
@@ -115,6 +118,16 @@ class MML(BaseIRTAlgorithm):
             list(model.parameters()), lr=learning_rate, amsgrad=True
         )
 
+        if integration_method == "gauss_hermite":
+            points, weights = gauss_hermite(
+                n=quadrature_points,
+                mean=torch.zeros(model.latent_variables),
+                covariance=self.covariance_matrix
+            )
+            log_weights = weights.log()
+        else:
+            points, log_weights = self._quasi_mc(n_points=quadrature_points, latent_variables=model.latent_variables)
+
         # Reduce learning rate when loss stops decreasing ("min")
         # we multiply the learning rate by the factor
         # patience: We need no improvement after x epochs for it to trigger
@@ -123,16 +136,12 @@ class MML(BaseIRTAlgorithm):
         )
 
         model.to(device)
-        normal_dist = MultivariateNormal(
-            loc=torch.zeros(model.latent_variables).to(device),
-            covariance_matrix=self.covariance_matrix.to(device)
-        )
         self._training_loop(
             model,
             train_data.to(device),
             max_epochs,
-            latent_grid.to(device),
-            normal_dist,
+            points.to(device, dtype = torch.float32),
+            log_weights.to(device, dtype = torch.float32),
             scheduler,
             learning_rate_updates_before_stopping
         )
@@ -144,8 +153,8 @@ class MML(BaseIRTAlgorithm):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         max_epochs: int,
-        latent_grid: torch.Tensor,
-        normal_dist: MultivariateNormal,
+        points: torch.Tensor,
+        log_weights: torch.Tensor,
         scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
         learning_rate_updates_before_stopping: int,
     ):
@@ -160,10 +169,10 @@ class MML(BaseIRTAlgorithm):
             The training data.
         max_epochs : int
             The maximum number of epochs to train for.
-        latent_grid : torch.Tensor
-            The grid of latent variables.
-        normal_dist : torch.distributions.MultivariateNormal
-            The multivariate normal distribution for the latent variables.
+        points : torch.Tensor
+            The latent variable points to evaluate the MML integral.
+        log_weights : torch.distributions.MultivariateNormal
+            The logarithm of the integral weights associated with the points.
         scheduler : torch.optim.lr_scheduler.ReduceLROnPlateau
             The learning rate scheduler.
         learning_rate_updates_before_stopping : int, optional
@@ -172,15 +181,9 @@ class MML(BaseIRTAlgorithm):
         lr_update_count = 0
         irt_dataset = PytorchIRTDataset(data=train_data)
         train_data = self._impute_missing(model, irt_dataset.data, irt_dataset.mask)
-        if latent_grid.size(1) > 1:
-            columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
-            latent_combos = torch.cartesian_prod(*columns)
-        else:
-            latent_combos = latent_grid
 
-        log_weights = normal_dist.log_prob(latent_combos)
-        latent_combos_rep = latent_combos.repeat_interleave(train_data.size(0), dim=0)
-        train_data_rep = train_data.repeat(latent_combos.size(0), 1)
+        latent_combos_rep = points.repeat_interleave(train_data.size(0), dim=0)
+        train_data_rep = train_data.repeat(points.size(0), 1)
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
 
         best_loss = float("inf")
@@ -191,7 +194,7 @@ class MML(BaseIRTAlgorithm):
                 train_data_rep,
                 latent_combos_rep,
                 log_weights_rep,
-                latent_combos.size(0)
+                points.size(0)
             )
 
             current_loss = train_loss
@@ -267,6 +270,39 @@ class MML(BaseIRTAlgorithm):
         
         self.training_history["train_loss"].append(loss.item())
         return loss.item()
+
+    def _quasi_mc(self, n_points: int, latent_variables: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Get the points and weights for Quasi-Monte Carlo integral approximation.
+
+        Parameters
+        ----------
+        n_points : int
+            The number of points of evaluation.
+        latent_variables : int
+            The number of latent variables.
+
+        Returns
+        -------
+        torch.Tensor
+            The points of integration.
+        torch.Tensor
+            The logarithm of the weights associated with the points.
+        """
+        latent_grid = torch.linspace(-3, 3, n_points).view(-1, 1)
+        latent_grid = latent_grid.expand(-1, latent_variables).contiguous()
+        if latent_variables > 1:
+            columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
+            latent_combos = torch.cartesian_prod(*columns)
+        else:
+            latent_combos = latent_grid
+
+        normal_dist = MultivariateNormal(
+            loc=torch.zeros(latent_variables),
+            covariance_matrix=self.covariance_matrix
+        )
+        weights = normal_dist.log_prob(latent_combos)
+        return latent_combos, weights
 
     def _impute_missing(self, model: BaseIRTModel, data, missing_mask):
         if torch.sum(missing_mask) > 0:

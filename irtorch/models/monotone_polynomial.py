@@ -10,7 +10,7 @@ logger = logging.getLogger("irtorch")
 
 class MonotonePolynomial(BaseIRTModel):
     r"""
-    Monotonic Polynomial IRT model with monotonic polynomials for each item or item response category.
+    Monotonic Polynomial IRT model :cite:p:`Falk2016` with monotonic polynomials for each item or item response category.
 
     If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice (MMC) model.
     

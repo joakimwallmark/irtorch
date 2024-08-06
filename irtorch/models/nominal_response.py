@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 
 class NominalResponse(BaseIRTModel):
     r"""
-    Nominal response IRT model.
+    Nominal response IRT model :cite:p:`bock1972`.
 
     Parameters
     ----------

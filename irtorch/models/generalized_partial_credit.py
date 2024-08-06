@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 
 class GeneralizedPartialCredit(BaseIRTModel):
     r"""
-    Generalized Partial Credit IRT model.
+    Generalized Partial Credit IRT model :cite:p:`Muraki1992`.
 
     Parameters
     ----------

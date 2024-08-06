@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 
 class TwoParameterLogistic(BaseIRTModel):
     r"""
-    Two parametric logistic (2PL) IRT model.
+    Two parametric logistic (2PL) IRT model :cite:p:`Birnbaum1968`.
 
     Parameters
     ----------

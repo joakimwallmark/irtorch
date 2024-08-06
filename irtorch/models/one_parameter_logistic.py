@@ -5,7 +5,7 @@ from irtorch.models.base_irt_model import BaseIRTModel
 
 class OneParameterLogistic(BaseIRTModel):
     r"""
-    One parametric logistic (1PL) IRT model. This model is only available for unidimensional latent variables.
+    One parametric logistic (1PL) IRT model, also known as the Rasch model :cite:p:`Rasch1960`. This model is only available for unidimensional latent variables.
 
     Parameters
     ----------

@@ -49,9 +49,14 @@ class Plotting:
 
         data_frames = []
 
+        if isinstance(self.model.algorithm, (AE, VAE)):
+            x_label = "Epoch"
+        else:
+            x_label = "Iteration"
+
         if "train_loss" in self.model.algorithm.training_history and len(self.model.algorithm.training_history["train_loss"]) > 0:
             train_df = pd.DataFrame({
-                "Epoch": range(1, len(self.model.algorithm.training_history["train_loss"]) + 1),
+                x_label: range(1, len(self.model.algorithm.training_history["train_loss"]) + 1),
                 "Loss": self.model.algorithm.training_history["train_loss"],
                 "Type": "Training"
             })
@@ -59,7 +64,7 @@ class Plotting:
 
         if "validation_loss" in self.model.algorithm.training_history and len(self.model.algorithm.training_history["validation_loss"]) > 0:
             validation_df = pd.DataFrame({
-                "Epoch": range(1, len(self.model.algorithm.training_history["validation_loss"]) + 1),
+                x_label: range(1, len(self.model.algorithm.training_history["validation_loss"]) + 1),
                 "Loss": self.model.algorithm.training_history["validation_loss"],
                 "Type": "Validation"
             })
@@ -71,9 +76,14 @@ class Plotting:
         plot_df = pd.concat(data_frames)
 
         fig = px.line(
-            plot_df, x="Epoch", y="Loss", color="Type",
-            labels={"Loss": "Loss", "Epoch": "Epoch"},
+            plot_df, x=x_label, y="Loss", color="Type",
+            labels={"Loss": "Loss", x_label: x_label},
             title="Training History")
+
+        if plot_df["Type"].nunique() > 1:
+            fig.update_layout(showlegend=True)
+        else:
+            fig.update_layout(showlegend=False)
 
         return fig
 
@@ -954,22 +964,11 @@ class Plotting:
             ))
 
             if latent_group_means is not None and group_probs_data is not None and group_probs_model is not None:
-                if self.model.model_missing:
-                    if i == 0:
-                        data_text = "Data missing"
-                        model_text = "Model missing"
-                    else:
-                        data_text = f"Data {i}" if self.model.mc_correct is not None else f"{i}"
-                        model_text = f"Model {i}" if self.model.mc_correct is not None else f"{i}"
-                else:
-                    data_text = f"Data {i+1}" if self.model.mc_correct is not None else f"{i}"
-                    model_text = f"Model {i+1}" if self.model.mc_correct is not None else f"{i}"
-
                 # Adding scatter plot for group data
                 fig.add_trace(go.Scatter(
                     x=latent_group_means,
                     y=group_probs_data[:, i],
-                    mode="markers", name=data_text,
+                    mode="markers", name="Data",
                     marker=dict(symbol="circle-open", color=color)
                 ))
                 # Adding scatter plot for group model predictions
@@ -977,7 +976,7 @@ class Plotting:
                     x=latent_group_means,
                     y=group_probs_model[:, i],
                     mode="markers",
-                    name=model_text,
+                    name="Model",
                     marker=dict(symbol="circle", color=color)
                 ))
 

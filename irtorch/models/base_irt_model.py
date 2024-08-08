@@ -87,7 +87,7 @@ class BaseIRTModel(ABC, nn.Module):
     @property
     def plotting(self):
         """
-        Methods for IRT model plotting :class:`irtorch.Plotting`.
+        Methods for IRT model plotting. See :class:`irtorch.Plotting`.
 
         Returns
         -------

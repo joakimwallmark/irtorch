@@ -213,7 +213,7 @@ class Plotting:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores_from_theta` for details. 
 
         Returns
         -------
@@ -399,7 +399,7 @@ class Plotting:
         plot_derivative : bool, optional
             Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores_from_theta` for details. 
 
         Returns
         -------
@@ -563,7 +563,7 @@ class Plotting:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores_from_theta` for details. 
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -694,7 +694,7 @@ class Plotting:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.irt.IRT.bit_scores_from_theta` for details. 
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores_from_theta` for details. 
 
         Returns
         -------

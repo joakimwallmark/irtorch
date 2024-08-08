@@ -290,7 +290,7 @@ class BaseIRTModel(ABC, nn.Module):
         degrees : list[int], optional
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
+            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`irtorch.BitScales.bit_score_gradients` for details.
             
         Returns
         -------

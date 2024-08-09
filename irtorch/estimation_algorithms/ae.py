@@ -289,11 +289,11 @@ class AE(BaseIRTAlgorithm):
         tuple
             The logits and loss after training on the batch.
         """
-        batch_logits = model(self.encoder(batch))
+        outputs = model(self.encoder(batch))
         if self.one_hot_encoded:
             # for running with loss_function
             batch = decode_one_hot_test_data(batch, model.modeled_item_responses)
-        batch_loss = -model.log_likelihood(batch, batch_logits) / batch.shape[0]
+        batch_loss = -model.log_likelihood(batch, outputs) / batch.shape[0]
         return batch_loss
 
     @torch.inference_mode()

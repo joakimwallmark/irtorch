@@ -269,17 +269,18 @@ class BitScales:
         start_theta_guessing_iterations: int = 10000,
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of the bit scores with respect to the input theta scores using the central difference method: 
+        Computes the gradients of the bit scores with respect to the input theta scores using the central difference method:
+
         .. math ::
 
-            f^{\prime}(theta) \approx \frac{f(theta+h)-f(theta-h)}{2 h}
+            f^{\prime}(\mathbf{\theta}) \approx \frac{f(\mathbf{\theta}+h)-f(\mathbf{\theta}-h)}{2 h}
 
         Parameters
         ----------
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         h : float, optional
-            The step size for the central difference method. (default is uses the difference between the smaller and upper outlier limits (computed using the interquantile range rule) of the training theta scores divided by 1000)
+            The step size for the central difference method. (default uses the difference between the smaller and upper outlier limits (computed using the interquantile range rule) of the training theta scores divided by 1000)
         independent_theta : int, optional
             The latent variable to differentiate with respect to. (default is None and computes gradients with respect to theta)
         start_theta : torch.Tensor, optional

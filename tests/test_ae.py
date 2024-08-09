@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 import torch
 from irtorch.estimation_algorithms import AE
-from irtorch.models import MonotoneNN, BaseIRTModel
+from irtorch.models import MonotoneNN, BaseIRTModel, GeneralizedPartialCredit
 from irtorch.estimation_algorithms.encoders import StandardEncoder
 
 
@@ -13,10 +13,9 @@ from irtorch.estimation_algorithms.encoders import StandardEncoder
 class TestAE:
     @pytest.fixture()
     def irt_model(self, latent_variables, item_categories):
-        model = MonotoneNN(
+        model = GeneralizedPartialCredit(
             latent_variables = latent_variables,
-            item_categories = item_categories,
-            hidden_dim = [3]
+            item_categories = item_categories
         )
         return model
 

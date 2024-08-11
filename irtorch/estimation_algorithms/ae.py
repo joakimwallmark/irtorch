@@ -4,8 +4,8 @@ import torch
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import StandardEncoder
-from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
-from irtorch.utils import one_hot_encode_test_data, decode_one_hot_test_data
+from irtorch._internal_utils import dynamic_print
+from irtorch.irt_dataset import PytorchIRTDataset
 
 logger = logging.getLogger("irtorch")
 
@@ -15,7 +15,6 @@ class AE(BaseIRTAlgorithm):
     """
     def __init__(self):
         super().__init__()
-        self.imputation_method = "zero"
         self.one_hot_encoded = True
         self.batch_normalization = False
         self.encoder = None
@@ -34,6 +33,7 @@ class AE(BaseIRTAlgorithm):
         train_data: torch.Tensor,
         validation_data: torch.Tensor = None,
         one_hot_encoded: bool = True,
+        imputation_method: str = None,
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
         batch_normalization_encoder: bool = True,
@@ -43,10 +43,9 @@ class AE(BaseIRTAlgorithm):
         learning_rate_update_patience: int = 4,
         learning_rate_updates_before_stopping: int = 5,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        imputation_method: str = "zero",
     ):
         """
-        Train the autoencoder model.
+        Train an IRT model using the autoencoder.
 
         Parameters
         ----------
@@ -58,6 +57,11 @@ class AE(BaseIRTAlgorithm):
             The validation data. (default is None)
         one_hot_encoded : bool, optional
             Whether or not to one-hot encode the train data as encoder input inside this fit method. (default is True)
+        imputation_method : str, optional
+            The method to use for imputing missing data for the encoder. For options see :func:`irtorch.utils.impute_missing`.
+            Only methods not relying on a fitted model can be used. 
+            Note that missing values are removed from the loss calculation even after imputation.
+            If you do not want this, do the imputation to your dataset before fitting. (default is None and only works for one-hot encoded inputs)
         hidden_layers_encoder : list[int], optional
             List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
         nonlinear_encoder : torch.nn.Module, optional
@@ -76,13 +80,10 @@ class AE(BaseIRTAlgorithm):
             The number of times the learning rate can be reduced before stopping training. (default is 5)
         device : str, optional
             The device to run the model on. (default is "cuda" if available else "cpu".)
-        imputation_method : str, optional
-            The method to use for imputing missing data. (default is "zero")
         """
         super().fit(model = model, train_data = train_data)
         self.one_hot_encoded = one_hot_encoded
         self.batch_normalization = batch_normalization_encoder
-        self.imputation_method = imputation_method
 
         if self.one_hot_encoded:
             input_dim = sum(model.modeled_item_responses)
@@ -106,21 +107,32 @@ class AE(BaseIRTAlgorithm):
             "validation_loss": [],
         }
 
-        if self.one_hot_encoded:
-            train_data = one_hot_encode_test_data(train_data, model.item_categories, encode_missing=model.model_missing)
-            if validation_data is not None:
-                validation_data = one_hot_encode_test_data(validation_data, model.item_categories, encode_missing=model.model_missing)
+        if not one_hot_encoded and imputation_method is None:
+            raise ValueError("imputation_method must be supplied for non-one-hot encoded data.")
 
+        train_data_irt = PytorchIRTDataset(
+            data=train_data.to(device),
+            one_hot_encoded=self.one_hot_encoded,
+            item_categories=model.item_categories,
+            imputation_method=imputation_method,
+            mc_correct=model.mc_correct
+        )
         self.data_loader = torch.utils.data.DataLoader(
-            PytorchIRTDataset(data=train_data.to(device)),
+            train_data_irt,
             batch_size=batch_size,
             shuffle=True,
             pin_memory=False,
         )
         if validation_data is not None:
-            validation_data = validation_data.to(device)
+            validation_data_irt = PytorchIRTDataset(
+                data=validation_data.to(device),
+                one_hot_encoded=self.one_hot_encoded,
+                item_categories=model.item_categories,
+                imputation_method=imputation_method,
+                mc_correct=model.mc_correct
+            )
             self.validation_data_loader = torch.utils.data.DataLoader(
-                PytorchIRTDataset(data=validation_data),
+                validation_data_irt,
                 batch_size=batch_size,
                 shuffle=False,
             )
@@ -146,15 +158,9 @@ class AE(BaseIRTAlgorithm):
 
         # store the latent theta scores of the training data
         # used for more efficient computation when using other methods
-        if not self.one_hot_encoded:
-            if train_data.isnan().any():
-                train_data[train_data.isnan()] = -1
-            if model.model_missing:
-                train_data = train_data + 1 # handled in theta_scores for nn
-            else:
-                train_data[train_data == -1] = 0
-
-        self.training_theta_scores = self.theta_scores(train_data).clone().detach()
+        self.training_theta_scores = self.theta_scores(
+            train_data_irt.input_data.to("cpu")
+        ).clone().detach()
 
     def _training_loop(
         self,
@@ -243,13 +249,12 @@ class AE(BaseIRTAlgorithm):
         model.train()
         loss = 0
 
-        for _, (batch, mask) in enumerate(self.data_loader):
+        for _, (batch, mask, input_batch) in enumerate(self.data_loader):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
             if batch.shape[0] < 4 and self.batch_normalization:
                 continue
-            batch = self._impute_missing(batch, mask)
             self.optimizer.zero_grad()
-            batch_loss = self._train_batch(model, batch)
+            batch_loss = self._train_batch(model, input_batch, batch, mask)
             batch_loss.backward()
 
             self.optimizer.step()
@@ -260,46 +265,39 @@ class AE(BaseIRTAlgorithm):
         self.training_history["train_loss"].append(loss)
         return loss
 
-    def _impute_missing(self, batch, missing_mask):
-        if torch.sum(missing_mask) > 0:
-            if self.imputation_method == "zero":
-                imputed_batch = batch
-                imputed_batch = imputed_batch.masked_fill(missing_mask.bool(), 0)
-            elif self.imputation_method == "mean":
-                raise NotImplementedError("Mean imputation not implemented")
-            else:
-                raise ValueError(
-                    f"Imputation method {self.imputation_method} not implmented"
-                )
-            return imputed_batch
-
-        return batch
-
-    def _train_batch(self, model: BaseIRTModel, batch: torch.Tensor):
+    def _train_batch(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
         """
         Train the model on a batch of data.
 
         Parameters
         ----------
+        model : BaseIRTModel
+            The model to train.
+        input_batch : torch.Tensor
+            The input batch for the encoder.
         batch : torch.Tensor
-            The batch of data.
-
+            The batch of data for computing the loss.
+        missing_mask : torch.Tensor
+            The mask for missing data.
+            
         Returns
         -------
         tuple
             The logits and loss after training on the batch.
         """
-        outputs = model(self.encoder(batch))
-        if self.one_hot_encoded:
-            # for running with loss_function
-            batch = decode_one_hot_test_data(batch, model.modeled_item_responses)
-        batch_loss = -model.log_likelihood(batch, outputs) / batch.shape[0]
+        outputs = model(self.encoder(input_batch))
+        batch_loss = -model.log_likelihood(batch, outputs, missing_mask) / batch.shape[0]
         return batch_loss
 
     @torch.inference_mode()
     def _validation_step(self, model: BaseIRTModel):
         """
         Perform a validation step.
+
+        Parameters
+        ----------
+        model : BaseIRTModel
+            The model to validate.
 
         Returns
         -------
@@ -309,9 +307,8 @@ class AE(BaseIRTAlgorithm):
         self.encoder.eval()
         model.eval()
         loss = 0
-        for _, (batch, mask) in enumerate(self.validation_data_loader):
-            batch = self._impute_missing(batch, mask)
-            batch_loss, _ = self._batch_fit_measures(model, batch)
+        for _, (batch, mask, input_batch) in enumerate(self.validation_data_loader):
+            batch_loss = self._batch_fit_measures(model, input_batch, batch, mask)
 
             loss += batch_loss.item()
         loss /= len(self.validation_data_loader)
@@ -319,33 +316,35 @@ class AE(BaseIRTAlgorithm):
         return loss
 
     @torch.inference_mode()
-    def _batch_fit_measures(self, model: BaseIRTModel, batch: torch.Tensor):
+    def _batch_fit_measures(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
         """
         Calculate the fit measures for a batch.
 
         Parameters
         ----------
+        model : BaseIRTModel
+            The model to calculate the fit measures for.
+        input_batch : torch.Tensor
+            The input batch for the encoder.
         batch : torch.Tensor
             The batch of data.
+        missing_mask : torch.Tensor
+            The mask for missing data.
 
         Returns
         -------
         tuple
             The loss, log likelihood, and accuracy for the batch.
         """
-        output = model(self.encoder(batch))
-        if self.one_hot_encoded:
-            # for running with loss_function
-            batch = decode_one_hot_test_data(batch, model.modeled_item_responses)
-        # negative ce is log likelihood
-        log_likelihood = model.log_likelihood(batch, output)
+        output = model(self.encoder(input_batch))
+        log_likelihood = model.log_likelihood(batch, output, missing_mask=missing_mask)
         loss = -log_likelihood / batch.shape[0]
-        return loss, log_likelihood
+        return loss
 
     @torch.inference_mode()
     def theta_scores(self, data: torch.Tensor):
         """
-        Get the latent scores from an input
+        Get the latent scores from an input dataset using the encoder.
 
         Parameters
         ----------

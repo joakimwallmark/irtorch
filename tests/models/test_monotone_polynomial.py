@@ -1,12 +1,13 @@
 import pytest
 import torch
 from irtorch.models import MonotonePolynomial
+from irtorch.irt_dataset import PytorchIRTDataset
 
 def test_mc_correct_output_idx():
     model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[3, 4],
-        mc_correct=[2, 1],
+        mc_correct=[1, 0],
         model_missing=True
     )
 
@@ -15,7 +16,7 @@ def test_mc_correct_output_idx():
     model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[3, 4],
-        mc_correct=[2, 1],
+        mc_correct=[1, 0],
         model_missing=False
     )
 
@@ -28,7 +29,7 @@ def test_log_likelihood():
         item_categories=[3, 4]
     )
 
-    data = torch.tensor([[0, 2], [1, 3], [2, 3]]).float()
+    data = torch.tensor([[0., 2.], [1., 3.], [2., 3.]])
     output = torch.tensor([
         [0, 0, 0, -torch.inf, -0.4, 0.2, -0.2, 0.5],
         [0, 0, 0, -torch.inf, -0.4, 0.2, -0.2, 0.5],
@@ -40,6 +41,20 @@ def test_log_likelihood():
     assert torch.equal(result[0], result[2]) and torch.equal(result[0], result[4]), "all first item likelihoods should be equal"
     assert torch.equal(result[3], result[5]), "same responses should be equal"
     assert torch.isclose(result[1], torch.tensor(-1.6722826)), "incorrect item likelihood"
+
+    data = torch.tensor([[0., torch.nan], [1., 3.], [2., 3.]])
+    data_irt = PytorchIRTDataset(data)
+    output = torch.tensor([
+        [0, 0, 0, -torch.inf, torch.nan, torch.nan, torch.nan, torch.nan],
+        [0, 0, 0, -torch.inf, -0.4, 0.2, -0.2, 0.5],
+        [0, 0, 0, -torch.inf, -0.4, 0.2, -0.2, 0.5]
+    ])
+    result = model.log_likelihood(data_irt.data, output, data_irt.mask, loss_reduction="none")
+    assert result.shape == (6, ), "Incorrect shape for log_likelihood"
+    assert torch.isclose(result.nansum(), torch.tensor(-5.240402698516)), "Incorrect log_likelihood sum"
+    assert torch.equal(result[0], result[2]) and torch.equal(result[0], result[4]), "all first item likelihoods should be equal"
+    assert torch.equal(result[3], result[5]), "same responses should be equal"
+    assert torch.isnan(result[1]), "incorrect missing response should be nan"
 
 @pytest.mark.parametrize("separate", ["items", "categories"])
 def test_forward_ordered(separate):
@@ -90,7 +105,7 @@ def test_forward_mc(separate):
     model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[2, 3, 3],
-        mc_correct=[2, 1, 3],
+        mc_correct=[1, 0, 2],
         separate=separate,
         item_theta_relationships=item_theta_relationships,
     )

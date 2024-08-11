@@ -6,8 +6,7 @@ import torch
 from torch import nn
 from torch.distributions import MultivariateNormal
 import torch.nn.functional as F
-from irtorch._internal_utils import linear_regression, fix_missing_values, dynamic_print
-from irtorch.utils import one_hot_encode_test_data
+from irtorch._internal_utils import linear_regression, fix_missing_values, dynamic_print, one_hot_encode_test_data
 
 if TYPE_CHECKING:
     from irtorch.estimation_algorithms import BaseIRTAlgorithm
@@ -175,6 +174,7 @@ class BaseIRTModel(ABC, nn.Module):
         self,
         data: torch.Tensor,
         output: torch.Tensor,
+        missing_mask: torch.Tensor = None,
         loss_reduction: str = "sum",
     ) -> torch.Tensor:
         """
@@ -186,6 +186,8 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with test data. Columns are items and rows are respondents
         output: torch.Tensor
             A 2D tensor with output. Columns are item response categories and rows are respondents
+        missing_mask: torch.Tensor, optional
+            A 2D tensor with missing data mask. (default is None)
         loss_reduction: str, optional 
             The reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
         
@@ -196,8 +198,22 @@ class BaseIRTModel(ABC, nn.Module):
         """
         data = data.long()
         data = data.view(-1)
+        respondents = data.size(0)
         reshaped_output = output.reshape(-1, self.max_item_responses)
-        return -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
+        # Remove missing values from log likelihood calculation
+        if missing_mask is not None:
+            missing_mask = missing_mask.view(-1)
+            reshaped_output = reshaped_output[missing_mask == 0]
+            data = data[missing_mask == 0]
+
+        ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
+        # For MML, we need the output to include missing values for missing item responses
+        if loss_reduction == "none" and missing_mask is not None:
+            loss = torch.full((respondents, ), torch.nan, device= ll.device)
+            loss[missing_mask == 0] = ll
+            return loss
+
+        return ll
 
     def expected_scores(self, theta: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
         """
@@ -218,7 +234,7 @@ class BaseIRTModel(ABC, nn.Module):
         item_probabilities = self.item_probabilities(theta)
         if self.mc_correct:
             item_scores = torch.zeros(item_probabilities.shape[1], item_probabilities.shape[2])
-            item_scores.scatter_(1, (torch.tensor(self.mc_correct) - 1 + self.model_missing).unsqueeze(1), 1)
+            item_scores.scatter_(1, (torch.tensor(self.mc_correct) + self.model_missing).unsqueeze(1), 1)
         else:
             item_scores = (torch.arange(item_probabilities.shape[2])).repeat(item_probabilities.shape[1], 1)
             if self.model_missing:

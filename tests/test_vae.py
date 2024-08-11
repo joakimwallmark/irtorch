@@ -61,61 +61,6 @@ class TestVAE:
         output = algorithm.theta_scores(test_data)
         assert output.shape == (120, irt_model.latent_variables)
 
-    def test__impute_missing_with_prior(self, algorithm: VAE, irt_model: BaseIRTModel):
-        a, b = 5, 5
-        data = torch.full((a, b), 5).float()
-        missing_mask = torch.tensor(
-            [
-                [0, 0, 1, 0, 0],
-                [0, 1, 0, 0, 0],
-                [0, 0, 0, 0, 1],
-                [0, 0, 0, 0, 0],
-                [1, 1, 0, 0, 0],
-            ]
-        )
-
-        imputed_data = algorithm._impute_missing_with_prior(irt_model, data, missing_mask)
-        assert torch.equal(
-            torch.full((20,), 5).float(),
-            imputed_data[(1 - missing_mask).bool()],
-        )
-        for replaced in torch.not_equal(
-            torch.full((5,), 5).float(),
-            imputed_data[missing_mask.bool()],
-        ):
-            assert replaced
-
-    def test__mean_scores(self, algorithm: VAE, irt_model: BaseIRTModel):
-        logits = torch.tensor(
-            [
-                [
-                    0.1586,
-                    -0.3347,
-                    -0.1472,
-                    0.0962,
-                    -0.2445,
-                    -0.1546,
-                    -0.0588,
-                    0.0421,
-                    -0.2624,
-                    -0.1405,
-                    0.0943,
-                    0.0735,
-                    -0.1177,
-                    -0.0686,
-                    0.0465,
-                    -0.0359,
-                ]
-            ]
-        )
-
-        means = algorithm._mean_scores(irt_model, logits)
-        assert torch.allclose(
-            means,
-            torch.tensor([0.3791, 0.9709, 1.0655, 1.6510, 1.5445]),
-            atol=1e-4,
-        )
-
     @pytest.mark.parametrize("iw_samples", [1, 3])
     def test__loss_function(
         self,
@@ -141,6 +86,6 @@ class TestVAE:
         std = torch.exp(0.5 * logvars)
         theta_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
-            irt_model_small, test_data[0:2, 0:2], logits, theta_samples, means, logvars
+            irt_model_small, test_data[0:2, 0:2], torch.zeros_like(test_data[0:2, 0:2]), logits, theta_samples, means, logvars
         )
         assert loss > 0

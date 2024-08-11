@@ -9,6 +9,8 @@ from irtorch._internal_utils import (
     sum_incorrect_probabilities,
     entropy,
     random_guessing_data,
+    one_hot_encode_test_data, 
+    decode_one_hot_test_data
 )
 
 @pytest.fixture(scope="module")
@@ -198,3 +200,96 @@ def test_random_guessing_data():
     assert data.min() == 0
     assert data.max() == 2
     assert data.unique().tolist() == [0, 1, 2]
+
+def test_one_hot_encode_test_data(device):
+    # Define a small tensor of test scores and a list of maximum scores
+    #
+    scores = (
+        torch.tensor([[0, 1, 2], [1, 2, 3], [2, 0, float("nan")], [2, 0, -1]])
+        .float()
+        .to(device)
+    )
+    item_categories = [3, 4, 4]
+
+    # Call the function to get the one-hot encoded tensor, with encode_missing set to True
+    one_hot_scores = one_hot_encode_test_data(
+        scores, item_categories, encode_missing=True
+    )
+
+    expected = (
+        torch.tensor(
+            [
+                [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0],
+                [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+                [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0],
+                [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0],
+            ]
+        )
+        .float()
+        .to(device)
+    )
+
+    assert torch.all(one_hot_scores == expected)
+
+    # Call the function to get the one-hot encoded tensor
+    one_hot_scores = one_hot_encode_test_data(
+        scores, item_categories, encode_missing=False
+    )
+
+    expected = torch.tensor(
+        [
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+            [0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+            [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0],
+        ]
+    ).to(device)
+
+    assert torch.all(one_hot_scores == expected)
+    assert one_hot_scores.shape == (4, sum(item_categories))
+    assert one_hot_scores.dtype == torch.float32
+    with pytest.raises(ValueError):
+        one_hot_encode_test_data(
+            torch.tensor([0, 1, 2]), item_categories, encode_missing=False
+        )
+    with pytest.raises(ValueError):
+        one_hot_encode_test_data(scores, [2, 2], encode_missing=False)
+
+def test_decode_one_hot_test_data(device):
+    scores = (
+        torch.tensor([[0, 1, 2], [1, 2, 3], [2, 0, 1], [2, 0, 1]]).float().to(device)
+    ).float()
+    item_categories = [3, 4, 4]
+
+    one_hot_scores = one_hot_encode_test_data(
+        scores, item_categories, encode_missing=False
+    )
+
+    decoded_scores = decode_one_hot_test_data(one_hot_scores, item_categories)
+
+    # Check that the decoded scores match the original scores
+    assert torch.all(decoded_scores == scores)
+
+    with pytest.raises(ValueError):
+        decode_one_hot_test_data(torch.tensor([0, 1, 2]), item_categories)
+    with pytest.raises(ValueError):
+        decode_one_hot_test_data(one_hot_scores, [2, 2])
+
+    # test with
+    scores = (
+        torch.tensor([[0, -1, 2], [1, 2, 3], [2, 0, 1], [2, -1, 1]]).float().to(device)
+    ).float()
+    item_categories = [3, 4, 4]
+
+    # Call the function to get the one-hot encoded tensor
+    one_hot_scores = one_hot_encode_test_data(
+        scores, item_categories, encode_missing=True
+    )
+
+    # Call the function to decode the one-hot encoded tensor
+    decoded_scores = decode_one_hot_test_data(
+        one_hot_scores, [item_cat + 1 for item_cat in item_categories]
+    )
+
+    # Check that the decoded scores match the original scores
+    assert torch.all(decoded_scores == scores + 1)

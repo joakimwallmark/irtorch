@@ -188,11 +188,11 @@ class Evaluation:
             residuals = data - self.model.expected_scores(theta, return_item_scores=True)
 
         if average_over == "items":
-            return residuals.mean(dim=1)
+            return residuals.nanmean(dim=1)
         if average_over == "respondents":
-            return residuals.mean(dim=0)
+            return residuals.nanmean(dim=0)
         if average_over == "everything":
-            return residuals.mean(dim=None)
+            return residuals.nanmean(dim=None)
 
         return residuals
 
@@ -373,13 +373,13 @@ class Evaluation:
         observed_scores = data
         if self.model.mc_correct is not None:
             score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
-            score_indices.scatter_(1, (torch.tensor(self.model.mc_correct) - 1 + self.model.model_missing).unsqueeze(1), 1)
+            score_indices.scatter_(1, (torch.tensor(self.model.mc_correct) + self.model.model_missing).unsqueeze(1), 1)
             score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
             correct_probabilities = (probabilities*score_indices.int()).sum(dim=2)
             variance = correct_probabilities * (1-correct_probabilities)
             possible_scores = torch.zeros_like(probabilities)
             possible_scores[:, :, 1] = 1
-            observed_scores = (data == torch.tensor(self.model.mc_correct) - 1).int()
+            observed_scores = (data == torch.tensor(self.model.mc_correct)).int()
         else:
             possible_scores = torch.arange(0, probabilities.shape[2]).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
             variance = ((possible_scores-expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)

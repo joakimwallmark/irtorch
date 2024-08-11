@@ -394,7 +394,7 @@ def test_infit_outfit(evaluation: Evaluation):
 
     evaluation.model.expected_scores = MagicMock(side_effect=expected_scores_mock_mc)
 
-    evaluation.model.mc_correct = [1, 3]
+    evaluation.model.mc_correct = [0, 2]
     infit, outfit = evaluation.infit_outfit(data, theta, level = "item")
     assert torch.allclose(infit, torch.tensor([0.6000000, 0.8947369])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.4973262, 0.8803419])), "Outfit is incorrect"

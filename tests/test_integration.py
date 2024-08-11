@@ -15,7 +15,7 @@
 #         one_hot_encoded=True
 #         with open("tests/datasets/mc_correct.txt", "r") as file:
 #             correct_cat = file.read().replace("\n", "")
-#         correct_cat = [int(num) for num in correct_cat]
+#         correct_cat = [int(num) - 1 for num in correct_cat]
 #         n_cats = [4, 4, 5, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 5, 4, 5, 4, 5]
 #     else:
 #         n_cats = get_item_categories(data)

@@ -24,7 +24,7 @@ def linear_regression(x, y):
 
     return w
 
-def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputation_method: str = "zero"):
+def fix_missing_values(data: torch.Tensor, imputation_method: str = "zero"):
     """
     Deal with missing values so that the data can be used for fitting.
 
@@ -32,8 +32,6 @@ def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputati
     ----------
     data : torch.Tensor
         The data to fix.
-    model_missing : bool, optional
-        Whether the model can handle missing values. If True, missing values are encoded as -1. If False, missing values are imputed. (default is False)
     imputation_method : str, optional
         The method to use for imputing missing values. The default is "zero".
 
@@ -45,13 +43,10 @@ def fix_missing_values(data: torch.Tensor, model_missing: bool = False, imputati
     if data.isnan().any():
         data[data.isnan()] = -1
 
-    if model_missing:
-        data = data + 1 # handled in theta_scores for nn
+    if imputation_method == "zero":
+        data[data == -1] = 0
     else:
-        if imputation_method == "zero":
-            data[data == -1] = 0
-        else:
-            raise NotImplementedError("Imputation methods not implemented yet")
+        raise NotImplementedError("Imputation methods not implemented yet")
 
     return data
 
@@ -113,7 +108,7 @@ def random_guessing_data(
                 probs = torch.full((num_categories,), (1 - guessing_prob) / (num_categories - 1))
                 
                 # Assign the guessing probability to the correct option
-                probs[mc_correct[item_idx]-1] = guessing_prob
+                probs[mc_correct[item_idx]] = guessing_prob
 
                 # Now, for the incorrect answers, we distribute the remaining probability
                 # We've taken the guessing_prob for the correct answer, so we distribute what's left
@@ -204,15 +199,15 @@ def sum_incorrect_probabilities(
     for item in range(0, len(modeled_item_responses)):
         item_score_0_probs = torch.cat(
             (
-                probabilities[:, item, :mc_correct[item] - 1],
-                probabilities[:, item, mc_correct[item]:]
+                probabilities[:, item, :mc_correct[item]],
+                probabilities[:, item, mc_correct[item]+1:]
             ),
             dim=1,
         ).sum(dim=1)
         new_probs[:, item, :] = torch.cat(
             (
                 item_score_0_probs.unsqueeze(1),
-                probabilities[:, item, mc_correct[item] - 1].unsqueeze(1),
+                probabilities[:, item, mc_correct[item]].unsqueeze(1),
             ),
             dim=1,
         )
@@ -245,21 +240,6 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
     entropies = (probabilities * surprisal).sum(dim=-1)
     return entropies
 
-class PytorchIRTDataset(torch.utils.data.Dataset):
-    def __init__(self, data: torch.Tensor):
-        super().__init__()
-        self.data = data
-        # set missing responses to 0 in the response mask (all non-missing are ones)
-        self.mask = torch.zeros_like(data, dtype=torch.int)
-        self.mask[data == -1] = 1
-        self.mask[data.isnan()] = 1
-
-    def __len__(self) -> int:
-        return len(self.data)
-
-    def __getitem__(self, index: int):
-        return self.data[index], self.mask[index]
-
 def is_jupyter():
     try:
         from IPython import get_ipython
@@ -281,3 +261,99 @@ def dynamic_print(string_to_print):
     """
     formatted_string = f"\r{string_to_print} " # small space after to make it look better in terminal
     print(formatted_string, end="", flush=True)
+
+def one_hot_encode_test_data(
+    data: torch.Tensor, item_categories: list, encode_missing: bool
+):
+    """
+    One-hot encodes test data for each item based on the number of response categories for that item. Missing item responses need to be coded as -1 or nan.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        A 2D tensor where each row represents one respondent and each column represents an item.
+        The values should be the scores achieved by the respondents on the items, starting from 0.
+        Missing item responses need to be coded as -1 or 'nan'.
+    item_categories : list
+        A list of integers where each integer is the number of response categories for the corresponding item.
+    encode_missing: bool
+        Encode missing values in a separate category. If False, they are coded as 0 for all items.
+
+    Returns
+    -------
+    torch.Tensor
+        A 2D tensor where each group of columns corresponds to the one-hot encoded scores for one of the items.
+        The number of columns in each group is equal to the maximum possible score plus one for that item.
+
+    Notes
+    -----
+    The input data tensor should contain integer values representing the scores. If it contains non-integer values,
+    they will be rounded to the nearest integer.
+    """
+    if data.dim() != 2:
+        raise ValueError("Input data must be a 2D tensor.")
+    if data.shape[1] != len(item_categories):
+        raise ValueError(
+            "The number of columns in the data tensor must match the length of the item_categories list."
+        )
+    if data.isnan().any():
+        data[data.isnan()] = -1
+
+    one_hot_list = []
+    if data.dtype != torch.long:
+        data = data.round().long()
+    if encode_missing:
+        data = data + 1
+        item_categories = [item_cat + 1 for item_cat in item_categories]
+    else:
+        data[data == -1] = 0
+
+    for i in range(data.shape[1]):
+        one_hot = torch.zeros((data.shape[0], item_categories[i]), dtype=torch.long).to(
+            data.device
+        )
+        # Fill in the appropriate column with ones based on the scores
+        # Only for those rows where the score is not -1
+        valid_rows = data[:, i] != -1
+        one_hot[valid_rows, data[valid_rows, i]] = 1
+        # Append the one-hot encoded tensor to the list
+        one_hot_list.append(one_hot)
+
+    # Concatenate the one-hot encoded columns back into a single tensor
+    return torch.cat(one_hot_list, dim=1).float()
+
+def decode_one_hot_test_data(one_hot_data: torch.Tensor, item_categories: list):
+    """
+    Decodes one-hot encoded test data back to the original scores.
+
+    Parameters
+    ----------
+    one_hot_data : torch.Tensor
+        A 2D tensor where each group of columns corresponds to the one-hot encoded scores for one of the items.
+        The number of columns in each group is equal to the number of possible responses for that item.
+    item_categories : list
+        A list of integers where each integer is the number of possible responses for the corresponding item.
+
+    Returns
+    -------
+    torch.Tensor
+        A 2D tensor where each row represents one respondent and each column represents an item.
+        The values are the scores achieved by the respondents on the items.
+    """
+    if one_hot_data.dim() != 2:
+        raise ValueError("Input one_hot_data must be a 2D tensor.")
+    if sum(item_categories) != one_hot_data.shape[1]:
+        raise ValueError(
+            "The total number of categories must match the number of columns in the one_hot_data tensor."
+        )
+
+    # Preallocate a tensor for the scores
+    scores = []
+    start = 0
+    for _, item_cat in enumerate(item_categories):
+        # Extract the one-hot encoded scores for this item
+        # Decode the one-hot encoded scores back to the original scores
+        scores.append(torch.argmax(one_hot_data[:, start : start + item_cat], dim=1))
+        start += item_cat
+
+    return torch.stack(scores, dim=1).float()

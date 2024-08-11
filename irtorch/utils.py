@@ -1,4 +1,5 @@
 import torch
+from irtorch.models import BaseIRTModel
 import numpy as np
 import itertools
 
@@ -81,49 +82,83 @@ def get_item_categories(data: torch.Tensor):
     """
     return [int(data[~data.isnan().any(dim=1)][:, col].max()) + 1 for col in range(data.shape[1])]
 
-def impute_missing(data: torch.tensor, mc_correct: list[int] = None, item_categories: list[int] = None):
+@torch.inference_mode()
+def impute_missing(
+    data: torch.Tensor,
+    method: str = "zero",
+    model: BaseIRTModel = None,
+    mc_correct: list[int] = None,
+    item_categories: list[int] = None
+) -> torch.Tensor:
     """
-    Impute missing values in the data. 
-    For multiple choice data for which missing is not modeled, imputes randomly from incorrect responses.
-    For non-multiple choice data, imputes missing values as 0.
+    Impute missing values.
 
     Parameters
-    -----------
-    data : torch.Tensor
-        A 2D tensor where each row represents one respondent and each column represents an item.
-        The values should be the scores/possible responses on the items, starting from 0.
-        Missing item responses need to be coded as -1 or "nan".
-    mc_correct : list[int], optional
-        A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
-    item_categories : list[int], optional
-        A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
-
-    Returns
     ----------
-    torch.Tensor
-        A 2D tensor with missing values imputed. Rows are respondents and columns are items.
+    data : torch.Tensor
+        A 2D tensor where each row is a response vector and each column is an item.
+    method : str, optional
+        The imputation method to use. Options are 'zero', 'mean', 'random_incorrect'. (default is 'zero')
+
+        - 'zero': Impute missing values with 0.
+        - 'mean': Impute missing values with the item means.
+        - 'random incorrect': Impute missing values with a random incorrect response. This method is only valid for multiple choice data.
+        - 'prior expected': Impute missing values with the expected scores for the latent space prior distribution mean.
+    mc_correct : list[int], optional
+        Only for method='random_incorrect'. A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
+    item_categories : list[int], optional
+        Only for method='random_incorrect'. A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
     """
-    if data.isnan().any():
-        data[data.isnan()] = -1
+    imputed_data = data.clone()
 
-    if mc_correct is None:
-        data[data==-1] = 0
-        return data
-    else: 
-        if item_categories is None:
-            item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
-        for col in range(data.shape[1]):
+    if (imputed_data == -1).any():
+        imputed_data[imputed_data == -1] = torch.nan
+
+    if method == "zero":
+        imputed_data = torch.where(torch.isnan(imputed_data), torch.tensor(0.0), imputed_data)
+    elif method == "mean":
+        means = imputed_data.nanmean(dim=0)
+        mask = torch.isnan(imputed_data)
+        imputed_data[mask] = means.repeat(data.shape[0], 1)[mask]
+    elif method == "random incorrect":
+        if model is not None:
+            if model.mc_correct is not None:
+                raise ValueError("The model provided must be a multiple choice item model when using random_incorrect imputation")
+            item_categories = model.item_categories
+            mc_correct = model.mc_correct
+        else:
+            if mc_correct is None:
+                raise ValueError("mc_correct must be provided when using random_incorrect imputation without a model")
+            if item_categories is None:
+                item_categories = (torch.where(~imputed_data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+
+        for col in range(imputed_data.shape[1]):
             # Get the incorrect non-missing responses from the column
-            incorrect_responses = torch.arange(0, item_categories[col])
-            incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]-1]
-
-            # Find the indices of -1 values in the column
-            missing_indices = (data[:, col] == -1).squeeze()
-
+            incorrect_responses = torch.arange(0, item_categories[col], device=imputed_data.device).float()
+            incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]]
+            # Find the indices of missing values in the column
+            missing_indices = (imputed_data[:, col].isnan()).squeeze()
             # randomly sample from the incorrect responses and replace missing
-            data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))].float()
+            imputed_data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))]
+    elif method == "prior expected":
+        if model is None:
+            raise ValueError("The model must be provided when using prior mean imputation")
+        if model.mc_correct is not None:
+            raise ValueError("The model provided must be a non-multiple choice item model when using prior mean imputation")
+        prior_scores = model.expected_scores(
+            torch.zeros(1, model.latent_variables).to(next(model.parameters()).device),
+            return_item_scores=True
+        ).round()
+        mask = torch.isnan(imputed_data)
+        imputed_data[mask] = prior_scores.repeat(imputed_data.shape[0], 1).to(
+            next(model.parameters()).device
+        )[mask]
+    else:
+        raise ValueError(
+            f"{method} imputation is not implmented"
+        )
 
-        return data
+    return imputed_data
 
 def split_data(data, train_ratio=0.8, shuffle=True):
     """
@@ -168,99 +203,3 @@ def split_data(data, train_ratio=0.8, shuffle=True):
     test_data = data_shuffled[train_size:]
 
     return train_data, test_data
-
-def one_hot_encode_test_data(
-    data: torch.Tensor, item_categories: list, encode_missing: bool
-):
-    """
-    One-hot encodes test data for each item based on the number of response categories for that item. Missing item responses need to be coded as -1 or nan.
-
-    Parameters
-    ----------
-    data : torch.Tensor
-        A 2D tensor where each row represents one respondent and each column represents an item.
-        The values should be the scores achieved by the respondents on the items, starting from 0.
-        Missing item responses need to be coded as -1 or 'nan'.
-    item_categories : list
-        A list of integers where each integer is the number of response categories for the corresponding item.
-    encode_missing: bool
-        Encode missing values in a separate category. If False, they are coded as 0 for all items.
-
-    Returns
-    -------
-    torch.Tensor
-        A 2D tensor where each group of columns corresponds to the one-hot encoded scores for one of the items.
-        The number of columns in each group is equal to the maximum possible score plus one for that item.
-
-    Notes
-    -----
-    The input data tensor should contain integer values representing the scores. If it contains non-integer values,
-    they will be rounded to the nearest integer.
-    """
-    if data.dim() != 2:
-        raise ValueError("Input data must be a 2D tensor.")
-    if data.shape[1] != len(item_categories):
-        raise ValueError(
-            "The number of columns in the data tensor must match the length of the item_categories list."
-        )
-    if data.isnan().any():
-        data[data.isnan()] = -1
-
-    one_hot_list = []
-    if data.dtype != torch.long:
-        data = data.round().long()
-    if encode_missing:
-        data = data + 1
-        item_categories = [item_cat + 1 for item_cat in item_categories]
-    else:
-        data[data == -1] = 0
-
-    for i in range(data.shape[1]):
-        one_hot = torch.zeros((data.shape[0], item_categories[i]), dtype=torch.long).to(
-            data.device
-        )
-        # Fill in the appropriate column with ones based on the scores
-        # Only for those rows where the score is not -1
-        valid_rows = data[:, i] != -1
-        one_hot[valid_rows, data[valid_rows, i]] = 1
-        # Append the one-hot encoded tensor to the list
-        one_hot_list.append(one_hot)
-
-    # Concatenate the one-hot encoded columns back into a single tensor
-    return torch.cat(one_hot_list, dim=1).float()
-
-def decode_one_hot_test_data(one_hot_data: torch.Tensor, item_categories: list):
-    """
-    Decodes one-hot encoded test data back to the original scores.
-
-    Parameters
-    ----------
-    one_hot_data : torch.Tensor
-        A 2D tensor where each group of columns corresponds to the one-hot encoded scores for one of the items.
-        The number of columns in each group is equal to the number of possible responses for that item.
-    item_categories : list
-        A list of integers where each integer is the number of possible responses for the corresponding item.
-
-    Returns
-    -------
-    torch.Tensor
-        A 2D tensor where each row represents one respondent and each column represents an item.
-        The values are the scores achieved by the respondents on the items.
-    """
-    if one_hot_data.dim() != 2:
-        raise ValueError("Input one_hot_data must be a 2D tensor.")
-    if sum(item_categories) != one_hot_data.shape[1]:
-        raise ValueError(
-            "The total number of categories must match the number of columns in the one_hot_data tensor."
-        )
-
-    # Preallocate a tensor for the scores
-    scores = []
-    start = 0
-    for _, item_cat in enumerate(item_categories):
-        # Extract the one-hot encoded scores for this item
-        # Decode the one-hot encoded scores back to the original scores
-        scores.append(torch.argmax(one_hot_data[:, start : start + item_cat], dim=1))
-        start += item_cat
-
-    return torch.stack(scores, dim=1).float()

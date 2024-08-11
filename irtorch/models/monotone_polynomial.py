@@ -111,7 +111,7 @@ class MonotonePolynomial(BaseIRTModel):
         self.mc_correct_output_idx = None
         if mc_correct is not None:
             item_start_positions = torch.arange(0, self.output_length, self.max_item_responses)
-            indices = (item_start_positions + torch.tensor(mc_correct) - 1 + self.model_missing).long()
+            indices = (item_start_positions + torch.tensor(mc_correct) + self.model_missing).long()
             self.mc_correct_output_idx = torch.zeros(self.output_length, dtype=torch.bool)
             self.mc_correct_output_idx.index_fill_(0, indices, True)
 

@@ -54,17 +54,11 @@ def test_expected_scores(base_irt_model: BaseIRTModel):
     assert torch.allclose(expected_item_scores.sum(dim=1), base_irt_model.expected_scores(torch.randn((2, 2)), return_item_scores=False))
 
     base_irt_model.model_missing = False
-    base_irt_model.mc_correct = [1, 2]
+    base_irt_model.mc_correct = [0, 1]
     expected_item_scores = base_irt_model.expected_scores(torch.randn((2, 2)), return_item_scores=True)
     assert torch.allclose(expected_item_scores, torch.tensor([[0.1, 0.1], [0.3, 0.5]]))
     assert torch.allclose(expected_item_scores.sum(dim=1), base_irt_model.expected_scores(torch.randn((2, 2)), return_item_scores=False))
     
-    base_irt_model.model_missing = True
-    base_irt_model.mc_correct = [0, 1] # should give the same as above even if in practice invalid mc_correct
-    expected_item_scores = base_irt_model.expected_scores(torch.randn((2, 2)), return_item_scores=True)
-    assert torch.allclose(expected_item_scores, torch.tensor([[0.1, 0.1], [0.3, 0.5]]))
-    assert torch.allclose(expected_item_scores.sum(dim=1), base_irt_model.expected_scores(torch.randn((2, 2)), return_item_scores=False))
-
     # what if we just have 1 respondent?
     def item_probabilities_mock2(*args, **kwargs):
         return torch.tensor([[[0.1, 0.1, 0.8, 0.0], [0.1, 0.1, 0.2, 0.7]]])
@@ -76,7 +70,7 @@ def test_expected_scores(base_irt_model: BaseIRTModel):
     base_irt_model.model_missing = False
     expected_item_scores = base_irt_model.expected_scores(torch.randn((1, 2)), return_item_scores=True)
     assert torch.allclose(expected_item_scores, torch.tensor([[1.7, 2.6]]))
-    base_irt_model.mc_correct = [3, 1]
+    base_irt_model.mc_correct = [2, 0]
     base_irt_model.model_missing = False
     expected_item_scores = base_irt_model.expected_scores(torch.randn((1, 2)), return_item_scores=True)
     assert torch.allclose(expected_item_scores, torch.tensor([[0.8, 0.1]]))

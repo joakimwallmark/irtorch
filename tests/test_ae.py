@@ -30,7 +30,7 @@ class TestAE:
         algorithm.encoder = StandardEncoder(
             input_dim=len(item_categories),
             latent_variables=latent_variables,
-            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+            hidden_dim=[2 * sum(irt_model.item_categories)]
         )
 
         return algorithm

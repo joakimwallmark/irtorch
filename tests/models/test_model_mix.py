@@ -62,7 +62,7 @@ def test_log_likelihood(model_mix: ModelMix):
     assert torch.isclose(result[11], torch.tensor(-0.743420)), "incorrect item likelihood"
 
     data = torch.tensor([[0, 1, 0], [0, torch.nan, 1], [1, 0, torch.nan], [1, 1, 2]]).float()
-    missing_mask = torch.isnan(data).int()
+    missing_mask = torch.isnan(data)
     output = torch.tensor([
         [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5],
         [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5],

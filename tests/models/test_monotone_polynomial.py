@@ -7,17 +7,7 @@ def test_mc_correct_output_idx():
     model = MonotonePolynomial(
         latent_variables = 2,
         item_categories=[3, 4],
-        mc_correct=[1, 0],
-        model_missing=True
-    )
-
-    assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, False,  True, False, False, False,  True, False, False, False]))
-
-    model = MonotonePolynomial(
-        latent_variables = 2,
-        item_categories=[3, 4],
-        mc_correct=[1, 0],
-        model_missing=False
+        mc_correct=[1, 0]
     )
 
     assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, True,  False, False,  True, False, False, False]))

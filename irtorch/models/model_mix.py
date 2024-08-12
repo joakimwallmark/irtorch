@@ -37,14 +37,9 @@ class ModelMix(BaseIRTModel):
         if not all([latent_variables[0] == latent_variables[i] for i in range(1, len(latent_variables))]):
             raise ValueError("All models must have the same number of latent variables.")
 
-        model_missing = [model.model_missing for model in models]
-        if not all([model_missing[0] == model_missing[i] for i in range(1, len(model_missing))]):
-            raise ValueError("All models must have the same way of handling missing values.")
-
         super().__init__(
             latent_variables=latent_variables[0],
-            item_categories = item_categories,
-            model_missing=model_missing[0]
+            item_categories = item_categories
         )
         # register each model as a submodule
         self.models = nn.ModuleList(models)

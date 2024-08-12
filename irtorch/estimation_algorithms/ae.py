@@ -18,6 +18,7 @@ class AE(BaseIRTAlgorithm):
         self.one_hot_encoded = True
         self.batch_normalization = False
         self.encoder = None
+        self.imputation_method = None
         self.training_theta_scores = None
         self.data_loader = None
         self.validation_data_loader = None
@@ -84,14 +85,15 @@ class AE(BaseIRTAlgorithm):
         super().fit(model = model, train_data = train_data)
         self.one_hot_encoded = one_hot_encoded
         self.batch_normalization = batch_normalization_encoder
+        self.imputation_method = imputation_method
 
         if self.one_hot_encoded:
-            input_dim = sum(model.modeled_item_responses)
+            input_dim = sum(model.item_categories)
         else:
-            input_dim = len(model.modeled_item_responses)
+            input_dim = len(model.item_categories)
 
         if hidden_layers_encoder is None:  # 1 layer with 2x number of categories as neurons is default
-            hidden_layers_encoder = [2 * sum(model.modeled_item_responses)]
+            hidden_layers_encoder = [2 * sum(model.item_categories)]
 
         self.encoder = StandardEncoder(
             input_dim=input_dim,

@@ -62,7 +62,7 @@ class BitScales:
         torch.Tensor
             A tensor with all the starting theta values.
         """
-        items = items or list(range(len(self.model.modeled_item_responses)))
+        items = items or list(range(len(self.model.item_categories)))
         mc_correct = torch.tensor(self.model.mc_correct) if self.model.mc_correct else None
         if not all(isinstance(item, int) for item in items):
             raise ValueError("items must be a list of integers.")
@@ -100,10 +100,7 @@ class BitScales:
             else:
                 # Get minimum score in relation to each latent variable
                 min_sum_score = torch.zeros((len(items), self.model.latent_variables))
-                if self.model.model_missing:
-                    min_sum_score[~item_theta_positive] = (torch.tensor(selected_item_categories) - 2).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_theta_positive]
-                else:
-                    min_sum_score[~item_theta_positive] = (torch.tensor(selected_item_categories) - 1).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_theta_positive]
+                min_sum_score[~item_theta_positive] = (torch.tensor(selected_item_categories) - 1).view(-1, 1).float().repeat(1, self.model.latent_variables)[~item_theta_positive]
 
                 # get the minimum theta scores based on the sum scores
                 starting_theta = torch.zeros((1, self.model.latent_variables)).float()
@@ -196,7 +193,7 @@ class BitScales:
         if theta_estimation not in ["NN", "ML", "EAP", "MAP"]:
             raise ValueError("Invalid bit_score_theta_grid_method. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
         if items is None:
-            items = list(range(len(self.model.modeled_item_responses)))
+            items = list(range(len(self.model.item_categories)))
         elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
             raise ValueError("items must be a list of integers.")
         
@@ -403,21 +400,21 @@ class BitScales:
         if self.model.latent_variables > 1:
             expected_item_sum_scores = self.model.expected_scores(theta, return_item_scores=True).detach()
             if not self.model.mc_correct and rescale_by_item_score:
-                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
+                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
             if bit_scores is None:
                 bit_scores = self.bit_scores_from_theta(theta)[0]
             # item score slopes for each item
             mean_slopes = linear_regression(bit_scores, expected_item_sum_scores).t()[:, 1:]
         else:
             median, _ = torch.median(theta, dim=0)
-            mean_slopes = torch.zeros(theta.shape[0], len(self.model.modeled_item_responses),theta.shape[1])
+            mean_slopes = torch.zeros(theta.shape[0], len(self.model.item_categories),theta.shape[1])
             for latent_variable in range(theta.shape[1]):
                 theta_scores = median.repeat(theta.shape[0], 1)
                 theta_scores[:, latent_variable], _ = theta[:, latent_variable].sort()
                 theta_scores.requires_grad_(True)
                 expected_item_sum_scores = self.model.expected_scores(theta_scores, return_item_scores=True)
                 if not self.model.mc_correct and rescale_by_item_score:
-                    expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.modeled_item_responses) - 1)
+                    expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
 
                 # item score slopes for each item
                 for item in range(expected_item_sum_scores.shape[1]):

@@ -9,8 +9,8 @@ from irtorch._internal_utils import (
     sum_incorrect_probabilities,
     entropy,
     random_guessing_data,
-    one_hot_encode_test_data, 
-    decode_one_hot_test_data
+    one_hot_encode_test_data,
+    impute_missing_internal
 )
 
 @pytest.fixture(scope="module")
@@ -104,9 +104,9 @@ def test_conditional_scores_distribution():
     assert torch.allclose(result, expected_output, atol=1e-5)
 
     # Test with mc_correct
-    mc_correct = [1, 2, 3]
+    mc_correct = [0, 1, 2]
     probabilities = sum_incorrect_probabilities(
-        probabilities, item_categories, mc_correct, False
+        probabilities, item_categories, mc_correct
     )
     item_categories = [2] * len(item_categories)
     result = conditional_score_distribution(probabilities, item_categories)
@@ -125,13 +125,12 @@ def test_sum_incorrect_probabilities():
     ])
     
     item_categories = [2, 3, 4]
-    mc_correct = [1, 3, 2]
+    mc_correct = [0, 2, 1]
 
     result = sum_incorrect_probabilities(
         probabilities,
         item_categories,
-        mc_correct,
-        missing_modeled=False
+        mc_correct
     )
 
     expected_output = torch.tensor([
@@ -141,23 +140,6 @@ def test_sum_incorrect_probabilities():
 
     # Check if the output matches the expected output
     assert torch.allclose(result, expected_output, atol=1e-5)
-
-    # Test with missing_modeled=True
-    result = sum_incorrect_probabilities(
-        probabilities,
-        item_categories,
-        [x - 1 for x in mc_correct],
-        missing_modeled=True
-    )
-
-    expected_output = torch.tensor([
-        [[0.5, 0.5], [0.5, 0.5], [0.8, 0.2]],
-        [[0.6, 0.4], [0.6, 0.4], [0.7, 0.3]]
-    ])
-
-    # Check if the output matches the expected output
-    assert torch.allclose(result, expected_output, atol=1e-5)
-
 
 def test_entropy():
     # Also test that if one probability is 0, we get correct response
@@ -194,7 +176,7 @@ def test_random_guessing_data():
     # Test multiple choice data
     item_categories = [3, 3, 3, 3, 3]
     guessing_probabilities = [0.5, 0.5, 0.5, 0.5, 0.5]
-    mc_correct = [2, 1, 3, 1, 2]
+    mc_correct = [1, 0, 2, 0, 1]
     data = random_guessing_data(item_categories, 100, guessing_probabilities, mc_correct)
     assert data.shape == (100, 5)
     assert data.min() == 0
@@ -212,17 +194,15 @@ def test_one_hot_encode_test_data(device):
     item_categories = [3, 4, 4]
 
     # Call the function to get the one-hot encoded tensor, with encode_missing set to True
-    one_hot_scores = one_hot_encode_test_data(
-        scores, item_categories, encode_missing=True
-    )
+    one_hot_scores = one_hot_encode_test_data(scores, item_categories)
 
     expected = (
         torch.tensor(
             [
-                [0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0],
-                [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1],
-                [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0],
-                [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0],
+                [1, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0],
+                [0, 1, 0,  0, 0, 1, 0,  0, 0, 0, 1],
+                [0, 0, 1,  1, 0, 0, 0,  0, 0, 0, 0],
+                [0, 0, 1,  1, 0, 0, 0,  0, 0, 0, 0],
             ]
         )
         .float()
@@ -230,66 +210,28 @@ def test_one_hot_encode_test_data(device):
     )
 
     assert torch.all(one_hot_scores == expected)
-
-    # Call the function to get the one-hot encoded tensor
-    one_hot_scores = one_hot_encode_test_data(
-        scores, item_categories, encode_missing=False
-    )
-
-    expected = torch.tensor(
-        [
-            [1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
-            [0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-            [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0],
-            [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0],
-        ]
-    ).to(device)
-
-    assert torch.all(one_hot_scores == expected)
     assert one_hot_scores.shape == (4, sum(item_categories))
     assert one_hot_scores.dtype == torch.float32
     with pytest.raises(ValueError):
-        one_hot_encode_test_data(
-            torch.tensor([0, 1, 2]), item_categories, encode_missing=False
-        )
+        one_hot_encode_test_data(torch.tensor([0, 1, 2]), item_categories)
     with pytest.raises(ValueError):
-        one_hot_encode_test_data(scores, [2, 2], encode_missing=False)
+        one_hot_encode_test_data(scores, [2, 2])
 
-def test_decode_one_hot_test_data(device):
-    scores = (
-        torch.tensor([[0, 1, 2], [1, 2, 3], [2, 0, 1], [2, 0, 1]]).float().to(device)
-    ).float()
-    item_categories = [3, 4, 4]
+def test_impute_missing_internal():
+    data = torch.tensor([[1, 2, 1, -1], [-1, float("nan"), 0, 2], [-1, float("nan"), 1, 2]])
+    imputed_data = impute_missing_internal(data = data, method="zero")
+    assert (imputed_data == torch.tensor([[1, 2, 1, 0], [0, 0, 0, 2], [0, 0, 1, 2]])).all()
 
-    one_hot_scores = one_hot_encode_test_data(
-        scores, item_categories, encode_missing=False
-    )
+    imputed_data = impute_missing_internal(data = data, method="mean")
+    assert (imputed_data == torch.tensor([[1, 2, 1, 2], [1, 2, 0, 2], [1, 2, 1, 2]])).all()
 
-    decoded_scores = decode_one_hot_test_data(one_hot_scores, item_categories)
-
-    # Check that the decoded scores match the original scores
-    assert torch.all(decoded_scores == scores)
-
-    with pytest.raises(ValueError):
-        decode_one_hot_test_data(torch.tensor([0, 1, 2]), item_categories)
-    with pytest.raises(ValueError):
-        decode_one_hot_test_data(one_hot_scores, [2, 2])
-
-    # test with
-    scores = (
-        torch.tensor([[0, -1, 2], [1, 2, 3], [2, 0, 1], [2, -1, 1]]).float().to(device)
-    ).float()
-    item_categories = [3, 4, 4]
-
-    # Call the function to get the one-hot encoded tensor
-    one_hot_scores = one_hot_encode_test_data(
-        scores, item_categories, encode_missing=True
-    )
-
-    # Call the function to decode the one-hot encoded tensor
-    decoded_scores = decode_one_hot_test_data(
-        one_hot_scores, [item_cat + 1 for item_cat in item_categories]
-    )
-
-    # Check that the decoded scores match the original scores
-    assert torch.all(decoded_scores == scores + 1)
+    mc_correct = [1, 2, 1, 2]
+    imputed_data = impute_missing_internal(data = data, method = "random incorrect", mc_correct=mc_correct, item_categories=[3, 3, 2, 3])
+    missing_mask = torch.logical_or(data == -1, data.isnan())
+    assert (imputed_data[missing_mask] > -1).all() # all missing are replaced
+    assert (imputed_data[~missing_mask] == data[~missing_mask]).all() # non missing are still the same
+    assert imputed_data[0, 3] != 2 # we did not replace with true values
+    assert imputed_data[1, 0] != 1
+    assert imputed_data[1, 1] != 2
+    assert imputed_data[2, 0] != 1
+    assert imputed_data[2, 1] != 2

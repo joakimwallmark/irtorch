@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 import torch
-from torch.nn.functional import softmax
 import pytest
 from irtorch.evaluation import Evaluation
 from irtorch.bit_scales import BitScales
@@ -69,8 +68,7 @@ def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
     mock_model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     mock_model.latent_scores = MagicMock(side_effect=latent_scores)
     mock_model.item_categories = item_categories
-    mock_model.modeled_item_responses = item_categories
-    mock_model.model_missing = False
+    mock_model.item_categories = item_categories
     mock_model.mc_correct = None
     mock_model.latent_variables = latent_variables
 
@@ -96,21 +94,26 @@ def test__evaluate_data_theta_input(evaluation: Evaluation):
             for item_cat in evaluation.model.item_categories
         ],
         dim=1,
-    )
+    ).float()
+    data[5:7, 1] = torch.nan
 
     # Call the method with data and theta as None
-    result_data, result_theta = evaluation._evaluate_data_theta_input(data, None, "NN")
+    result_data, result_theta, missing_mask = evaluation._evaluate_data_theta_input(data, None, "NN")
 
     # Check the shape of the output data and theta
     assert result_data.shape == data.shape
     assert result_theta.shape == evaluation.model.algorithm.training_theta_scores.shape
+    assert missing_mask.shape == data.shape
+    assert missing_mask[5:7, 1].all()
 
     # Call the method with data as None
-    result_data, result_theta = evaluation._evaluate_data_theta_input(None, None, "NN")
+    result_data, result_theta, missing_mask = evaluation._evaluate_data_theta_input(None, None, "NN")
 
     # Check the shape of the output data and theta
     assert result_data.shape == evaluation.model.algorithm.train_data.shape
     assert result_theta.shape == evaluation.model.algorithm.training_theta_scores.shape
+    assert missing_mask.shape == data.shape
+    assert (~missing_mask).all()
 
 def test_probabilities_from_grouped_theta(evaluation: Evaluation, latent_variables):
     # Create some synthetic theta scores
@@ -166,7 +169,7 @@ def test_latent_group_probabilities(evaluation: Evaluation, scale):
             for item_cat in evaluation.model.item_categories
         ],
         dim=1,
-    )
+    ).float()
 
     groups = 3
     (
@@ -222,7 +225,7 @@ def test_sum_score_probabilities(evaluation: Evaluation, latent_density_method):
         total_score_probs = evaluation.sum_score_probabilities(
             latent_density_method=latent_density_method, trapezoidal_segments=5
         )
-        # We should have 4 scores since we have modeled_item_responses = [2, 3]
+        # We should have 4 scores since we have item_categories = [2, 3]
         assert total_score_probs.shape == (4,)
         # They should add up to 1
         assert torch.isclose(total_score_probs.sum(), torch.tensor(1.0), atol=1e-6)
@@ -238,7 +241,7 @@ def test_log_likelihood(evaluation: Evaluation):
     )
 
     # Mock log_likelihood method
-    def log_likelihood_mock(data, output, loss_reduction):
+    def log_likelihood_mock(data, output, missing_mask, loss_reduction):
         t1 = torch.tensor([-0.5, -1.0]).repeat(data.shape[0] // 2)
         t2 = torch.tensor([-0.1, -0.2]).repeat(data.shape[0] - (data.shape[0] // 2))
         return torch.cat([t1, t2])
@@ -285,7 +288,8 @@ def test_accuracy(evaluation: Evaluation):
             for item_cat in evaluation.model.item_categories
         ],
         dim=1,
-    )
+    ).float()
+    data[5:7, 1] = torch.nan
 
     # Mock probabilities
     def item_probabilities_mock(theta):
@@ -298,7 +302,7 @@ def test_accuracy(evaluation: Evaluation):
 
     # overall
     accuracy = evaluation.accuracy(data=data, level="all")
-    assert accuracy.shape == ()  # We have 30 respondents
+    assert accuracy.shape == ()
     assert accuracy.dtype == torch.float32
     assert torch.all((accuracy >= 0) & (accuracy <= 1)), "All values are not between 0 and 1"
     
@@ -319,13 +323,13 @@ def test_residuals(evaluation: Evaluation):
     # Create synthetic test data
     data = torch.tensor(
         (
-            [0, 2],
-            [1, 1],
-            [1, 0],
-            [0, 1],
-            [0, 2],
+            [0., 2.],
+            [1., 1.],
+            [1., 0.],
+            [0., -1.],
+            [0., torch.nan],
         )
-    ).float()
+    )
 
     # Mock probabilities
     def item_probabilities_mock(theta):
@@ -342,29 +346,29 @@ def test_residuals(evaluation: Evaluation):
     evaluation.model.mc_correct = [0, 2]
     # non-averaged
     residuals = evaluation.residuals(data=data)
-    assert residuals.shape == (5, 2)  # We have 30 respondents
+    assert residuals.shape == (5, 2)
     assert torch.allclose(residuals, torch.tensor([
         [0.4500, 0.5500],
         [0.5500, 0.6500],
         [0.1500, 0.4000],
-        [0.8500, 0.9500],
-        [0.8500, 0.6500]]
-    )), "Residuals are not correct"
+        [0.8500, torch.nan],
+        [0.8500, torch.nan]],
+    ), equal_nan=True), "Residuals are not correct"
 
     # overall
     residuals = evaluation.residuals(data=data, average_over="everything")
     assert residuals.shape == ()  # We have 30 respondents
-    assert torch.isclose(residuals, torch.tensor(0.6050)), "Residuals are not correct"
+    assert torch.isclose(residuals, torch.tensor(0.556249976)), "Residuals are not correct"
 
     # respondent level
     residuals = evaluation.residuals(data=data, average_over="items")
     assert residuals.shape == (5,)  # We have 5 respondents
-    assert torch.allclose(residuals, torch.tensor([0.5000, 0.6000, 0.2750, 0.9000, 0.7500])), "Residuals are not correct"
+    assert torch.allclose(residuals, torch.tensor([0.5000, 0.6000, 0.2750, 0.8500, 0.8500])), "Residuals are not correct"
 
     # item level
     residuals = evaluation.residuals(data=data, average_over="respondents")
     assert residuals.shape == (2,)  # We have 2 items
-    assert torch.allclose(residuals, torch.tensor([0.5700, 0.6400])), "Residuals are not correct"
+    assert torch.allclose(residuals, torch.tensor([0.5700, 0.53333336114])), "Residuals are not correct"
 
 def test_infit_outfit(evaluation: Evaluation):
     data = torch.tensor([[0, 2], [1, 1]]).float()
@@ -402,6 +406,15 @@ def test_infit_outfit(evaluation: Evaluation):
     infit, outfit = evaluation.infit_outfit(data, theta, level = "respondent")
     assert torch.allclose(infit, torch.tensor([1.0202020, 0.4084507])), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([1.0202019, 0.3574660])), "Outfit is incorrect"
+
+    # With missing data
+    data[0, 1] = torch.nan
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "item")
+    assert torch.allclose(infit, torch.tensor([0.6000000, 0.53846150])), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.4973262, 0.53846150])), "Outfit is incorrect"
+    infit, outfit = evaluation.infit_outfit(data, theta, level = "respondent")
+    assert torch.allclose(infit, torch.tensor([0.8181817, 0.4084507]), equal_nan=True), "Infit is incorrect"
+    assert torch.allclose(outfit, torch.tensor([0.8181817, 0.3574660]), equal_nan=True), "Outfit is incorrect"
 
 @pytest.mark.parametrize("cv_n_components", [[1], [1, 2, 3]])
 def test__cv_gaussian_mixture_model(evaluation: Evaluation, cv_n_components):

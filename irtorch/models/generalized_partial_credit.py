@@ -74,18 +74,18 @@ class GeneralizedPartialCredit(BaseIRTModel):
         free_weights = torch.ones(self.items, latent_variables)
         self.register_buffer("gpc_weight_multiplier", torch.arange(0, self.max_item_responses).repeat(self.items))
         if item_theta_relationships is not None:
-            for item, item_cat in enumerate(self.modeled_item_responses):
+            for item, item_cat in enumerate(self.item_categories):
                 free_weights[item, :] = item_theta_relationships[item, :]
 
         self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
 
-        number_of_bias_parameters = sum(self.modeled_item_responses) - self.items
+        number_of_bias_parameters = sum(self.item_categories) - self.items
         self.bias_param = nn.Parameter(torch.zeros(number_of_bias_parameters))
         first_category = torch.zeros(self.items, self.max_item_responses)
         first_category[:, 0] = 1.0
         first_category = first_category.reshape(-1)
         missing_category = torch.zeros(self.items, self.max_item_responses)
-        for item, item_cat in enumerate(self.modeled_item_responses):
+        for item, item_cat in enumerate(self.item_categories):
             missing_category[item, item_cat:self.max_item_responses] = 1.0
         missing_category = missing_category.reshape(-1)
         free_bias = (1 - first_category) * (1 - missing_category)

@@ -1,6 +1,6 @@
 import torch
 from irtorch._internal_utils import one_hot_encode_test_data
-from irtorch.utils import impute_missing
+from irtorch._internal_utils import impute_missing_internal
 
 class PytorchIRTDataset(torch.utils.data.Dataset):
     """
@@ -33,17 +33,15 @@ class PytorchIRTDataset(torch.utils.data.Dataset):
         self.data = data.clone() # clone to avoid modifying the original data
 
         # set missing responses to 0 in the response mask (all non-missing are ones)
-        self.mask = torch.zeros_like(data, dtype=torch.int)
-        self.mask[data == -1] = 1
-        self.mask[data.isnan()] = 1
+        self.mask = (data == -1) | data.isnan()
 
         if imputation_method is not None:
-            data = impute_missing(data = data, method=imputation_method, item_categories=item_categories, **kwargs)
+            data = impute_missing_internal(data = data, method=imputation_method, item_categories=item_categories, **kwargs)
         
         if one_hot_encoded:
             if item_categories is None:
                 raise ValueError("item_categories must be supplied for one-hot encoded data.")
-            self.input_data = one_hot_encode_test_data(data, item_categories, encode_missing=False)
+            self.input_data = one_hot_encode_test_data(data, item_categories)
         else:
             self.input_data = data
 

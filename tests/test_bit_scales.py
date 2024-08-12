@@ -57,9 +57,8 @@ def bit_scales(theta_scores, latent_variables):
     mock_model.mc_correct = None
     mock_model.latent_variables = latent_variables
     mock_model.item_categories = item_categories
-    mock_model.modeled_item_responses = item_categories
+    mock_model.item_categories = item_categories
     mock_model.side_effect = forward_mock
-    mock_model.model_missing = False
     mock_model.log_likelihood = MagicMock(side_effect=log_likelihood_mock)
     mock_model.probabilities_from_output = MagicMock(side_effect=probabilities_from_output_mock)
     mock_model.algorithm = MagicMock(spec=AE)

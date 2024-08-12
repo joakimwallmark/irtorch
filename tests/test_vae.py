@@ -29,7 +29,7 @@ class TestVAE:
         algorithm.encoder = VariationalEncoder(
             input_dim=len(item_categories),
             latent_variables=latent_variables,
-            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+            hidden_dim=[2 * sum(irt_model.item_categories)]
         )
         return algorithm
 
@@ -53,7 +53,7 @@ class TestVAE:
         algorithm.encoder = VariationalEncoder(
             input_dim=len(item_categories_small),
             latent_variables=latent_variables,
-            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+            hidden_dim=[2 * sum(irt_model.item_categories)]
         )
         return algorithm
 
@@ -86,6 +86,6 @@ class TestVAE:
         std = torch.exp(0.5 * logvars)
         theta_samples = means + torch.randn_like(std) * std
         loss = algorithm_small_data._loss_function(
-            irt_model_small, test_data[0:2, 0:2], torch.zeros_like(test_data[0:2, 0:2]), logits, theta_samples, means, logvars
+            irt_model_small, test_data[0:2, 0:2], torch.zeros_like(test_data[0:2, 0:2]).bool(), logits, theta_samples, means, logvars
         )
         assert loss > 0

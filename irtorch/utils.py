@@ -104,6 +104,8 @@ def impute_missing(
         - 'mean': Impute missing values with the item means.
         - 'random incorrect': Impute missing values with a random incorrect response. This method is only valid for multiple choice data.
         - 'prior expected': Impute missing values with the expected scores for the latent space prior distribution mean.
+    model : BaseIRTModel, optional
+        Only for method='random_incorrect' or 'prior expected'. The IRT model to use for imputation. (default is None)
     mc_correct : list[int], optional
         Only for method='random_incorrect'. A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
     item_categories : list[int], optional

@@ -4,7 +4,6 @@ from torch.distributions import Normal
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms.ae import AE
 from irtorch.estimation_algorithms.encoders import VariationalEncoder
-from irtorch._internal_utils import decode_one_hot_test_data
 from irtorch.irt_dataset import PytorchIRTDataset
 
 logger = logging.getLogger("irtorch")
@@ -95,11 +94,11 @@ class VAE(AE):
         self.one_hot_encoded = one_hot_encoded
 
         if one_hot_encoded:
-            input_dim = sum(model.modeled_item_responses)
+            input_dim = sum(model.item_categories)
         else:
-            input_dim = len(model.modeled_item_responses)
+            input_dim = len(model.item_categories)
         if hidden_layers_encoder is None:  # 1 layer with 2x number of categories as neurons is default
-            hidden_layers_encoder = [2 * sum(model.modeled_item_responses)]
+            hidden_layers_encoder = [2 * sum(model.item_categories)]
 
         self.encoder = VariationalEncoder(
             input_dim,
@@ -329,16 +328,41 @@ class VAE(AE):
     def sample_latent_variables(
         self, model: BaseIRTModel, sample_size: int, input_data: torch.Tensor = None
     ):
+        """
+        Sample latent variables from the encoder.
+
+        Parameters
+        ----------
+        model : BaseIRTModel
+            The model.
+        sample_size : int
+            The number of samples to draw.
+        input_data : torch.Tensor, optional
+            The data to sample from. If None, uses the training data. (default is None)
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor of latent variables. Rows are samples and columns are latent variables.
+        """
         if input_data is None:
             input_data = self.train_data
         else:
             input_data = input_data.contiguous().to(next(model.parameters()).device)
 
+        input_data_irt = PytorchIRTDataset(
+            data=input_data,
+            one_hot_encoded=self.one_hot_encoded,
+            item_categories=model.item_categories,
+            imputation_method=self.imputation_method,
+            mc_correct=model.mc_correct
+        )
+
         # Sample test scores until we have sample_size
         indices = torch.randint(low=0, high=input_data.size(0), size=(sample_size,)).to(
             next(model.parameters()).device
         )
-        samples = torch.index_select(input_data, 0, indices)
+        samples = torch.index_select(input_data_irt.input_data, 0, indices)
         # run the sample through the encoder
         mean, logvar = self.encoder(samples)
         return self.reparameterize(mean, logvar)

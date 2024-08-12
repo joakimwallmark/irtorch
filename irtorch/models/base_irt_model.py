@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.distributions import MultivariateNormal
 import torch.nn.functional as F
-from irtorch._internal_utils import linear_regression, fix_missing_values, dynamic_print, one_hot_encode_test_data
+from irtorch._internal_utils import linear_regression, impute_missing_internal, dynamic_print, one_hot_encode_test_data, get_missing_mask
 
 if TYPE_CHECKING:
     from irtorch.estimation_algorithms import BaseIRTAlgorithm
@@ -25,15 +25,12 @@ class BaseIRTModel(ABC, nn.Module):
         A list of the number of response categories for each item.
     mc_correct : list[int], optional
         A list of the correct response category for each multiple choice item. (default is None)
-    model_missing : bool, optional
-        Whether to model missing data. (default is False)
     """
     def __init__(
         self,
         latent_variables: int,
         item_categories: list[int],
         mc_correct: list[int] = None,
-        model_missing: bool = False
     ):
         super().__init__()
         if mc_correct is not None:
@@ -41,11 +38,9 @@ class BaseIRTModel(ABC, nn.Module):
                 raise ValueError("mc_correct cannot be greater than the number of categories for each item.")
         self.latent_variables = latent_variables
         self.item_categories = item_categories
-        self.modeled_item_responses = [x + 1 for x in item_categories] if model_missing else item_categories
-        self.max_item_responses = max(self.modeled_item_responses)
+        self.max_item_responses = max(self.item_categories)
         self.items = len(item_categories)
         self.mc_correct = mc_correct
-        self.model_missing = model_missing
         self.algorithm = None
 
         self._bit_scales = None
@@ -203,14 +198,14 @@ class BaseIRTModel(ABC, nn.Module):
         # Remove missing values from log likelihood calculation
         if missing_mask is not None:
             missing_mask = missing_mask.view(-1)
-            reshaped_output = reshaped_output[missing_mask == 0]
-            data = data[missing_mask == 0]
+            reshaped_output = reshaped_output[~missing_mask]
+            data = data[~missing_mask]
 
         ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
         # For MML, we need the output to include missing values for missing item responses
         if loss_reduction == "none" and missing_mask is not None:
             loss = torch.full((respondents, ), torch.nan, device= ll.device)
-            loss[missing_mask == 0] = ll
+            loss[~missing_mask] = ll
             return loss
 
         return ll
@@ -234,11 +229,9 @@ class BaseIRTModel(ABC, nn.Module):
         item_probabilities = self.item_probabilities(theta)
         if self.mc_correct:
             item_scores = torch.zeros(item_probabilities.shape[1], item_probabilities.shape[2])
-            item_scores.scatter_(1, (torch.tensor(self.mc_correct) + self.model_missing).unsqueeze(1), 1)
+            item_scores.scatter_(1, torch.tensor(self.mc_correct).unsqueeze(1), 1)
         else:
             item_scores = (torch.arange(item_probabilities.shape[2])).repeat(item_probabilities.shape[1], 1)
-            if self.model_missing:
-                item_scores[:, 1:] = item_scores[:, 1:] - 1
         expected_item_scores = (item_probabilities * item_scores).sum(dim=2)
 
         if return_item_scores:
@@ -273,14 +266,14 @@ class BaseIRTModel(ABC, nn.Module):
             theta.requires_grad_(False)
 
         median, _ = torch.median(theta, dim=0)
-        mean_slopes = torch.zeros(theta.shape[0], len(self.modeled_item_responses),theta.shape[1])
+        mean_slopes = torch.zeros(theta.shape[0], len(self.item_categories),theta.shape[1])
         for latent_variable in range(theta.shape[1]):
             theta_scores = median.repeat(theta.shape[0], 1)
             theta_scores[:, latent_variable], _ = theta[:, latent_variable].sort()
             theta_scores.requires_grad_(True)
             expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
             if not self.mc_correct and rescale_by_item_score:
-                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.modeled_item_responses) - 1)
+                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
 
             # item score slopes for each item
             for item in range(expected_item_sum_scores.shape[1]):
@@ -379,7 +372,7 @@ class BaseIRTModel(ABC, nn.Module):
         """
         item_sum_scores = self.expected_scores(theta)
         item_theta_mask = torch.zeros(self.items, self.latent_variables)
-        for item, _ in enumerate(self.modeled_item_responses):
+        for item, _ in enumerate(self.item_categories):
             weights = linear_regression(theta, item_sum_scores[:,item].reshape(-1, 1))[1:].reshape(-1)
             item_theta_mask[item, :] = weights.sign().int()
         
@@ -435,7 +428,6 @@ class BaseIRTModel(ABC, nn.Module):
         self,
         data: torch.Tensor,
         standard_errors: bool = False,
-        theta: torch.Tensor = None,
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.25,
@@ -452,8 +444,6 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with test data. Each row represents one respondent, each column an item.
         standard_errors : bool, optional
             Whether to return standard errors for the latent scores. (default is False)
-        theta : torch.Tensor, optional
-            For bit scores. A 2D tensor containing the pre-estimated theta scores for each respondent in the data. If not provided, will be estimated using theta_estimation. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Also used for bit scores as they require the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
@@ -479,22 +469,28 @@ class BaseIRTModel(ABC, nn.Module):
         if data.dim() == 1:  # if we have only one observations
             data = data.view(1, -1)
 
-        if theta is None:
-            logger.info("%s estimation of theta scores.", theta_estimation)
-            if theta_estimation in ["NN", "ML", "MAP"] and hasattr(self.algorithm, "one_hot_encoded"):
-                if self.algorithm.one_hot_encoded:
-                    one_hot_data = one_hot_encode_test_data(data, self.item_categories, encode_missing=self.model_missing)
-                    if hasattr(self.algorithm, "theta_scores"):
-                        theta = self.algorithm.theta_scores(one_hot_data).clone()
+        if theta_estimation == "EAP":
+            theta = self._eap_theta_scores(data, eap_theta_integration_points)
+        else:
+            if hasattr(self.algorithm, "one_hot_encoded"):
+                if data.isnan().any() and data.eq(-1).any():
+                    if self.algorithm.imputation_method is not None:
+                        encoder_data = impute_missing_internal(
+                            data = data,
+                            method=self.algorithm.imputation_method,
+                        )
+                    elif not self.algorithm.one_hot_encoded:
+                        raise ValueError("The algorithm encoder does not use one-hot encoded data, and autoencoder does not have a pre-specified imputation method. Please impute beforehand.")
+                else:
+                    encoder_data = data
 
-            data = fix_missing_values(data, self.model_missing, imputation_method="zero")
-            
-            if theta_estimation in ["NN", "ML", "MAP"]:
-                if not hasattr(self.algorithm, "one_hot_encoded") or (hasattr(self.algorithm, "one_hot_encoded") and not self.algorithm.one_hot_encoded):
-                    if hasattr(self.algorithm, "theta_scores"):
-                        theta = self.algorithm.theta_scores(data).clone()
-                    else:
-                        theta = torch.zeros(data.shape[0], self.latent_variables).float()
+                if self.algorithm.one_hot_encoded:
+                    one_hot_data = one_hot_encode_test_data(encoder_data, self.item_categories)
+                    theta = self.algorithm.theta_scores(one_hot_data).clone()
+                else:
+                    theta = self.algorithm.theta_scores(encoder_data).clone()
+            else:
+                theta = torch.zeros(data.shape[0], self.latent_variables).float()
 
             if theta_estimation in ["ML", "MAP"]:
                 theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=ml_map_device)
@@ -502,9 +498,12 @@ class BaseIRTModel(ABC, nn.Module):
                 theta = self._eap_theta_scores(data, eap_theta_integration_points)
 
         if standard_errors:
-            fisher_info = self.information(theta, item=False, degrees=None)
-            se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-            return theta, se
+            if theta_estimation == "ML" or theta_estimation == "NN":
+                fisher_info = self.information(theta, item=False, degrees=None)
+                se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
+                return theta, se
+            else:
+                logger.warning("Standard errors are only available for theta scores with ML or NN estimation.")
         
         return theta
     
@@ -572,13 +571,14 @@ class BaseIRTModel(ABC, nn.Module):
             loss_history = []
             tolerance = 1e-8
 
+            missing_mask = get_missing_mask(data)
             def closure():
                 optimizer.zero_grad()
                 logits = self(optimized_theta_scores)
                 if theta_estimation == "MAP": # maximize -log likelihood - log prior
-                    loss = -self.log_likelihood(data, logits, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
+                    loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
                 else: # maximize -log likelihood for ML
-                    loss = -self.log_likelihood(data, logits, loss_reduction = "sum")
+                    loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum")
                 loss.backward()
                 return loss
 
@@ -587,9 +587,9 @@ class BaseIRTModel(ABC, nn.Module):
                 with torch.no_grad():
                     logits = self(optimized_theta_scores)
                     if theta_estimation == "MAP": # maximize -log likelihood - log prior
-                        loss = -self.log_likelihood(data, logits, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
+                        loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
                     else: # maximize -log likelihood for ML
-                        loss = -self.log_likelihood(data, logits, loss_reduction = "sum")
+                        loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum")
                     loss = loss.item()
 
                 denominator = data.numel()
@@ -671,8 +671,9 @@ class BaseIRTModel(ABC, nn.Module):
         replicated_logits = torch.cat([logits] * data.shape[0], dim=0)
         replicated_theta_grid = torch.cat([theta_grid] * data.shape[0], dim=0)
         log_prior = torch.cat([log_prior] * data.shape[0], dim=0)
-        grid_log_likelihoods = self.log_likelihood(replicated_data, replicated_logits, loss_reduction = "none")
-        grid_log_likelihoods = grid_log_likelihoods.view(-1, data.shape[1]).sum(dim=1) # sum likelihood over items
+        missing_mask = get_missing_mask(replicated_data)
+        grid_log_likelihoods = self.log_likelihood(replicated_data, replicated_logits, missing_mask, loss_reduction = "none")
+        grid_log_likelihoods = grid_log_likelihoods.view(-1, data.shape[1]).nansum(dim=1) # sum likelihood over items
 
         # Approximate integration integral(p(x|theta)*p(theta)dtheta)
         # p(x|theta)p(theta) / sum(p(x|theta)p(theta)) needs to sum to 1 for each respondent response pattern.

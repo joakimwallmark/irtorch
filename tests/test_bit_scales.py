@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock, patch
 import torch
 import pytest
-from unittest.mock import patch
 from irtorch.bit_scales import BitScales
 from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
+from irtorch._internal_utils import linear_regression
 
 @pytest.fixture
 def bit_scales(theta_scores, latent_variables):
@@ -52,6 +52,8 @@ def bit_scales(theta_scores, latent_variables):
     def probabilities_from_output_mock(output: torch.Tensor) -> torch.Tensor:
         reshaped_output = output.reshape(-1, 3)
         return torch.functional.F.softmax(reshaped_output, dim=1).reshape(output.shape[0], len(item_categories), 3)
+    def expected_scores_mock(theta: torch.Tensor, return_item_scores = False) -> torch.Tensor:
+        return torch.randn(theta.size(0)).abs().round().unsqueeze(1)
 
     mock_model = MagicMock(spec=BaseIRTModel)
     mock_model.mc_correct = None
@@ -65,6 +67,7 @@ def bit_scales(theta_scores, latent_variables):
     mock_model.algorithm.theta_scores = MagicMock(side_effect=theta_scores_mock)
     mock_model.algorithm.training_theta_scores = theta_scores.clone().detach()
     mock_model.algorithm.train_data = torch.tensor([[1, 2], [0, 0], [1, 2], [1, 1]]).float()
+    mock_model.expected_scores = MagicMock(side_effect=expected_scores_mock)
 
     return BitScales(mock_model)
 
@@ -153,3 +156,26 @@ def test_compute_multi_dimensional_bit_scores(bit_scales: BitScales, latent_vari
     assert bit_scores.size(1) == latent_variables, "bit scores should have size 1 in the second dimension"
     assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
     assert torch.all(bit_scores[theta_adjusted < start_theta_adjusted] == 0), "Smaller than start should be set to start"
+
+@pytest.mark.parametrize("guessing_probabilities", [None, [0.25, 0.5]])
+def test_bit_score_starting_theta(bit_scales: BitScales, guessing_probabilities, latent_variables):
+    items = [0, 1]  
+    train_theta = torch.randn(3, latent_variables)
+
+    mock_latent_scores = MagicMock(return_value=torch.randn(1, latent_variables))
+    with patch.object(bit_scales.model, 'latent_scores', mock_latent_scores):
+        with patch.object(bit_scales.model, 'item_theta_relationship_directions', return_value=torch.ones(len(items), latent_variables)):
+            # with patch('irtorch.bit_scales.linear_regression', return_value=torch.randn(train_theta.size(0), latent_variables+1)):
+            #     with patch('irtorch.bit_scales.random_guessing_data', return_value=torch.randn(10000, len(items))):
+            
+            starting_theta = bit_scales.bit_score_starting_theta(
+                theta_estimation="ML",
+                start_all_incorrect=False,
+                guessing_probabilities=guessing_probabilities,
+                items=items,
+                train_theta=train_theta
+            )
+            
+            assert starting_theta.shape == (1, latent_variables), "Starting theta should have shape (1, latent_variables)"
+            if guessing_probabilities:
+                assert len(guessing_probabilities) == len(items), "Guessing probabilities should match the number of items"

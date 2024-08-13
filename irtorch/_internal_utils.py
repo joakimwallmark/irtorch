@@ -63,36 +63,27 @@ def random_guessing_data(
 
 
     if guessing_probabilities is None:
-        # Use default guessing probabilities
         guessing_probabilities = [1.0 / cats for cats in item_categories]
 
-    # Initialize the response matrix with zeros
     response_matrix = torch.zeros(size, num_items)
 
-    # Process each item
     for item_idx, num_categories in enumerate(item_categories):
         guessing_prob = guessing_probabilities[item_idx]
 
         if num_categories == 2:
-            # Dichotomous item, generate responses based on the guessing probability
             responses = torch.bernoulli(torch.full((size,), guessing_prob))
         else:
             if mc_correct is not None:
-                # Create a tensor to hold probabilities for all choices
                 probs = torch.full((num_categories,), (1 - guessing_prob) / (num_categories - 1))
                 
-                # Assign the guessing probability to the correct option
                 probs[mc_correct[item_idx]] = guessing_prob
 
-                # Now, for the incorrect answers, we distribute the remaining probability
-                # We've taken the guessing_prob for the correct answer, so we distribute what's left
+                # For the incorrect answers, we distribute the remaining probability
                 incorrect_total_prob = 1.0 - guessing_prob
-                probs[probs != guessing_prob] = incorrect_total_prob / (num_categories - 1)  # distribute among others
+                probs[probs != guessing_prob] = incorrect_total_prob / (num_categories - 1)
 
-                # Randomly choose options based on the probabilities
                 responses = torch.multinomial(probs.repeat(size, 1), 1).squeeze()
             else:
-                # Polytomous item which is not mcmc, keep at 0
                 responses = torch.zeros(size, dtype=torch.long)
 
         response_matrix[:, item_idx] = responses

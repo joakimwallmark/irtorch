@@ -4,7 +4,8 @@ import torch
 from torch.distributions import MultivariateNormal
 from irtorch.models import BaseIRTModel
 from irtorch.utils import gauss_hermite
-from irtorch._internal_utils import dynamic_print, PytorchIRTDataset
+from irtorch._internal_utils import dynamic_print
+from irtorch.irt_dataset import PytorchIRTDataset
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
 logger = logging.getLogger("irtorch")
@@ -40,7 +41,6 @@ class MML(BaseIRTAlgorithm):
         self,
     ):
         super().__init__()
-        self.imputation_method = "zero"
         self.covariance_matrix = None
         self.optimizer = None
         self.training_history = {
@@ -59,7 +59,6 @@ class MML(BaseIRTAlgorithm):
         learning_rate_update_patience: int = 4,
         learning_rate_updates_before_stopping: int = 1,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        imputation_method: str = "zero",
     ):
         """
         Train the model.
@@ -87,12 +86,8 @@ class MML(BaseIRTAlgorithm):
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         device : str, optional
             The device to run the model on. (default is "cuda" if available else "cpu".)
-        imputation_method : str, optional
-            The method to use for imputing missing data. (default is "zero")
         """
         super().fit(model = model, train_data = train_data)
-
-        self.imputation_method = imputation_method
 
         self.training_history = {
             "train_loss": [],
@@ -179,19 +174,18 @@ class MML(BaseIRTAlgorithm):
             The number of times the learning rate can be reduced before stopping training.
         """
         lr_update_count = 0
-        irt_dataset = PytorchIRTDataset(data=train_data)
-        train_data = self._impute_missing(model, irt_dataset.data, irt_dataset.mask)
 
         latent_combos_rep = points.repeat_interleave(train_data.size(0), dim=0)
         train_data_rep = train_data.repeat(points.size(0), 1)
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
+        irt_dataset_rep = PytorchIRTDataset(data=train_data_rep)
 
         best_loss = float("inf")
         prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
             train_loss = self._train_step(
                 model,
-                train_data_rep,
+                irt_dataset_rep,
                 latent_combos_rep,
                 log_weights_rep,
                 points.size(0)
@@ -229,7 +223,7 @@ class MML(BaseIRTAlgorithm):
     def _train_step(
         self,
         model: BaseIRTModel,
-        train_data: torch.Tensor,
+        train_data: PytorchIRTDataset,
         latent_grid: torch.Tensor,
         log_weights: torch.Tensor,
         number_of_weights: int,
@@ -239,7 +233,9 @@ class MML(BaseIRTAlgorithm):
 
         Parameters
         ----------
-        train_data : torch.Tensor
+        model : BaseIRTModel
+            The model to train.
+        train_data : PytorchIRTDataset
             The training data.
         latent_grid : torch.Tensor
             The grid of latent variables.
@@ -257,8 +253,8 @@ class MML(BaseIRTAlgorithm):
 
         self.optimizer.zero_grad()
         logits = model(latent_grid)
-        ll = model.log_likelihood(train_data, logits, loss_reduction="none")
-        ll = ll.view(-1, model.items).sum(dim=1) # sum over items
+        ll = model.log_likelihood(train_data.data, logits, missing_mask=train_data.mask, loss_reduction="none")
+        ll = ll.view(-1, model.items).nansum(dim=1) # sum over items
         
         log_sums = (log_weights + ll).view(number_of_weights, -1)
         constant = log_sums.max(dim=0)[0] # for logexpsum trick (one constant per respondent)
@@ -303,34 +299,3 @@ class MML(BaseIRTAlgorithm):
         )
         weights = normal_dist.log_prob(latent_combos)
         return latent_combos, weights
-
-    def _impute_missing(self, model: BaseIRTModel, data, missing_mask):
-        if torch.sum(missing_mask) > 0:
-            if self.imputation_method == "zero":
-                imputed_data = data
-                imputed_data = imputed_data.masked_fill(missing_mask.bool(), 0)
-            elif self.imputation_method == "prior":
-                imputed_data = self._impute_missing_with_prior(model, data, missing_mask)
-            elif self.imputation_method == "mean":
-                raise NotImplementedError("Mean imputation not implemented")
-            else:
-                raise ValueError(
-                    f"Imputation method {self.imputation_method} not implmented"
-                )
-            return imputed_data
-
-        return data
-
-    @torch.inference_mode()
-    def _impute_missing_with_prior(self, model: BaseIRTModel, batch, missing_mask):
-        raise NotImplementedError("Imputation method 'prior' not implemented for mml.")
-        # prior_logits = model(
-        #     torch.zeros(1, model.latent_variables).to(next(model.parameters()).device)
-        # )
-        # prior_mean_scores = self._mean_scores(prior_logits)
-        # batch[missing_mask.bool()] = prior_mean_scores.repeat(batch.shape[0], 1).to(
-        #     next(self.parameters()).device
-        # )[missing_mask.bool()]
-
-        # return batch
-

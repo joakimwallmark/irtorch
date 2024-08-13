@@ -37,14 +37,9 @@ class ModelMix(BaseIRTModel):
         if not all([latent_variables[0] == latent_variables[i] for i in range(1, len(latent_variables))]):
             raise ValueError("All models must have the same number of latent variables.")
 
-        model_missing = [model.model_missing for model in models]
-        if not all([model_missing[0] == model_missing[i] for i in range(1, len(model_missing))]):
-            raise ValueError("All models must have the same way of handling missing values.")
-
         super().__init__(
             latent_variables=latent_variables[0],
-            item_categories = item_categories,
-            model_missing=model_missing[0]
+            item_categories = item_categories
         )
         # register each model as a submodule
         self.models = nn.ModuleList(models)
@@ -133,6 +128,7 @@ class ModelMix(BaseIRTModel):
         self,
         data: torch.Tensor,
         output: torch.Tensor,
+        missing_mask: torch.Tensor = None,
         loss_reduction: str = "sum",
     ) -> torch.Tensor:
         """
@@ -144,6 +140,8 @@ class ModelMix(BaseIRTModel):
             A 2D tensor with test data. Columns are items and rows are respondents
         output: torch.Tensor
             A 2D tensor with output. Columns are item response categories and rows are respondents
+        missing_mask: torch.Tensor, optional
+            A 2D tensor with missing data mask. (default is None)
         loss_reduction: str, optional 
             The reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
         
@@ -163,7 +161,19 @@ class ModelMix(BaseIRTModel):
             [model.items for model in self.models],
             dim=1
         )
-        log_likelihoods = [model.log_likelihood(data_split, output, loss_reduction) for model, data_split, output in zip(self.models, data_splits, outputs)]
+        if missing_mask is None:
+            mask_splits = [None] * len(self.models)
+        else:
+            mask_splits = torch.split(
+                missing_mask,
+                [model.items for model in self.models],
+                dim=1
+            )
+            mask_splits = [mask.contiguous() for mask in mask_splits]
+        log_likelihoods = [
+            model.log_likelihood(data_split, output, mask_split, loss_reduction)
+            for model, data_split, mask_split, output in zip(self.models, data_splits, mask_splits, outputs)
+        ]
 
         if loss_reduction == "mean":
             raise NotImplementedError("loss_reduction='mean' is not implemented for ModelMix.")

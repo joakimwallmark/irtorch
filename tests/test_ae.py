@@ -30,7 +30,7 @@ class TestAE:
         algorithm.encoder = StandardEncoder(
             input_dim=len(item_categories),
             latent_variables=latent_variables,
-            hidden_dim=[2 * sum(irt_model.modeled_item_responses)]
+            hidden_dim=[2 * sum(irt_model.item_categories)]
         )
 
         return algorithm
@@ -57,38 +57,6 @@ class TestAE:
         assert isinstance(log_likelihood, float)
         assert log_likelihood > 0
 
-    def test__impute_missing_theta_zero(self, algorithm: AE, irt_model: BaseIRTModel):
-        a, b = 5, 5
-        data = torch.full((a, b), 5)
-        no_missing_mask = torch.full((a, b), 0)
-        missing_mask = torch.tensor(
-            [
-                [0, 0, 1, 0, 0],
-                [0, 1, 0, 0, 0],
-                [0, 0, 0, 0, 1],
-                [0, 0, 0, 0, 0],
-                [1, 1, 0, 0, 0],
-            ]
-        )
-
-        algorithm.imputation_method = "zero"
-        imputed_data = algorithm._impute_missing(data, missing_mask)
-        assert torch.equal(
-            imputed_data,
-            torch.tensor(
-                [
-                    [5, 5, 0, 5, 5],
-                    [5, 0, 5, 5, 5],
-                    [5, 5, 5, 5, 0],
-                    [5, 5, 5, 5, 5],
-                    [0, 0, 5, 5, 5],
-                ]
-            ),
-        )
-        imputed_data = algorithm._impute_missing(data, no_missing_mask)
-        assert torch.equal(imputed_data, data)
-
-    # The following is a test for the fit function of the AEIRTNeuralNet class
     def test_fit(self, algorithm: AE, irt_model: BaseIRTModel, test_data):
         # Mock the inner functions that would be called during training
         with patch.object(

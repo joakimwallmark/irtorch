@@ -15,7 +15,7 @@
 #         one_hot_encoded=True
 #         with open("tests/datasets/mc_correct.txt", "r") as file:
 #             correct_cat = file.read().replace("\n", "")
-#         correct_cat = [int(num) for num in correct_cat]
+#         correct_cat = [int(num) - 1 for num in correct_cat]
 #         n_cats = [4, 4, 5, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 5, 4, 5, 4, 5]
 #     else:
 #         n_cats = get_item_categories(data)
@@ -124,7 +124,7 @@
 
 # @pytest.mark.integration
 # def test_bit_score_starting_theta(model: IRT):
-#     guessing_probabilities = [0.5] * len(model.scorer.algorithm.model.modeled_item_responses)
+#     guessing_probabilities = [0.5] * len(model.scorer.algorithm.model.item_categories)
 
 #     # Test with no guessing (or default guessing for multiple choice)
 #     starting_theta = model.scorer.bit_score_starting_theta(guessing_iterations=200)
@@ -135,7 +135,7 @@
 #     assert starting_theta.shape == (1, model.model.latent_variables)
 
 #     # Test with guessing and MC correct
-#     model.scorer.algorithm.model.mc_correct = [1] * len(model.scorer.algorithm.model.modeled_item_responses)
+#     model.scorer.algorithm.model.mc_correct = [1] * len(model.scorer.algorithm.model.item_categories)
 #     starting_theta = model.scorer.bit_score_starting_theta(guessing_probabilities=guessing_probabilities, guessing_iterations=200)
 #     assert starting_theta.shape == (1, model.model.latent_variables)
 #     model.scorer.algorithm.model.mc_correct = None

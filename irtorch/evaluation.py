@@ -9,9 +9,8 @@ from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import (
     conditional_score_distribution,
     sum_incorrect_probabilities,
-    fix_missing_values
+    get_missing_mask,
 )
-from irtorch.utils import impute_missing
 
 if TYPE_CHECKING:
     from irtorch.models.base_irt_model import BaseIRTModel
@@ -60,19 +59,12 @@ class Evaluation:
         else:
             data = data.contiguous()
 
-        if not self.model.model_missing:
-            data = impute_missing(data, self.model.mc_correct, self.model.item_categories)
-
         if theta is None:
             theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
 
-        if self.model.model_missing:
-            data[data.isnan()] = -1
-            data = data + 1
+        missing_mask = get_missing_mask(data)
 
-        data = fix_missing_values(data)
-        
-        return data, theta
+        return data, theta, missing_mask
 
 
     @torch.inference_mode()
@@ -173,26 +165,29 @@ class Evaluation:
         torch.Tensor
             The residuals.
         """
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        # 3D tensor with dimensions (respondents, items, item categories)
+        missing_mask = get_missing_mask(data)
+        data[torch.isnan(data)] = -1
         if self.model.mc_correct is not None:
+            # 3D tensor with dimensions (respondents, items, item categories)
             probabilities = self.model.item_probabilities(theta)
             # Creating a range tensor for slice indices
-            respndents = torch.arange(probabilities.size(0)).view(-1, 1)
+            respondents = torch.arange(probabilities.size(0)).view(-1, 1)
             # Expand slices to match the shape of indices
-            expanded_respondents = respndents.expand_as(data)
+            expanded_respondents = respondents.expand_as(data)
             model_probs = probabilities[expanded_respondents, torch.arange(probabilities.size(1)), data.int()]
             residuals = 1 - model_probs
         else:
             residuals = data - self.model.expected_scores(theta, return_item_scores=True)
 
+        residuals[missing_mask] = float("nan")
         if average_over == "items":
-            return residuals.mean(dim=1)
+            return residuals.nanmean(dim=1)
         if average_over == "respondents":
-            return residuals.mean(dim=0)
+            return residuals.nanmean(dim=0)
         if average_over == "everything":
-            return residuals.mean(dim=None)
+            return residuals.nanmean(dim=None)
 
         return residuals
 
@@ -267,7 +262,6 @@ class Evaluation:
         
         for item, categories in enumerate(self.model.item_categories):
             # set non-existing categories to nan
-            categories = categories + 1 if self.model.model_missing else categories
             raw_residuals[:, item, categories:] = float("nan")
 
         return raw_residuals, group_mid_points
@@ -299,10 +293,11 @@ class Evaluation:
         torch.Tensor
             The accuracy.
         """
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         probabilities = self.model.item_probabilities(theta)
         accuracy = (torch.argmax(probabilities, dim=2) == data).float()
+        accuracy[missing_mask] = float("nan")
 
         if level == "item":
             dim = 0
@@ -311,7 +306,7 @@ class Evaluation:
         else:
             dim = None
         
-        return accuracy.mean(dim=dim)
+        return accuracy.nanmean(dim=dim)
 
     @torch.inference_mode()
     def infit_outfit(
@@ -366,34 +361,36 @@ class Evaluation:
         if level not in ["item", "respondent"]:
             raise ValueError("Invalid level. Choose either 'item' or 'respondent'.")
 
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         expected_scores = self.model.expected_scores(theta, return_item_scores=True)
         probabilities = self.model.item_probabilities(theta)
         observed_scores = data
         if self.model.mc_correct is not None:
             score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
-            score_indices.scatter_(1, (torch.tensor(self.model.mc_correct) - 1 + self.model.model_missing).unsqueeze(1), 1)
+            score_indices.scatter_(1, torch.tensor(self.model.mc_correct).unsqueeze(1), 1)
             score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
             correct_probabilities = (probabilities*score_indices.int()).sum(dim=2)
             variance = correct_probabilities * (1-correct_probabilities)
             possible_scores = torch.zeros_like(probabilities)
             possible_scores[:, :, 1] = 1
-            observed_scores = (data == torch.tensor(self.model.mc_correct) - 1).int()
+            observed_scores = (data == torch.tensor(self.model.mc_correct)).int()
         else:
             possible_scores = torch.arange(0, probabilities.shape[2]).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
             variance = ((possible_scores-expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
 
         mse = (observed_scores - expected_scores) ** 2
+        mse[missing_mask] = torch.nan
+        variance[missing_mask] = torch.nan
         wmse = mse / variance
         wmse[mse == 0] = 0 # if error is 0, set to 0 in case of 0 variance to avoid nans
 
         if level == "item":
-            infit = mse.sum(dim=0) / variance.sum(dim=0)
-            outfit = wmse.mean(dim=0)
+            infit = mse.nansum(dim=0) / variance.nansum(dim=0)
+            outfit = wmse.nanmean(dim=0)
         elif level == "respondent":
-            infit = mse.sum(dim=1) / variance.sum(dim=1)
-            outfit = wmse.mean(dim=1)
+            infit = mse.nansum(dim=1) / variance.nansum(dim=1)
+            outfit = wmse.nanmean(dim=1)
         
         return infit, outfit
 
@@ -429,7 +426,7 @@ class Evaluation:
         torch.Tensor
             The log-likelihood for the provided data.
         """
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         if reduction != "none":
             if level == "item":
@@ -442,13 +439,14 @@ class Evaluation:
         likelihoods = self.model.log_likelihood(
             data,
             self.model(theta),
+            missing_mask,
             loss_reduction="none"
         )
         
         if reduction in "mean":
-            return likelihoods.view(theta.shape[0], -1).mean(dim=dim)
+            return likelihoods.view(theta.shape[0], -1).nanmean(dim=dim)
         if reduction == "sum":
-            return likelihoods.view(theta.shape[0], -1).sum(dim=dim)
+            return likelihoods.view(theta.shape[0], -1).nansum(dim=dim)
         
         return likelihoods
 
@@ -485,7 +483,7 @@ class Evaluation:
         torch.Tensor
             The average log-likelihood for each group.
         """
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         indicies = torch.sort(theta[:, latent_variable - 1], dim=0)[1]
         theta = theta[indicies]
@@ -493,6 +491,7 @@ class Evaluation:
         likelihoods = self.model.log_likelihood(
             data,
             self.model(theta),
+            missing_mask,
             loss_reduction="none"
         )
         respondent_likelihoods = likelihoods.view(theta.shape[0], -1).sum(dim=1)
@@ -558,7 +557,7 @@ class Evaluation:
         if scale not in ["bit", "theta"]:
             raise ValueError("Invalid scale. Choose either 'theta' or 'bit'.")
 
-        data, theta = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
         if scale == "bit":
             if population_theta is None and data is self.model.algorithm.train_data:
@@ -642,17 +641,12 @@ class Evaluation:
         if self.model.mc_correct is not None:
             probabilities = sum_incorrect_probabilities(
                 probabilities=probabilities,
-                modeled_item_responses=self.model.modeled_item_responses,
-                mc_correct=self.model.mc_correct,
-                missing_modeled=self.model.model_missing
+                item_responses=self.model.item_categories,
+                mc_correct=self.model.mc_correct
             )
-            item_categories = [2] * len(self.model.modeled_item_responses)
+            item_categories = [2] * len(self.model.item_categories)
         else:
             item_categories = self.model.item_categories
-            # Add together probabilities for missing response and a score of 0
-            if self.model.model_missing:
-                summed_slices = probabilities[:, :, 0] + probabilities[:, :, 1]
-                probabilities = torch.cat((summed_slices.unsqueeze(-1), probabilities[:, :, 2:]), dim=2)
         
         conditional_total_score_probs = conditional_score_distribution(
             probabilities, item_categories
@@ -710,7 +704,7 @@ class Evaluation:
         torch.Tensor
             A 3D torch tensor with group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
         """
-        group_probabilities = torch.zeros(len(grouped_theta), len(self.model.modeled_item_responses), max(self.model.modeled_item_responses))
+        group_probabilities = torch.zeros(len(grouped_theta), len(self.model.item_categories), max(self.model.item_categories))
         for group_i, group in enumerate(grouped_theta):
             item_probabilities = self.model.item_probabilities(group)
             group_probabilities[group_i, :, :] = item_probabilities.mean(dim=0)
@@ -731,11 +725,12 @@ class Evaluation:
         torch.Tensor
             A 3D torch tensor with group averages. The first dimension represents the groups, the second dimension represents the items and the third dimension represents the item categories.
         """
-        modeled_item_responses = self.model.modeled_item_responses
-        group_probabilities = torch.zeros(len(grouped_data), len(modeled_item_responses), max(modeled_item_responses))
+        item_responses = self.model.item_categories
+        group_probabilities = torch.zeros(len(grouped_data), len(item_responses), max(item_responses))
         for group_i, group in enumerate(grouped_data):
-            for item_i, _ in enumerate(modeled_item_responses):
-                counts = torch.bincount(group[:, item_i].int(), minlength=max(modeled_item_responses))
+            missing_mask = get_missing_mask(group)
+            for item_i, _ in enumerate(item_responses):
+                counts = torch.bincount(group[:, item_i][~missing_mask[:, item_i]].int(), minlength=max(item_responses))
                 group_probabilities[group_i, item_i, :] = counts.float() / counts.sum()
 
         return group_probabilities

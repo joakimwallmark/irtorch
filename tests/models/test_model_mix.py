@@ -60,3 +60,19 @@ def test_log_likelihood(model_mix: ModelMix):
     assert torch.equal(result[0], result[2]) and torch.equal(result[0], result[4]), "all first item likelihoods should be equal"
     assert torch.equal(result[1], result[3]), "same responses should be equal"
     assert torch.isclose(result[11], torch.tensor(-0.743420)), "incorrect item likelihood"
+
+    data = torch.tensor([[0, 1, 0], [0, torch.nan, 1], [1, 0, torch.nan], [1, 1, 2]]).float()
+    missing_mask = torch.isnan(data)
+    output = torch.tensor([
+        [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5],
+        [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5],
+        [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5],
+        [0, 0, -0.4, 0.2, -0.2, 0.0, 0.5]
+    ])
+    result = model_mix.log_likelihood(data, output, missing_mask, loss_reduction="none")
+    assert result.shape == (12, ), "Incorrect shape for log_likelihood"
+    assert torch.isclose(result.nansum(), torch.tensor(-8.115312576)), "Incorrect log_likelihood sum"
+    assert torch.equal(result[0], result[2]) and torch.equal(result[0], result[4]), "all first item likelihoods should be equal"
+    assert torch.isnan(result[3]), "missing response should be nan"
+    assert torch.isnan(result[10]), "missing response should be nan"
+    assert torch.isclose(result[11], torch.tensor(-0.743420)), "incorrect item likelihood"

@@ -9,13 +9,6 @@ if TYPE_CHECKING:
 class BaseIRTAlgorithm(ABC):
     """
     Abstract base class for IRT algorithms. All IRT algorithms should inherit from this class.
-
-    Parameters
-    ----------
-    model : BaseIRTModel, optional
-        The model to train. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
-    one_hot_encoded : bool, optional
-        Whether the algorithm uses one-hot encoded data. (default is True)
     """
     def __init__(self):
         super().__init__()
@@ -35,8 +28,6 @@ class BaseIRTAlgorithm(ABC):
         **kwargs
             Additional keyword arguments for the algorithm fit method.
         """
-        if (train_data.isnan().any() or (train_data == -1).any()) and model.mc_correct and not model.model_missing:
-            raise ValueError("Missing responses are not supported with multiple choice models when missing responses are not modeled. Please impute missing responses or remove the observations.")
         # Store all training data within the algorithm instance
         if self.train_data is not None:
             self.train_data = torch.cat((self.train_data, train_data), dim=0).contiguous()

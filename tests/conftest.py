@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from irtorch.models import MonotoneNN
 from irtorch.estimation_algorithms import AE, VAE, BaseIRTAlgorithm
-from irtorch._internal_utils import PytorchIRTDataset
+from irtorch.irt_dataset import PytorchIRTDataset
 from irtorch.utils import get_item_categories
 
 @pytest.fixture(
@@ -44,7 +44,7 @@ def model(device, latent_variables, data, data_type, fitting_algorithm: BaseIRTA
         one_hot_encoded=True
         with open("tests/datasets/mc_correct.txt", "r") as file:
             correct_cat = file.read().replace("\n", "")
-        correct_cat = [int(num) for num in correct_cat]
+        correct_cat = [int(num) - 1 for num in correct_cat]
         n_cats = [4, 4, 5, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 5, 4, 5, 4, 5]
     else:
         n_cats = get_item_categories(data)

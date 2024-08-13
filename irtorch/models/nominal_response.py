@@ -17,8 +17,6 @@ class NominalResponse(BaseIRTModel):
         Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
-    model_missing : bool, optional
-        Whether to model missing item responses as separate item response categories. (Default: False)
     mc_correct : list[int], optional
         The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
     reference_category : bool, optional
@@ -49,7 +47,6 @@ class NominalResponse(BaseIRTModel):
         data: torch.Tensor = None,
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
-        model_missing: bool = False,
         mc_correct: list[int] = None,
         reference_category: bool = False
     ):
@@ -60,7 +57,7 @@ class NominalResponse(BaseIRTModel):
                 # replace nan with -inf to get max
                 item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
-        super().__init__(latent_variables=latent_variables, item_categories=item_categories, model_missing=model_missing, mc_correct=mc_correct)
+        super().__init__(latent_variables=latent_variables, item_categories=item_categories, mc_correct=mc_correct)
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
@@ -72,7 +69,7 @@ class NominalResponse(BaseIRTModel):
         self.output_size = self.items * self.max_item_responses
 
         free_weights = torch.zeros(self.items, self.max_item_responses, latent_variables)
-        for item, item_cat in enumerate(self.modeled_item_responses):
+        for item, item_cat in enumerate(self.item_categories):
             start_1 = 1 if reference_category else 0
             if item_theta_relationships is not None:
                 free_weights[item, start_1:item_cat, :] = item_theta_relationships[item, :]
@@ -82,14 +79,14 @@ class NominalResponse(BaseIRTModel):
         free_weights = free_weights.reshape(-1, latent_variables)
         self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
 
-        number_of_bias_parameters = sum(self.modeled_item_responses) if not reference_category else sum(self.modeled_item_responses) - self.items
+        number_of_bias_parameters = sum(self.item_categories) if not reference_category else sum(self.item_categories) - self.items
         self.bias_param = nn.Parameter(torch.zeros(number_of_bias_parameters))
         first_category = torch.zeros(self.items, self.max_item_responses)
         if reference_category:
             first_category[:, 0] = 1.0
         first_category = first_category.reshape(-1)
         missing_category = torch.zeros(self.items, self.max_item_responses)
-        for item, item_cat in enumerate(self.modeled_item_responses):
+        for item, item_cat in enumerate(self.item_categories):
             missing_category[item, item_cat:self.max_item_responses] = 1.0
         missing_category = missing_category.reshape(-1)
         free_bias = (1 - first_category) * (1 - missing_category)

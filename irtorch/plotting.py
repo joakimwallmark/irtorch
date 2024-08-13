@@ -377,7 +377,7 @@ class Plotting:
         Parameters
         ----------
         item : int
-            The item to plot.
+            The item to plot (starts from 1).
         scale : str, optional
             The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
         latent_variables : tuple, optional
@@ -469,12 +469,12 @@ class Plotting:
             scores_to_plot = theta_grid
 
         if plot_derivative and len(latent_variables) == 1:
-            prob_matrix = self.model.probability_gradients(theta_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1], latent_variables[0] - 1]
+            prob_matrix = self.model.probability_gradients(theta_grid)[:, item - 1, :self.model.item_categories[item - 1], latent_variables[0] - 1]
             if scale == "bit":
                 bit_theta_gradients = self.model.bit_scales.bit_score_gradients(theta_grid, independent_theta=latent_variables[0], start_theta=start_theta, **kwargs)
                 prob_matrix = prob_matrix / bit_theta_gradients[:, latent_variables[0] - 1].view(-1, 1)
         else:
-            prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.modeled_item_responses[item - 1]]
+            prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.item_categories[item - 1]]
 
         if len(latent_variables) == 1:
             if plot_group_fit:
@@ -491,8 +491,8 @@ class Plotting:
                     **kwargs
                 )
 
-                group_probs_data = group_probs_data[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
-                group_probs_model = group_probs_model[:, item - 1, 0:self.model.modeled_item_responses[item - 1]]
+                group_probs_data = group_probs_data[:, item - 1, 0:self.model.item_categories[item - 1]]
+                group_probs_model = group_probs_model[:, item - 1, 0:self.model.item_categories[item - 1]]
                 
             else:
                 group_probs_data = group_probs_model = latent_group_means = None
@@ -946,13 +946,7 @@ class Plotting:
 
         # Plot each response category
         for i in range(prob_matrix.shape[1]):
-            if self.model.model_missing:
-                if i == 0:
-                    response_text = "Missing"
-                else:
-                    response_text = f"Option {i}" if self.model.mc_correct is not None else f"{i}"
-            else:
-                response_text = f"Option {i+1}" if self.model.mc_correct is not None else f"{i}"
+            response_text = f"Option {i+1}" if self.model.mc_correct is not None else f"{i}"
 
             color = colors[i % len(colors)]  # Ensure color wraps around if more categories than colors
             fig.add_trace(go.Scatter(

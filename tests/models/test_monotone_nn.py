@@ -8,19 +8,7 @@ def test_mc_correct_output_idx():
         hidden_dim=[6],
         item_categories=[3, 4],
         use_bounded_activation=True,
-        mc_correct=[2, 1],
-        model_missing=True
-    )
-
-    assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, False,  True, False, False, False,  True, False, False, False]))
-
-    model = MonotoneNN(
-        latent_variables = 2,
-        hidden_dim=[6],
-        item_categories=[3, 4],
-        use_bounded_activation=True,
-        mc_correct=[2, 1],
-        model_missing=False
+        mc_correct=[1, 0]
     )
 
     assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, True,  False, False,  True, False, False, False]))
@@ -115,7 +103,7 @@ def test_forward_mc(separate):
         latent_variables = 2,
         item_categories=[2, 3, 3],
         hidden_dim=hidden_dim,
-        mc_correct=[2, 1, 3],
+        mc_correct=[1, 0, 2],
         separate=separate,
         item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool),
         use_bounded_activation=True

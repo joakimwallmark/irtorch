@@ -1,6 +1,8 @@
 import pytest
+from unittest.mock import patch, MagicMock
 import torch
 from irtorch.estimation_algorithms.vae import VAE, VariationalEncoder
+from irtorch.irt_dataset import PytorchIRTDataset
 from irtorch.models import MonotoneNN, BaseIRTModel
 
 
@@ -89,3 +91,44 @@ class TestVAE:
             irt_model_small, test_data[0:2, 0:2], torch.zeros_like(test_data[0:2, 0:2]).bool(), logits, theta_samples, means, logvars
         )
         assert loss > 0
+
+    def test_fit(self, algorithm: VAE, irt_model: BaseIRTModel, test_data):
+        # Mock the inner functions that would be called during training
+        with patch.object(
+            algorithm, "_train_step", return_value=torch.tensor(0.5)
+        ) as mocked_train_step, patch.object(
+            algorithm, "_validation_step", return_value=torch.tensor(0.5)
+        ) as mocked_validation_step:
+            # Call fit function
+            algorithm.fit(
+                model=irt_model,
+                train_data=test_data[0:100],
+                validation_data=test_data[100:120],
+                max_epochs=5
+            )
+
+            # Check if inner functions are called
+            assert mocked_train_step.call_count == 5
+            assert mocked_validation_step.call_count == 5
+
+    def test_latent_credible_interval(self, algorithm: VAE):
+            input_data = torch.randn(10, algorithm.encoder.input_dim)
+
+            def encoder_mock(input_data: torch.Tensor) -> torch.Tensor:
+                means = (torch.arange(input_data.size(0)) - (input_data.size(0)/2)) / input_data.size(0)
+                means = means.view(-1, 1).repeat(input_data.size(0), 2).float()
+                variances = (torch.arange(input_data.size(0)) + 1) / input_data.size(0)
+                variances = variances.view(-1, 1).repeat(input_data.size(0), 2).float()
+                return means, variances.log()
+
+            algorithm.encoder = MagicMock(side_effect=encoder_mock)
+
+            lower, mean, upper = algorithm.latent_credible_interval(input_data, alpha=0.05)
+
+            expected_mean = (torch.arange(input_data.size(0)) - (input_data.size(0)/2)) / input_data.size(0)
+            expected_mean = expected_mean.view(-1, 1).repeat(input_data.size(0), 2).float()
+            assert torch.all(mean == expected_mean)
+
+            assert lower.shape == mean.shape == upper.shape == (100, 2)
+            assert torch.all(lower <= mean)  # Lower bound should be less than or equal to the mean
+            assert torch.all(mean <= upper)  # Mean should be less than or equal to the upper bound

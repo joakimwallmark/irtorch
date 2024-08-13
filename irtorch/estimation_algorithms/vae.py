@@ -187,7 +187,7 @@ class VAE(AE):
         Returns
         -------
         tuple
-            The logits and loss after training on the batch.
+            The loss after training on the batch.
         """
         mean, logvar = self.encoder(input_batch)
 

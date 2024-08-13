@@ -249,7 +249,7 @@ class Plotting:
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
         mean_output = self.model(theta_grid)
-        entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
+        item_entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
         if scale == "bit":
             scores_to_plot = self.model.bit_scales.bit_scores_from_theta(

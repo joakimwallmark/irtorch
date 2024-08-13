@@ -41,12 +41,12 @@ class TestAE:
 
     def test__train_step(self, algorithm: AE, irt_model: BaseIRTModel):
         algorithm.optimizer = torch.optim.Adam(
-            list(algorithm.encoder.parameters()) + list(irt_model.parameters()), lr=0.01, amsgrad=True
+            list(algorithm.encoder.parameters()) + list(irt_model.parameters()), lr=0.1, amsgrad=True
         )
         previous_loss = float("inf")
         for _ in range(2):
             loss = algorithm._train_step(irt_model)
-            assert loss <= previous_loss  # Loss should decrease
+            assert loss <= previous_loss, "Loss should decrease"
             previous_loss = loss
 
     def test__validation_step(self, algorithm: AE, irt_model: BaseIRTModel):

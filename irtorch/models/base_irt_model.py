@@ -733,9 +733,6 @@ class BaseIRTModel(ABC, nn.Module):
         to_save = {
             "model_state_dict": self.state_dict(),
             "algorithm": self.algorithm,
-            # "train_data": self.algorithm.train_data,
-            # "training_theta_scores": self.algorithm.training_theta_scores,
-            # "training_history": self.algorithm.training_history,
         }
         torch.save(to_save, path)
 
@@ -752,9 +749,3 @@ class BaseIRTModel(ABC, nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         if "algorithm" in checkpoint:
             self.algorithm = checkpoint["algorithm"]
-        # if "train_data" in checkpoint:
-        #     self.algorithm.train_data = checkpoint["train_data"]
-        # if "training_theta_scores" in checkpoint:
-        #     self.algorithm.training_theta_scores = checkpoint["training_theta_scores"]
-        # if "training_history" in checkpoint:
-        #     self.algorithm.training_history = checkpoint["training_history"]

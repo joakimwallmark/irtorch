@@ -546,9 +546,9 @@ class BaseIRTModel(ABC, nn.Module):
                     mean_centered_theta_scores = train_theta_scores - train_theta_scores.mean(dim=0)
                     cov_matrix = mean_centered_theta_scores.T @ mean_centered_theta_scores / (train_theta_scores.shape[0] - 1)
                     # Create prior (multivariate normal distribution).
-                    prior_density = MultivariateNormal(torch.zeros(train_theta_scores.shape[1]), cov_matrix)
+                    prior_density = MultivariateNormal(torch.zeros(train_theta_scores.shape[1]).to(device), cov_matrix.to(device))
                 elif hasattr(self.algorithm, "covariance_matrix"):
-                    prior_density = MultivariateNormal(torch.zeros(self.latent_variables), self.algorithm.covariance_matrix)
+                    prior_density = MultivariateNormal(torch.zeros(self.latent_variables).to(device), self.algorithm.covariance_matrix.to(device))
 
             # Ensure model parameters gradients are not updated
             self.requires_grad_(False)

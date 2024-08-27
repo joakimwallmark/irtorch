@@ -49,18 +49,25 @@ To install the latest version directly from GitHub, use:
 
 **Recommended Tools**
 
-You can run Python code and **IRTorch** directly from the terminal with python installed. There are also several ways to run **IRTorch** within Jupyter Notebooks on your own computer using the `Jupyter project <https://jupyter.org/>`__. To install the **jupyterlab** package, run:
+You can run Python code and **IRTorch** directly from the terminal with python installed. There are also several ways to run **IRTorch** within Jupyter Notebooks on your own computer. One of the simplest ways is to use `JupyterLab <https://jupyter.org/>`__, which is a web-based interactive development environment where you can work with Jupyter notebooks, code, and data.
+
+1. Install the **jupyterlab** package:
 
 .. code-block:: bash
 
     pip install jupyterlab
 
-Then start a Jupyter notebook server by running:
+2. Start a JupyterLab session:
 
 .. code-block:: bash
 
     jupyter lab
 
-Now simply select a notebook kernel and start using the package.
+3. Create a new notebook and import the **IRTorch** package to start using it:
 
-Of course, you can also run notebooks or python code through `Anaconda <https://docs.jupyter.org/en/latest/install/notebook-classic.html>`__, `Visual Studio Code <https://code.visualstudio.com/docs/datascience/jupyter-notebooks>`__ or `PyCharm's <https://www.jetbrains.com/help/pycharm/jupyter-notebook-support.html>`__.
+.. code-block:: python
+
+    import irtorch
+    print("IRTorch successfully installed")
+
+See the examples section and the package API reference for more information on how to use the package.

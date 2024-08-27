@@ -25,11 +25,11 @@ Install on your own machine
 ---------------------------
 **Prerequisites**
 
-Ensure you have Python 3.10 or later installed on your system. If not, download and install it from `Python's official website <https://www.python.org/downloads/>`__.
+Ensure you have Python 3.10 or later installed on your system. If not, download and install it from `Python's official website <https://www.python.org/downloads/>`__. We suggest you check the option to add python.exe to PATH during installation to be able to run Python from the command line.
 
 **Installing IRTorch**
 
-You can install IRTorch directly from the Python Package Index (PyPI) or from GitHub.
+You can install **IRTorch** directly from the Python Package Index (PyPI) or from GitHub.
 
 **Install from PyPI**
 
@@ -49,10 +49,18 @@ To install the latest version directly from GitHub, use:
 
 **Recommended Tools**
 
-When using the package installed on your local machine, consider using an integrated development environment (IDE) such as `Visual Studio Code <https://code.visualstudio.com/>`__ or `PyCharm <https://www.jetbrains.com/pycharm/>`__. Both offer extensive support for Python and include features such as debugging, syntax highlighting, code completion and jupyter notebooks.
+You can run Python code and **IRTorch** directly from the terminal with python installed. There are also several ways to run **IRTorch** within Jupyter Notebooks on your own computer using the `Jupyter project <https://jupyter.org/>`__. To install the **jupyterlab** package, run:
 
-- Visual Studio Code: Follow this `tutorial <https://code.visualstudio.com/docs/python/python-tutorial>`__ to set up VSCode for Python development.
-- PyCharm: Refer to the `official documentation <https://www.jetbrains.com/help/pycharm/quick-start-guide.html>`__ for installation instructions and getting started.
+.. code-block:: bash
 
-For jupyter notebooks, refer to `VSCode's <https://code.visualstudio.com/docs/datascience/jupyter-notebooks>`__ or
-`PyCharm's <https://www.jetbrains.com/help/pycharm/jupyter-notebook-support.html>`__ documentation.
+    pip install jupyterlab
+
+Then start a Jupyter notebook server by running:
+
+.. code-block:: bash
+
+    jupyter lab
+
+Now simply select a notebook kernel and start using the package.
+
+Of course, you can also run notebooks or python code through `Anaconda <https://docs.jupyter.org/en/latest/install/notebook-classic.html>`__, `Visual Studio Code <https://code.visualstudio.com/docs/datascience/jupyter-notebooks>`__ or `PyCharm's <https://www.jetbrains.com/help/pycharm/jupyter-notebook-support.html>`__.

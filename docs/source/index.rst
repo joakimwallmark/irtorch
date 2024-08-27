@@ -4,7 +4,7 @@
 Welcome to IRTorch's documentation!
 ===================================
 
-**IRTorch** is a python package for fitting item response theory models using auto-encoders.
+**IRTorch** is a python package for analyzing response data using Item Response Theory models.
 The package utilizes **PyTorch** for parameter optimization and GPU support.
 
 .. note::

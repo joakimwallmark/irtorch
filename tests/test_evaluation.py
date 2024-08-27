@@ -416,6 +416,33 @@ def test_infit_outfit(evaluation: Evaluation):
     assert torch.allclose(infit, torch.tensor([0.8181817, 0.4084507]), equal_nan=True), "Infit is incorrect"
     assert torch.allclose(outfit, torch.tensor([0.8181817, 0.3574660]), equal_nan=True), "Outfit is incorrect"
 
+def test_q3(evaluation: Evaluation):
+    data = torch.cat(
+        [
+            torch.randint(0, item_cat, (5, 1))
+            for item_cat in evaluation.model.item_categories
+        ],
+        dim=1,
+    ).float()
+    data[1:2, 1] = torch.nan
+
+    def residuals_mock(data, theta, theta_estimation, average_over):
+        residuals = torch.zeros_like(data)
+        residuals[:, 0] = 0.5
+        residuals[0, 0] = 0
+        residuals[:, 1] = torch.arange(data.size()[0]) / data.size()[0]
+        residuals[torch.isnan(data)] = torch.nan
+        return residuals
+    
+    evaluation.residuals = MagicMock(side_effect=residuals_mock)
+
+    q3_matrix, _ = evaluation.q3(data=data)
+
+    assert q3_matrix.shape == (len(evaluation.model.item_categories), len(evaluation.model.item_categories))
+    assert torch.allclose(torch.diag(q3_matrix), torch.ones(len(evaluation.model.item_categories)), atol=1e-7)
+    assert torch.allclose(q3_matrix, q3_matrix.T, atol=1e-7)
+    assert torch.allclose(q3_matrix[0, 1], torch.tensor(0.8783100843429565))
+
 @pytest.mark.parametrize("cv_n_components", [[1], [1, 2, 3]])
 def test__cv_gaussian_mixture_model(evaluation: Evaluation, cv_n_components):
     data = torch.randn(100, evaluation.model.latent_variables)

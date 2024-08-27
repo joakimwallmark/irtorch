@@ -10,7 +10,8 @@ from irtorch._internal_utils import (
     entropy,
     random_guessing_data,
     one_hot_encode_test_data,
-    impute_missing_internal
+    impute_missing_internal,
+    correlation_matrix,
 )
 
 @pytest.fixture(scope="module")
@@ -235,3 +236,21 @@ def test_impute_missing_internal():
     assert imputed_data[1, 1] != 2
     assert imputed_data[2, 0] != 1
     assert imputed_data[2, 1] != 2
+
+def test_correlation_matrix():
+    # Test with a simple 2D tensor
+    x = torch.tensor([[1.0, 2.0], [3.0, 3.0], [5.0, 6.0]])
+    result = correlation_matrix(x)
+    expected = torch.tensor([[1.0, 0.9607689], [0.9607689, 1.0]])
+    assert torch.allclose(result, expected, atol=1e-5)
+
+    # Test with a tensor containing NaNs
+    x = torch.tensor([[1.0, 2.0], [3.0, float('nan')], [5.0, 6.0]])
+    result = correlation_matrix(x)
+    expected = torch.tensor([[1.0, 1.0], [1.0, 1.0]])
+    assert torch.allclose(result, expected, atol=1e-5)
+
+    # Test with invalid input
+    x = torch.tensor([1.0, 2.0, 3.0])
+    with pytest.raises(ValueError):
+        correlation_matrix(x)

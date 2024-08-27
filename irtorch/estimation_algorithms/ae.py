@@ -23,6 +23,8 @@ class AE(BaseIRTAlgorithm):
         self.data_loader = None
         self.validation_data_loader = None
         self.optimizer = None
+        self.item_categories = None
+        self.mc_correct = None
         self.training_history = {
             "train_loss": [],
             "validation_loss": [],
@@ -86,6 +88,8 @@ class AE(BaseIRTAlgorithm):
         self.one_hot_encoded = one_hot_encoded
         self.batch_normalization = batch_normalization_encoder
         self.imputation_method = imputation_method
+        self.item_categories = model.item_categories
+        self.mc_correct = model.mc_correct
 
         if self.one_hot_encoded:
             input_dim = sum(model.item_categories)

@@ -13,7 +13,7 @@ def linear_regression(x, y):
 
     Returns
     -----------
-    w : torch.Tensor
+    torch.Tensor
         A tensor vector with the bias and the weights of shape (n+1, o).
     """
     # Add a bias term (1) to each sample in x
@@ -23,6 +23,63 @@ def linear_regression(x, y):
     w = torch.inverse(bias.t().mm(bias)).mm(bias.t()).mm(y)
 
     return w
+
+def correlation_matrix(x):
+    """
+    Compute the covariance matrix from a 2D torch tensor, handling missing values (NaNs).
+    
+    Parameters
+    -----------
+    x : torch.Tensor
+        A 2D tensor where each column represents a variable and each row represents an observation.
+    
+    Returns
+    -----------
+    torch.Tensor
+        The covariance matrix of the input tensor, ignoring NaNs.
+    """
+    if x.dim() != 2:
+        raise ValueError("Input must be a 2D tensor")
+    mask = ~torch.isnan(x)
+
+    if (~mask).sum() == 0: # No NaNs is more efficient
+        x_centered = x - x.mean(dim=0, keepdim=True)
+        cov_matrix = x_centered.T @ x_centered / (x.size(0) - 1)
+        stddev = x.std(dim=0, unbiased=True)
+        corr_matrix = cov_matrix / (stddev.unsqueeze(1) * stddev.unsqueeze(0))
+        
+        return corr_matrix
+
+    means = torch.nanmean(x, dim=0)
+    centered_tensor = x - means
+    # Set NaNs back where they originally were in the centered tensor
+    centered_tensor[~mask] = 0
+    # Calculate the dot product of the centered matrix to get the covariance
+    cov_matrix = torch.matmul(centered_tensor.T, centered_tensor)
+    
+    # Normalization factors: counts of non-NaN pairs
+    norm_factors = torch.matmul(mask.T.float(), mask.float())
+    # Adjust normalization by dividing by n-1
+    norm_factors = torch.where(norm_factors > 1, norm_factors - 1, torch.ones_like(norm_factors))
+    cov_matrix = cov_matrix / norm_factors
+    
+    corr_matrix = torch.ones_like(cov_matrix)
+    for i in range(cov_matrix.size(0)):
+        for j in range(cov_matrix.size(1)):
+            if i == j or i > j:
+                continue
+            else:
+                valid_mask = mask[:, i] & mask[:, j]
+                if torch.sum(valid_mask) > 1:
+                    std_i = torch.sqrt(torch.sum((x[valid_mask, i] - x[valid_mask, i].mean()) ** 2) / (torch.sum(valid_mask) - 1))
+                    std_j = torch.sqrt(torch.sum((x[valid_mask, j] - x[valid_mask, j].mean()) ** 2) / (torch.sum(valid_mask) - 1))
+                    corr_matrix[i, j] = cov_matrix[i, j] / (std_i * std_j)
+                    corr_matrix[j, i] = corr_matrix[i, j]
+                else:
+                    corr_matrix[i, j] = 0.0 # Assign a default value if there aren't enough valid pairs
+                    corr_matrix[j, i] = 0.0
+    
+    return corr_matrix
 
 def random_guessing_data(
     item_categories: list[int],

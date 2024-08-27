@@ -10,6 +10,8 @@ from irtorch._internal_utils import (
     conditional_score_distribution,
     sum_incorrect_probabilities,
     get_missing_mask,
+    correlation_matrix,
+    dynamic_print
 )
 
 if TYPE_CHECKING:
@@ -653,6 +655,71 @@ class Evaluation:
         )
         sum_score_probabilities = conditional_total_score_probs * weights.view(-1, 1)
         return sum_score_probabilities.sum(dim=0)
+
+    def q3(
+        self,
+        data: torch.Tensor = None,
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
+        sample_hypothesis_test: bool = False,
+        samples: int = 1000,
+    ) -> torch.Tensor:
+        r"""
+        Compute the Q3 statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta`. (local independence).
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The data used to compute the Q3 statistic. Uses the model's training data if not provided.
+        theta: torch.Tensor, optional
+            The theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        sample_hypothesis_test : bool, optional
+            Whether to sample from the null hypothesis distribution for the Q3 statistic and perform a statistical test for each item pair. (default is False)
+        samples : int, optional
+            The number of samples to draw from the null hypothesis distribution. (default is 1000)
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            A tuple with the Q3 statistic for each item pair and the corresponding p-values of the Q3 tests if sample_hypothesis_test is True.
+        """
+        if data is None:
+            data = self.model.algorithm.train_data
+        else:
+            data = data.contiguous()
+        if theta is None:
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation)
+
+        residuals = self.residuals(data, theta, theta_estimation, average_over="none")
+        corr_matrix = correlation_matrix(residuals)
+
+        if sample_hypothesis_test:
+            sample_corr_matrices = torch.zeros(samples, *corr_matrix.shape)
+            for sample in range(samples):
+                dynamic_print(f"Computing Q3 for null distribution sample: {sample+1}")
+                sample_data = self.model.sample_test_data(theta)
+                sample_residuals = self.residuals(
+                    sample_data,
+                    theta = theta,
+                    theta_estimation = theta_estimation,
+                    average_over="none"
+                )
+                sample_corr_matrices[sample, :, :] = correlation_matrix(sample_residuals)
+
+            observed_q3 = corr_matrix.unsqueeze(0).expand(sample_corr_matrices.shape[0], -1, -1)
+            counts1 = (sample_corr_matrices < observed_q3).sum(dim=0) # how many samples are smaller than the obs. correlation?
+            counts2 = (sample_corr_matrices >= observed_q3).sum(dim=0) # how many samples are larger than the obs. correlation?
+            # if most samples are smaller than the observed correlation, the p-value is the proportion of samples that are larger
+            # times 2 since we are interested in both tails
+            p_values = torch.min(counts1, counts2).float() * 2 / sample_corr_matrices.shape[0]
+            p_values.fill_diagonal_(0)
+
+            return corr_matrix, p_values
+        
+        return corr_matrix, None
+
 
     @torch.inference_mode()
     def _min_max_theta_for_integration(

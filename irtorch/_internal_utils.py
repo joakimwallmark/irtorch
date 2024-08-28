@@ -232,7 +232,7 @@ def sum_incorrect_probabilities(
     return new_probs
 
 
-def entropy(probabilities: torch.Tensor, log_base: int = 2):
+def entropy(probabilities: torch.Tensor, log_base: float = 2.0):
     """
     Calculate the entropy of a set of probabilities.
 
@@ -242,7 +242,7 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
     -------------
     probabilities: torch.Tensor
         A tensor of probabilities. The last tensor dimension should represent a discrete probability distribution and should sum to 1.
-    log_base: int, optional
+    log_base: float, optional
         The base of the logarithm used in the calculation. (default is 2, which gives entropy in bits)
 
     Returns
@@ -254,11 +254,11 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
         raise RuntimeError("The probabilities of the last dimension must sum to 1.")
 
     surprisal = -torch.log(probabilities) / torch.log(torch.tensor(log_base))
-    surprisal[surprisal.isinf()] = 0 # is surprisal is Inf, set to finite value to get correct entropy instead of NaN
+    surprisal[surprisal.isinf()] = 0 # if surprisal is Inf, set to finite value to get correct entropy instead of NaN
     entropies = (probabilities * surprisal).sum(dim=-1)
     return entropies
 
-def joint_entropy_matrix(data: torch.Tensor, log_base: int = 2):
+def joint_entropy_matrix(data: torch.Tensor, log_base: float = 2.0):
     """
     Calculate the matrix of joint entropies from test data.
 
@@ -266,7 +266,7 @@ def joint_entropy_matrix(data: torch.Tensor, log_base: int = 2):
     -------------
     data: torch.Tensor
         A tensor with test data.
-    log_base: int, optional
+    log_base: float, optional
         The base of the logarithm used in the calculation. (default is 2, which gives entropy in bits)
 
     Returns
@@ -279,7 +279,6 @@ def joint_entropy_matrix(data: torch.Tensor, log_base: int = 2):
     
     mask = ~torch.isnan(data)
     int_data = data.int()
-    # joint_entropy_matrix = torch.zeros(int_data.shape[1], int_data.shape[1])
     max_combos = ((int_data.max() + 1) ** 2).item()
     proportions = torch.zeros(int_data.shape[1], int_data.shape[1], max_combos)
     for i in range(int_data.shape[1]):

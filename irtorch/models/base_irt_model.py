@@ -473,7 +473,7 @@ class BaseIRTModel(ABC, nn.Module):
             theta = self._eap_theta_scores(data, eap_theta_integration_points)
         else:
             if hasattr(self.algorithm, "one_hot_encoded"):
-                if data.isnan().any() and data.eq(-1).any():
+                if data.isnan().any() or data.eq(-1).any():
                     if self.algorithm.imputation_method is not None:
                         encoder_data = impute_missing_internal(
                             data = data,

@@ -11,7 +11,9 @@ from irtorch._internal_utils import (
     sum_incorrect_probabilities,
     get_missing_mask,
     correlation_matrix,
-    dynamic_print
+    dynamic_print,
+    entropy,
+    joint_entropy_matrix
 )
 
 if TYPE_CHECKING:
@@ -603,6 +605,97 @@ class Evaluation:
         grouped_model_probabilties = self._grouped_theta_probabilities(grouped_theta)
         return grouped_data_probabilties, grouped_model_probabilties, group_mid_points
 
+
+    @torch.inference_mode()
+    def mutual_information_difference(
+        self,
+        data: torch.Tensor = None,
+        theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
+        sample_hypothesis_test: bool = False,
+        samples: int = 1000,
+        log_base: float = 2.0,
+    ) -> torch.Tensor:
+        r"""
+        Compute the mutual information difference (MID) and the absolute value of mutual information difference (AMID) statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence). 
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The data used to compute the AMID statistic. Uses the model's training data if not provided.
+        theta: torch.Tensor, optional
+            The theta scores for the provided data. If not provided, they will be computed using theta_estimation.
+        theta_estimation : str, optional
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+        sample_hypothesis_test : bool, optional
+            Whether to sample from the null hypothesis distribution for the AMID statistic and perform a statistical test for each item pair. (default is False)
+        samples : int, optional
+            The number of samples to draw from the null hypothesis distribution. (default is 1000)
+        log_base : float, optional
+            The base of the logarithm used to compute the entropy. (default is 2.0)
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            A tuple with the MID and AMID statistics for each item pair. The corresponding p-values of the AMID tests if sample_hypothesis_test is True.
+        """
+        if data is None:
+            data = self.model.algorithm.train_data
+        else:
+            data = data.contiguous()
+        if theta is None:
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation)
+
+        data_joint_entropies = joint_entropy_matrix(data, log_base=log_base)
+        data_entropies = data_joint_entropies.diag()
+        data_entropy_sums = data_entropies.unsqueeze(dim=-1) + data_entropies.unsqueeze(dim=0)
+        data_mutual_information = data_entropy_sums - data_joint_entropies
+        # Note: data_mutual_information can be negative in rare cases when missing values are present since
+        # it's computed using the observed values in each column. There may be no missing in an individal
+        # column for the entropy but some values may still be ignored in the joint entropy if another column has missing.
+        
+        model_probabilities = self.model.probabilities_from_output(self.model(theta))
+        # Compute the expected entropy for each item
+        expected_item_entropies = entropy(model_probabilities.mean(dim=0), log_base=log_base)
+        # Expected respondent proportions for each pairwise combination of item responses
+        # Returns a 5D tensor with dimensions (Respondent, item 1, item 2, item 1 response, item 2 response)
+        expected_proportions = torch.einsum('bik, bjl -> bijkl', model_probabilities, model_probabilities)
+        # Average over respondents (integrate)
+        expected_proportions = expected_proportions.mean(dim=0)
+
+        expected_joint_entropies = entropy(
+            expected_proportions.view(expected_proportions.shape[0], expected_proportions.shape[1], -1),
+            log_base=log_base
+        )
+        expected_entropy_sums = expected_item_entropies.unsqueeze(dim=-1) + expected_item_entropies.unsqueeze(dim=0)
+        expected_mutual_information = expected_entropy_sums - expected_joint_entropies
+
+        mid = data_mutual_information - expected_mutual_information
+        amid = torch.abs(mid)
+
+        if sample_hypothesis_test:
+            sample_amids = torch.zeros(samples, *data_mutual_information.shape)
+            for sample in range(samples):
+                dynamic_print(f"Computing AMID p-values by null distribution sampling. Sample: {sample+1}")
+                sample_data = self.model.sample_test_data(theta)
+                sample_joint_entropies = joint_entropy_matrix(sample_data, log_base=log_base)
+                sample_entropies = sample_joint_entropies.diag()
+                sample_entropy_sums = sample_entropies.unsqueeze(dim=-1) + sample_entropies.unsqueeze(dim=0)
+                sample_mutual_information = sample_entropy_sums - sample_joint_entropies
+                sample_amids[sample, :, :] = (sample_mutual_information - expected_mutual_information).abs()
+
+            observed_amid = amid.unsqueeze(0).expand(sample_amids.shape[0], -1, -1)
+            # how many times are the samples larger than the observed amid?
+            counts = (sample_amids > observed_amid).sum(dim=0)
+            # if it is a relatively low amount of times, the p-value is low
+            p_values = counts / sample_amids.shape[0]
+            p_values.fill_diagonal_(0)
+
+            return mid, amid, p_values
+        
+        return mid, amid, None
+
+
     @torch.inference_mode()
     def sum_score_probabilities(
         self,
@@ -665,7 +758,7 @@ class Evaluation:
         samples: int = 1000,
     ) -> torch.Tensor:
         r"""
-        Compute the Q3 statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta`. (local independence).
+        Compute the Q3 statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence).
 
         Parameters
         ----------
@@ -698,7 +791,7 @@ class Evaluation:
         if sample_hypothesis_test:
             sample_corr_matrices = torch.zeros(samples, *corr_matrix.shape)
             for sample in range(samples):
-                dynamic_print(f"Computing Q3 for null distribution sample: {sample+1}")
+                dynamic_print(f"Computing Q3 p-values by null distribution sampling. Sample: {sample+1}")
                 sample_data = self.model.sample_test_data(theta)
                 sample_residuals = self.residuals(
                     sample_data,
@@ -720,6 +813,57 @@ class Evaluation:
         
         return corr_matrix, None
 
+    # def _expected_item_score_combination_proportions(self, response_probabilities: torch.Tensor) -> torch.Tensor:
+    #     """
+    #     Computes the item score proportions for each pairwise combination of item responses, averaged over the latent space.
+
+    #     Parameters
+    #     ----------
+    #     response_probabilities : torch.Tensor
+    #         A 3D tensor with the probabilities for each item response. The first dimension represents the respondents, the second dimension represents the items and the third dimension represents the item categories.
+
+    #     Returns
+    #     -------
+    #     torch.Tensor
+    #         A 4D tensor with the expected item score proportions. The first two dimensions represent the item pair, and the last two dimensions represent the item categories.
+    #     """
+    #     expected_combos = torch.zeros(
+    #         response_probabilities.shape[0],
+    #         response_probabilities.shape[1],
+    #         response_probabilities.shape[1],
+    #         response_probabilities.shape[2],
+    #         response_probabilities.shape[2],
+    #     )
+    #     for i in range(response_probabilities.shape[1]):
+    #         for j in range(response_probabilities.shape[1]):
+    #             for k in range(response_probabilities.shape[2]):
+    #                 for l in range(response_probabilities.shape[2]):
+    #                     expected_combos[:, i, j, k, l] = response_probabilities[:, i, k] * response_probabilities[:, j, l]
+
+    #     return expected_combos.mean(dim=0)
+
+    def _observed_item_score_proportions(self, data: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the observed item score proportions for each item in the data.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor with the observed item score proportions. The first dimension represents the items and the second dimension represents the item categories.
+        """
+        item_responses = self.model.item_categories
+        item_score_proportions = torch.zeros(len(item_responses), max(item_responses))
+        missing_mask = get_missing_mask(data)
+        for item_i, _ in enumerate(item_responses):
+            counts = torch.bincount(data[:, item_i][~missing_mask[:, item_i]].int(), minlength=max(item_responses))
+            item_score_proportions[item_i, :] = counts.float() / counts.sum()
+
+        return item_score_proportions
 
     @torch.inference_mode()
     def _min_max_theta_for_integration(

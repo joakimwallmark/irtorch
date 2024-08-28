@@ -12,6 +12,7 @@ from irtorch._internal_utils import (
     one_hot_encode_test_data,
     impute_missing_internal,
     correlation_matrix,
+    joint_entropy_matrix,
 )
 
 @pytest.fixture(scope="module")
@@ -238,7 +239,6 @@ def test_impute_missing_internal():
     assert imputed_data[2, 1] != 2
 
 def test_correlation_matrix():
-    # Test with a simple 2D tensor
     x = torch.tensor([[1.0, 2.0], [3.0, 3.0], [5.0, 6.0]])
     result = correlation_matrix(x)
     expected = torch.tensor([[1.0, 0.9607689], [0.9607689, 1.0]])
@@ -254,3 +254,28 @@ def test_correlation_matrix():
     x = torch.tensor([1.0, 2.0, 3.0])
     with pytest.raises(ValueError):
         correlation_matrix(x)
+
+def test_joint_entropy_matrix():
+    x = torch.tensor([[1.0, 2.0, 3.0], [3.0, 3.0, 3.0], [1.0, 2.0, 1.0], [2.0, 3.0, 1.0]])
+    result = joint_entropy_matrix(x)
+    expected = torch.tensor([
+        [1.5000, 1.5000, 2.0000],
+        [1.5000, 1.0000, 2.0000],
+        [2.0000, 2.0000, 1.0000]
+    ])
+    assert torch.allclose(result, expected, atol=1e-5)
+
+    # Test with a tensor containing NaNs
+    x = torch.tensor([[1.0, 2.0, 3.0], [3.0, 3.0, 3.0], [1.0, 2.0, torch.nan], [2.0, 3.0, 1.0]])
+    result = joint_entropy_matrix(x)
+    expected = torch.tensor([
+        [1.5000, 1.5000, 1.5850],
+        [1.5000, 1.0000, 1.5850],
+        [1.5850, 1.5850, 0.9183]]
+    )
+    assert torch.allclose(result, expected, atol=1e-4)
+
+    # Test with invalid input
+    x = torch.tensor([1.0, 2.0, 3.0])
+    with pytest.raises(ValueError):
+        joint_entropy_matrix(x)

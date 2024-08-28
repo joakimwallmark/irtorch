@@ -247,16 +247,56 @@ def entropy(probabilities: torch.Tensor, log_base: int = 2):
 
     Returns
     -------------
-    entropy: torch.Tensor
-        The entropy of each row of probabilities.
+    torch.Tensor
+        The entropies of the probabilities.
     """
     if not torch.allclose(probabilities.sum(dim=-1), torch.tensor(1.0)):
-        raise RuntimeError("Each row of probabilities must sum to 1.")
+        raise RuntimeError("The probabilities of the last dimension must sum to 1.")
 
     surprisal = -torch.log(probabilities) / torch.log(torch.tensor(log_base))
     surprisal[surprisal.isinf()] = 0 # is surprisal is Inf, set to finite value to get correct entropy instead of NaN
     entropies = (probabilities * surprisal).sum(dim=-1)
     return entropies
+
+def joint_entropy_matrix(data: torch.Tensor, log_base: int = 2):
+    """
+    Calculate the matrix of joint entropies from test data.
+
+    Parameters
+    -------------
+    data: torch.Tensor
+        A tensor with test data.
+    log_base: int, optional
+        The base of the logarithm used in the calculation. (default is 2, which gives entropy in bits)
+
+    Returns
+    -------------
+    torch.Tensor
+        The joint entropy matrix.
+    """
+    if data.dim() != 2:
+        raise ValueError("Input must be a 2D tensor")
+    
+    mask = ~torch.isnan(data)
+    int_data = data.int()
+    # joint_entropy_matrix = torch.zeros(int_data.shape[1], int_data.shape[1])
+    max_combos = ((int_data.max() + 1) ** 2).item()
+    proportions = torch.zeros(int_data.shape[1], int_data.shape[1], max_combos)
+    for i in range(int_data.shape[1]):
+        for j in range(int_data.shape[1]):
+            if i > j:
+                continue
+            else:
+                valid_mask = mask[:, i] & mask[:, j]
+                if torch.sum(valid_mask) > 1:
+                    relevant_data = int_data[valid_mask, :]
+                    unique_combinations, counts = torch.unique(
+                        relevant_data[:, [i, j]], dim=0, return_counts=True
+                    )
+                    proportions[i, j, :unique_combinations.size(0)] = counts.float() / counts.sum()
+                    proportions[j, i, :unique_combinations.size(0)] = proportions[i, j, :unique_combinations.size(0)]
+
+    return entropy(proportions, log_base)
 
 def is_jupyter():
     try:

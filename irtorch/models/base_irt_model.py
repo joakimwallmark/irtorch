@@ -85,7 +85,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         Returns
         -------
-        BitScales
+        Plotting
             An instance of the :class:`irtorch.Plotting` class.
         """
         if self._plotting is None:
@@ -481,6 +481,8 @@ class BaseIRTModel(ABC, nn.Module):
                         )
                     elif not self.algorithm.one_hot_encoded:
                         raise ValueError("The algorithm encoder does not use one-hot encoded data, and autoencoder does not have a pre-specified imputation method. Please impute beforehand.")
+                    else:
+                        encoder_data = data
                 else:
                     encoder_data = data
 

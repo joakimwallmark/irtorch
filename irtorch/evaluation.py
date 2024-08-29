@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import logging
 import torch
+import pandas as pd
+import numpy as np
 from torch.distributions import MultivariateNormal
 from irtorch.estimation_algorithms import VAE, AE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
@@ -615,7 +617,7 @@ class Evaluation:
         sample_hypothesis_test: bool = False,
         samples: int = 1000,
         log_base: float = 2.0,
-    ) -> torch.Tensor:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         r"""
         Compute the mutual information difference (MID) and the absolute value of mutual information difference (AMID) statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence). 
 
@@ -636,8 +638,18 @@ class Evaluation:
 
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-            A tuple with the MID and AMID statistics for each item pair. The corresponding p-values of the AMID tests if sample_hypothesis_test is True.
+        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
+            A tuple with three data frames. The first two are the MID and AMID statistics for each item pair. The third data frame contains the p-values of the AMID tests if sample_hypothesis_test is True.
+
+        Examples
+        --------
+        >>> from irtorch.models import MonotoneNN
+        >>> from irtorch.estimation_algorithms import AE
+        >>> from irtorch.load_dataset import swedish_national_mathematics_1
+        >>> data = swedish_national_mathematics_1()
+        >>> model = MonotoneNN(1, data)
+        >>> model.fit(train_data=data, algorithm=AE())
+        >>> mid, amid, p_value = model.evaluation.mutual_information_difference(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:
             data = self.model.algorithm.train_data
@@ -672,6 +684,17 @@ class Evaluation:
 
         mid = data_mutual_information - expected_mutual_information
         amid = torch.abs(mid)
+        mid_df = pd.DataFrame(mid.detach().numpy())
+        mid_df.columns = [f"Item {i+1}" for i in range(mid.shape[0])]
+        mid_df.index = [f"Item {i+1}" for i in range(mid.shape[0])]
+        amid_df = pd.DataFrame(amid.detach().numpy())
+        amid_df.columns = [f"Item {i+1}" for i in range(mid.shape[0])]
+        amid_df.index = [f"Item {i+1}" for i in range(mid.shape[0])]
+
+        df_no_diag = amid_df.where(~np.eye(amid_df.shape[0], dtype=bool))
+        max_value = df_no_diag.max().max()
+        max_location = df_no_diag.stack().idxmax()
+        logger.info("Largest AMID is %.2f between %s and %s.", max_value, max_location[0], max_location[1])
 
         if sample_hypothesis_test:
             sample_amids = torch.zeros(samples, *data_mutual_information.shape)
@@ -689,11 +712,14 @@ class Evaluation:
             counts = (sample_amids > observed_amid).sum(dim=0)
             # if it is a relatively low amount of times, the p-value is low
             p_values = counts / sample_amids.shape[0]
-            p_values.fill_diagonal_(0)
+            p_values.fill_diagonal_(torch.nan)
 
-            return mid, amid, p_values
+            p_values_df = pd.DataFrame(p_values.detach().numpy())
+            p_values_df.columns = [f"Item {i+1}" for i in range(p_values.shape[0])]
+            p_values_df.index = [f"Item {i+1}" for i in range(p_values.shape[0])]
+            return mid_df, amid_df, p_values_df.round(3)
         
-        return mid, amid, None
+        return mid_df, amid_df, None
 
 
     @torch.inference_mode()
@@ -756,7 +782,7 @@ class Evaluation:
         theta_estimation: str = "ML",
         sample_hypothesis_test: bool = False,
         samples: int = 1000,
-    ) -> torch.Tensor:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         r"""
         Compute the Q3 statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence).
 
@@ -775,8 +801,18 @@ class Evaluation:
 
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor]
+        tuple[pd.DataFrame, pd.DataFrame]
             A tuple with the Q3 statistic for each item pair and the corresponding p-values of the Q3 tests if sample_hypothesis_test is True.
+
+        Examples
+        --------
+        >>> from irtorch.models import MonotoneNN
+        >>> from irtorch.estimation_algorithms import AE
+        >>> from irtorch.load_dataset import swedish_national_mathematics_1
+        >>> data = swedish_national_mathematics_1()
+        >>> model = MonotoneNN(1, data)
+        >>> model.fit(train_data=data, algorithm=AE())
+        >>> q3, p_value = model.evaluation.q3(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:
             data = self.model.algorithm.train_data
@@ -787,6 +823,16 @@ class Evaluation:
 
         residuals = self.residuals(data, theta, theta_estimation, average_over="none")
         corr_matrix = correlation_matrix(residuals)
+        corr_matrix.fill_diagonal_(torch.nan)
+        corr_matrix_df = pd.DataFrame(corr_matrix.detach().numpy())
+        corr_matrix_df.columns = [f"Item {i+1}" for i in range(corr_matrix.shape[0])]
+        corr_matrix_df.index = [f"Item {i+1}" for i in range(corr_matrix.shape[0])]
+
+        # Find the maximum value and its location
+        df_no_diag = corr_matrix_df.where(~np.eye(corr_matrix_df.shape[0], dtype=bool))
+        max_value = df_no_diag.max().max()
+        max_location = df_no_diag.stack().idxmax()
+        logger.info("Largest Q3 is %.2f between %s and %s.", max_value, max_location[0], max_location[1])
 
         if sample_hypothesis_test:
             sample_corr_matrices = torch.zeros(samples, *corr_matrix.shape)
@@ -807,11 +853,14 @@ class Evaluation:
             # if most samples are smaller than the observed correlation, the p-value is the proportion of samples that are larger
             # times 2 since we are interested in both tails
             p_values = torch.min(counts1, counts2).float() * 2 / sample_corr_matrices.shape[0]
-            p_values.fill_diagonal_(0)
+            p_values.fill_diagonal_(torch.nan)
 
-            return corr_matrix, p_values
+            p_values_df = pd.DataFrame(p_values.detach().numpy())
+            p_values_df.columns = [f"Item {i+1}" for i in range(corr_matrix.shape[0])]
+            p_values_df.index = [f"Item {i+1}" for i in range(corr_matrix.shape[0])]
+            return corr_matrix_df.round(3), p_values_df.round(3)
         
-        return corr_matrix, None
+        return corr_matrix_df.round(3), None
 
     # def _expected_item_score_combination_proportions(self, response_probabilities: torch.Tensor) -> torch.Tensor:
     #     """

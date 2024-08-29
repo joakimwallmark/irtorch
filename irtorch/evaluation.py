@@ -26,6 +26,8 @@ logger = logging.getLogger("irtorch")
 class Evaluation:
     """
     Class for evaluating IRT model performance using various metrics.
+    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `evaluation` property. 
+    Thus the methods can be accessed through `model.evaluation.method_name()`.
 
     Parameters
     ----------

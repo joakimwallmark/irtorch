@@ -18,7 +18,9 @@ logger = logging.getLogger("irtorch")
 
 class Plotting:
     """
-    Plotting class for IRT models.
+    Class for producing various plots from an IRT model.
+    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `plotting` property. 
+    Thus the methods can be accessed through `model.plotting.method_name()`.
 
     Parameters
     ----------

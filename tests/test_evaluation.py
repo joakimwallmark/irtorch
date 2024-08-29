@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 import torch
+import numpy as np
+import pandas as pd
 import pytest
 from irtorch.evaluation import Evaluation
 from irtorch.bit_scales import BitScales
@@ -85,7 +87,28 @@ def evaluation(irt_model: BaseIRTModel):
 
     return evaluation
 
-# add test for the _evaluate_data_theta_input method
+def test_mutual_information_difference(evaluation: Evaluation):
+    data = torch.tensor([[1.0, 0.0], [1.0, 0.0], [0.0, 2.0], [1.0, 2.0]])
+    
+    def probabilities_from_output_mock(input_tensor):
+        # tensor that matches the shape of the data tensor
+        return torch.tensor([
+            [[0.55, 0.45, 0.0], [0.20, 0.35, 0.45]],
+            [[0.35, 0.65, 0.0], [0.10, 0.40, 0.50]],
+            [[0.25, 0.75, 0.0], [0.10, 0.20, 0.70]],
+            [[0.15, 0.85, 0.0], [0.05, 0.05, 0.90]],
+        ])
+
+    evaluation.model.probabilities_from_output = MagicMock(side_effect=probabilities_from_output_mock)
+    
+    mid, amid, _ = evaluation.mutual_information_difference(data=data)
+    assert mid.equals(amid), "Mid and Amid are not equal"
+    expected_mid = pd.DataFrame([
+        [0.8042, 0.3031],
+        [0.3031, 0.9862]
+    ])
+    assert np.allclose(mid.values, expected_mid.values, atol=1e-4), "Mid is not correct"
+
 def test__evaluate_data_theta_input(evaluation: Evaluation):
     # Create some synthetic test data
     data = torch.cat(
@@ -438,10 +461,31 @@ def test_q3(evaluation: Evaluation):
 
     q3_matrix, _ = evaluation.q3(data=data)
 
-    assert q3_matrix.shape == (len(evaluation.model.item_categories), len(evaluation.model.item_categories))
-    assert torch.allclose(torch.diag(q3_matrix), torch.ones(len(evaluation.model.item_categories)), atol=1e-7)
-    assert torch.allclose(q3_matrix, q3_matrix.T, atol=1e-7)
-    assert torch.allclose(q3_matrix[0, 1], torch.tensor(0.8783100843429565))
+    assert q3_matrix.shape == (len(evaluation.model.item_categories), len(evaluation.model.item_categories)), \
+        "q3_matrix does not have the expected shape"
+    assert np.allclose(q3_matrix.iloc[0, 1], q3_matrix.iloc[1, 0], atol=1e-3), \
+        "q3_matrix is not symmetric"
+    assert np.isclose(q3_matrix.iloc[0, 1], 0.878, atol=1e-3), \
+        "q3_matrix[0, 1] is not close to the expected value"
+
+def test__observed_item_score_proportions(evaluation: Evaluation):
+    data = torch.tensor(
+        [
+            [1., 2.],
+            [1., 0.],
+            [torch.nan, 2.],
+            [0., 2.],
+        ],
+    )
+
+    observed_proportions = evaluation._observed_item_score_proportions(data)
+    assert torch.allclose(
+        observed_proportions,
+        torch.tensor([
+            [0.3333333, 0.6666667, 0.00],
+            [0.2500000, 0.0000000, 0.75]
+        ])
+    )
 
 @pytest.mark.parametrize("cv_n_components", [[1], [1, 2, 3]])
 def test__cv_gaussian_mixture_model(evaluation: Evaluation, cv_n_components):

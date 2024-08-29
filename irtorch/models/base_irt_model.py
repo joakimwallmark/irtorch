@@ -85,7 +85,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         Returns
         -------
-        BitScales
+        Plotting
             An instance of the :class:`irtorch.Plotting` class.
         """
         if self._plotting is None:
@@ -473,7 +473,7 @@ class BaseIRTModel(ABC, nn.Module):
             theta = self._eap_theta_scores(data, eap_theta_integration_points)
         else:
             if hasattr(self.algorithm, "one_hot_encoded"):
-                if data.isnan().any() and data.eq(-1).any():
+                if data.isnan().any() or data.eq(-1).any():
                     if self.algorithm.imputation_method is not None:
                         encoder_data = impute_missing_internal(
                             data = data,
@@ -481,6 +481,8 @@ class BaseIRTModel(ABC, nn.Module):
                         )
                     elif not self.algorithm.one_hot_encoded:
                         raise ValueError("The algorithm encoder does not use one-hot encoded data, and autoencoder does not have a pre-specified imputation method. Please impute beforehand.")
+                    else:
+                        encoder_data = data
                 else:
                     encoder_data = data
 

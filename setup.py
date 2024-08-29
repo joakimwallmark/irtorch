@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="irtorch",
-    version="0.2.2",
+    version="0.2.3",
     description="IRTorch: An item response theory package for python.",
     long_description=long_description,
     long_description_content_type="text/markdown",

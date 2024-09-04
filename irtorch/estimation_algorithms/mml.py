@@ -12,14 +12,11 @@ logger = logging.getLogger("irtorch")
 
 class MML(BaseIRTAlgorithm):
     r"""
-    Marginal Maximum Likelihood (MML) for fitting IRT models. 
+    Marginal Maximum Likelihood (MML) for fitting IRT models :cite:p:`Bock1981`. 
     Uses a multivariate normal distribution for the latent variables and Gradient Descent to optimize the model parameters.
     This method is generally effecive for models with a small number of latent variables. More than 3 is not supported.
     Note that this method runs much faster on a GPU.
 
-    Notes
-    -----
-    Estimates the model parameters using the Marginal Maximum Likelihood (MML) method. 
     The marginal log-likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
 
     .. math::

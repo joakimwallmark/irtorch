@@ -747,7 +747,7 @@ class BaseIRTModel(ABC, nn.Module):
         path : str
             Where to load fitted model from.
         """
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
         self.load_state_dict(checkpoint["model_state_dict"])
         if "algorithm" in checkpoint:
             self.algorithm = checkpoint["algorithm"]

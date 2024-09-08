@@ -1095,7 +1095,7 @@ class Plotter:
         x_label : str, optional
             The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
         y_label : str, optional
-            The label for the Y-axis. (default is None and uses "Density" for one latent variable and "Latent variable 2" for two latent variables)
+            For more than one latent variable. The label for the Y-axis. (default is None and uses "Latent variable 2" for two latent variables)
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional

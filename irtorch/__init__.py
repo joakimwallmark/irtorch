@@ -1,7 +1,7 @@
 import logging
 from .bit_scales import BitScales
-from .evaluation import Evaluation
-from .plotting import Plotting
+from .evaluator import Evaluator
+from .plotter import Plotter
 from . import load_dataset
 from . import config
 from . import utils

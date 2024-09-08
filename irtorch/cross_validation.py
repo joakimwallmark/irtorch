@@ -125,6 +125,6 @@ def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, thet
         torch.set_num_threads(1) # One thread per core, to avoid overloading the CPU
 
     irt_model.fit(train_data, device=device, **params)
-    log_likelihood = irt_model.evaluation.log_likelihood(validation_data, theta_estimation = theta_estimation, reduction="sum").item()
+    log_likelihood = irt_model.evaluate.log_likelihood(validation_data, theta_estimation = theta_estimation, reduction="sum").item()
 
     return {**params, "log_likelihood": log_likelihood}

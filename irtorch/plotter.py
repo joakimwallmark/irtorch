@@ -1116,9 +1116,7 @@ class Plotter:
         if latent_variables == 1:
             if x_label is None:
                 x_label = "Latent variable"
-            if y_label is None:
-                y_label = "Density"
-            return self._single_latent_variable_distribution_plot(latent_scores.squeeze(), title, x_label, y_label, color)
+            return self._single_latent_variable_distribution_plot(latent_scores.squeeze(), title, x_label, color)
         else:
             if x_label is None:
                 x_label = "Latent variable 1"
@@ -1131,7 +1129,6 @@ class Plotter:
         scores: np.ndarray,
         title: str,
         x_label: str,
-        y_label: str,
         color: str
     ) -> go.Figure:
         df = pd.DataFrame(scores, columns=["values"])
@@ -1142,7 +1139,7 @@ class Plotter:
         if color:
             histogram_kwargs["color_discrete_sequence"] = [color]
         fig = px.histogram(df, **histogram_kwargs)
-        fig.update_layout(title=title, xaxis_title=x_label, yaxis_title=y_label)
+        fig.update_layout(title=title, xaxis_title=x_label)
         return fig
 
     def _two_latent_variables_distribution_plot(

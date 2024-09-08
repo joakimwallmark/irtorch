@@ -28,11 +28,11 @@ def data_type(request):
 @pytest.fixture(scope="module")
 def data(data_type):
     if data_type == "binary":
-        return torch.load("tests/datasets/test_data_bin.pt")
+        return torch.load("tests/datasets/test_data_bin.pt", weights_only=False)
     if data_type == "polytomous":
-        return torch.load("tests/datasets/test_data_poly.pt")
+        return torch.load("tests/datasets/test_data_poly.pt", weights_only=False)
     if data_type == "mc":
-        return torch.load("tests/datasets/test_data_mc.pt")
+        return torch.load("tests/datasets/test_data_mc.pt", weights_only=False)
 
 @pytest.fixture(scope="module")
 def model(device, latent_variables, data, data_type, fitting_algorithm: BaseIRTAlgorithm):
@@ -84,7 +84,7 @@ def item_categories_binary():
 
 @pytest.fixture(scope="module")
 def test_data():
-    test_data = torch.load("tests/datasets/test_data.pt")
+    test_data = torch.load("tests/datasets/test_data.pt", weights_only=False)
     return test_data[0:120, 8:13]
 
 @pytest.fixture(scope="module", params=[1, 2, 3], ids=["dim1", "dim2", "dim3"])

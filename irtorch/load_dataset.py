@@ -15,7 +15,7 @@ def swedish_national_mathematics_2() -> torch.Tensor:
     """
     try:
         file_path = resources.files("irtorch") / "datasets" / "national_mathematics" / "mathematics_2.pt"
-        data = torch.load(file_path)
+        data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
     return data
@@ -31,7 +31,7 @@ def swedish_national_mathematics_1() -> torch.Tensor:
     """
     try:
         file_path = resources.files("irtorch") / "datasets" / "national_mathematics" / "mathematics_1.pt"
-        data = torch.load(file_path)
+        data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
     return data
@@ -47,7 +47,7 @@ def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
     """
     try:
         file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_verb.pt"
-        data = torch.load(file_path)
+        data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
@@ -71,7 +71,7 @@ def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
     """
     try:
         file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_quant.pt"
-        data = torch.load(file_path)
+        data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
@@ -133,7 +133,7 @@ def big_five() -> torch.Tensor:
     """
     try:
         file_path = resources.files("irtorch") / "datasets" / "big_five" / "big_five.pt"
-        data = torch.load(file_path)
+        data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 

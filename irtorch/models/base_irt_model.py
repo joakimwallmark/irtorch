@@ -44,8 +44,8 @@ class BaseIRTModel(ABC, nn.Module):
         self.algorithm = None
 
         self._bit_scales = None
-        self._evaluation = None
-        self._plotting = None
+        self._evaluate = None
+        self._plot = None
 
     @property
     def bit_scales(self):
@@ -64,34 +64,34 @@ class BaseIRTModel(ABC, nn.Module):
         return self._bit_scales
 
     @property
-    def evaluation(self):
+    def evaluate(self):
         """
-        Various methods for IRT model evaluation as described in :class:`irtorch.Evaluation`.
+        Various methods for IRT model evaluation as described in :class:`irtorch.Evaluator`.
 
         Returns
         -------
         Evaluation
             An instance of the :class:`irtorch.Evaluation` class.
         """
-        if self._evaluation is None:
-            from ..evaluation import Evaluation
-            self._evaluation = Evaluation(self)
-        return self._evaluation
+        if self._evaluate is None:
+            from ..evaluator import Evaluator
+            self._evaluate = Evaluator(self)
+        return self._evaluate
 
     @property
-    def plotting(self):
+    def plot(self):
         """
-        Methods for IRT model plotting. See :class:`irtorch.Plotting`.
+        Methods for IRT model plotting. An instance of :class:`irtorch.Plotter`.
 
         Returns
         -------
         Plotting
             An instance of the :class:`irtorch.Plotting` class.
         """
-        if self._plotting is None:
-            from ..plotting import Plotting
-            self._plotting = Plotting(self)
-        return self._plotting
+        if self._plot is None:
+            from ..plotter import Plotter
+            self._plot = Plotter(self)
+        return self._plot
     
     @abstractmethod
     def forward(self, theta) -> torch.Tensor:
@@ -747,7 +747,7 @@ class BaseIRTModel(ABC, nn.Module):
         path : str
             Where to load fitted model from.
         """
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
         self.load_state_dict(checkpoint["model_state_dict"])
         if "algorithm" in checkpoint:
             self.algorithm = checkpoint["algorithm"]

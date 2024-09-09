@@ -193,20 +193,20 @@ class BaseIRTModel(ABC, nn.Module):
         """
         data = data.long()
         data = data.view(-1)
-        respondents = data.size(0)
         reshaped_output = output.reshape(-1, self.max_item_responses)
         # Remove missing values from log likelihood calculation
         if missing_mask is not None:
             missing_mask = missing_mask.view(-1)
             reshaped_output = reshaped_output[~missing_mask]
+            respondents = data.size(0)
             data = data[~missing_mask]
 
         ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
         # For MML, we need the output to include missing values for missing item responses
         if loss_reduction == "none" and missing_mask is not None:
-            loss = torch.full((respondents, ), torch.nan, device= ll.device)
-            loss[~missing_mask] = ll
-            return loss
+            ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
+            ll_masked[~missing_mask] = ll
+            return ll_masked
 
         return ll
 

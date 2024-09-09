@@ -15,7 +15,15 @@ IRT models
     :show-inheritance:
     :members:
 
+.. autoclass:: irtorch.models.ThreeParameterLogistic
+    :show-inheritance:
+    :members:
+
 .. autoclass:: irtorch.models.GeneralizedPartialCredit
+    :show-inheritance:
+    :members:
+
+.. autoclass:: irtorch.models.GradedResponse
     :show-inheritance:
     :members:
 

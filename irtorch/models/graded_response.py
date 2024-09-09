@@ -2,10 +2,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
+import torch.nn.functional as F
 
-class GeneralizedPartialCredit(BaseIRTModel):
+class GradedResponse(BaseIRTModel):
     r"""
-    Generalized Partial Credit IRT model :cite:p:`Muraki1992`.
+    Graded response IRT model :cite:p:`Samejima1968`.
 
     Parameters
     ----------
@@ -20,30 +21,34 @@ class GeneralizedPartialCredit(BaseIRTModel):
 
     Notes
     -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` as follows:
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` or higher for all :math:`x>0` as follows:
 
     .. math::
 
-        P(X_j=x | \mathbf{\theta}) = \begin{cases}
-            \dfrac{1}
-            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{if } x = 0\\
-            \dfrac{\exp \left( x\mathbf{a}_{j}^\top \mathbf{\theta}+\sum_{m=1}^{x}d_{jm}\right)}
-            {1+\sum_{g=1}^{M_i}\exp \left(g\mathbf{a}_{j}^\top \mathbf{\theta} + \sum_{m=1}^gd_{jm}\right)}, & \text{otherwise}
-        \end{cases}
+        P(X_j \geq x | \mathbf{\theta}) = \dfrac{\exp \left(\mathbf{a}_{j}^\top \mathbf{\theta} + d_{jx}\right)}{1+\exp \left(\mathbf{a}_{j}^\top \mathbf{\theta} + d_{jx}\right)}
 
+            
     where:
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_{j}` is a vector of weights for item :math:`j`.
-    - :math:`d_{jm}` is the bias term for item :math:`j` and score :math:`m`.
+    - :math:`d_{jx}` is the bias term for item :math:`j` and score :math:`x`.
+
+    From here, the probability of responding with a score of :math:`x` is calculated as:
+
+    .. math::
+        P(X_j = x | \mathbf{\theta}) = \begin{cases}
+            1-P(X_j \geq x +1 | \mathbf{\theta}), & \text{if } x = 0\\
+            P(X_j \geq x | \mathbf{\theta})-P(X_j \geq x+1 | \mathbf{\theta}), & \text{otherwise}
+        \end{cases}
 
     Examples
     --------
-    >>> from irtorch.models import GeneralizedPartialCredit
+    >>> from irtorch.models import GradedResponse
     >>> from irtorch.estimation_algorithms import AE
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
-    >>> model = GeneralizedPartialCredit(1, data)
+    >>> model = GradedResponse(1, data)
     >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
@@ -72,15 +77,12 @@ class GeneralizedPartialCredit(BaseIRTModel):
         self.output_size = self.items * self.max_item_responses
 
         free_weights = torch.ones(self.items, latent_variables)
-        self.register_buffer("gpc_weight_multiplier", torch.arange(0, self.max_item_responses).repeat(self.items))
         if item_theta_relationships is not None:
             for item, item_cat in enumerate(self.item_categories):
                 free_weights[item, :] = item_theta_relationships[item, :]
 
         self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
-
-        number_of_bias_parameters = sum(self.item_categories) - self.items
-        self.bias_param = nn.Parameter(torch.zeros(number_of_bias_parameters))
+        
         first_category = torch.zeros(self.items, self.max_item_responses)
         first_category[:, 0] = 1.0
         first_category = first_category.reshape(-1)
@@ -89,6 +91,7 @@ class GeneralizedPartialCredit(BaseIRTModel):
             missing_category[item, item_cat:self.max_item_responses] = 1.0
         missing_category = missing_category.reshape(-1)
         free_bias = (1 - first_category) * (1 - missing_category)
+
         self.register_buffer("free_weights", free_weights.bool())
         self.register_buffer("free_bias", free_bias.bool())
         self.register_buffer("missing_category", missing_category.bool())
@@ -96,11 +99,13 @@ class GeneralizedPartialCredit(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.weight_param, mean=1., std=0.01)
-        nn.init.zeros_(self.bias_param)
+        nn.init.uniform_(self.weight_param, a=0.8, b=1.2)
+        # initialize bias parameters in an order from -1 to 1 to avoid 0 probabilities
+        initial_bias = -torch.arange(-1., 1.01, 2/(self.max_item_responses - 1)).tile((self.items, 1)).flatten()
+        self.bias_param = nn.Parameter(initial_bias[self.free_bias])
     
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
-        """
+        r"""
         Forward pass of the model.
 
         Parameters
@@ -111,7 +116,7 @@ class GeneralizedPartialCredit(BaseIRTModel):
         Returns
         -------
         output : torch.Tensor
-            2D tensor. Rows are respondents and columns are item score logits.
+            2D tensor. Rows are respondents and columns are :math:`\mathbf{a}_{j}^\top \mathbf{\theta} + d_{jx}`.
         """
         bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
@@ -119,15 +124,79 @@ class GeneralizedPartialCredit(BaseIRTModel):
         weights = torch.zeros(self.items, self.latent_variables, device=theta.device)
         weights[self.free_weights] = self.weight_param
         weighted_theta = torch.matmul(theta, weights.T).repeat_interleave(self.max_item_responses, dim=1)
-        weighted_theta *= self.gpc_weight_multiplier
 
         output = weighted_theta + bias
-        # stop gradients from flowing through the missing categories
         output[:, self.missing_category] = -torch.inf
-
-        output[:, self.first_category] = 0
+        output[:, self.first_category] = torch.inf
 
         return output
+
+    def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
+        """
+        Compute probabilities from the output tensor from the forward method.
+
+        Parameters
+        ----------
+        output : torch.Tensor
+            Output tensor from the forward pass.
+
+        Returns
+        -------
+        torch.Tensor
+            3D tensor with dimensions (respondents, items, item categories)
+        """
+        # great than or equal to probabilities as per graded response model
+        geq_probs = output.sigmoid().reshape(output.shape[0], self.items, self.max_item_responses)
+        # convert to probabilities for each score
+        probs = geq_probs.clone()  # Create a copy of `probs` to avoid modifying the original in place
+        probs[:, :, :-1] -= geq_probs[:, :, 1:]
+        return probs
+
+    def log_likelihood(
+        self,
+        data: torch.Tensor,
+        output: torch.Tensor,
+        missing_mask: torch.Tensor = None,
+        loss_reduction: str = "sum",
+    ) -> torch.Tensor:
+        """
+        Compute the log likelihood.
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            A 2D tensor with test data. Columns are items and rows are respondents
+        output: torch.Tensor
+            A 2D tensor with output. Columns are item response categories and rows are respondents
+        missing_mask: torch.Tensor, optional
+            A 2D tensor with missing data mask. (default is None)
+        loss_reduction: str, optional 
+            The reduction argument. (default is 'sum')
+        
+        Returns
+        -------
+        torch.Tensor
+            The log likelihood.
+        """
+        probabilities = self.probabilities_from_output(output)
+        data = data.long().view(-1)
+        reshaped_probabilities = probabilities.reshape(-1, self.max_item_responses)
+
+        if missing_mask is not None:
+            missing_mask = missing_mask.view(-1)
+            reshaped_probabilities = reshaped_probabilities[~missing_mask]
+            respondents = data.size(0)
+            data = data[~missing_mask]
+
+        ll = reshaped_probabilities[torch.arange(data.size(0)), data].log()
+        if loss_reduction == "sum":
+            return ll.sum()
+        elif loss_reduction == "none" and missing_mask is not None:
+            ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
+            ll_masked[~missing_mask] = ll
+            return ll_masked
+        else:
+            raise ValueError("loss_reduction must be 'sum' or 'none'")
 
     def item_parameters(self, irt_format = False) -> pd.DataFrame:
         """

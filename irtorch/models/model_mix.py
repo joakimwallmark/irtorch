@@ -143,7 +143,7 @@ class ModelMix(BaseIRTModel):
         missing_mask: torch.Tensor, optional
             A 2D tensor with missing data mask. (default is None)
         loss_reduction: str, optional 
-            The reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
+            For most models, this is the reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
         
         Returns
         -------

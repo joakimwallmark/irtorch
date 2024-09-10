@@ -2,7 +2,6 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from irtorch.models.base_irt_model import BaseIRTModel
-import torch.nn.functional as F
 
 class GradedResponse(BaseIRTModel):
     r"""

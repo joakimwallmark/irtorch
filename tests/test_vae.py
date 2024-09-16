@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 import torch
 from irtorch.estimation_algorithms.vae import VAE, VariationalEncoder
-from irtorch.irt_dataset import PytorchIRTDataset
 from irtorch.models import MonotoneNN, BaseIRTModel
 
 
@@ -96,10 +95,7 @@ class TestVAE:
         # Mock the inner functions that would be called during training
         with patch.object(
             algorithm, "_train_step", return_value=torch.tensor(0.5)
-        ) as mocked_train_step, patch.object(
-            algorithm, "_validation_step", return_value=torch.tensor(0.5)
-        ) as mocked_validation_step:
-            # Call fit function
+        ) as mocked_train_step:
             algorithm.fit(
                 model=irt_model,
                 train_data=test_data[0:100],
@@ -109,7 +105,6 @@ class TestVAE:
 
             # Check if inner functions are called
             assert mocked_train_step.call_count == 5
-            assert mocked_validation_step.call_count == 5
 
     def test_latent_credible_interval(self, algorithm: VAE):
             input_data = torch.randn(10, algorithm.encoder.input_dim)

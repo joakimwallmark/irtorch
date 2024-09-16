@@ -151,14 +151,14 @@ class GeneralizedPartialCredit(BaseIRTModel):
         weights[self.free_weights] = self.weight_param
 
         weights_df = pd.DataFrame(weights.detach().numpy())
+        weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
         if irt_format and self.latent_variables == 1:
-            weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
             biases_df = pd.DataFrame(-(weights*biases).detach()[:, 1:].numpy())
+            biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         else:
-            weights_df.columns = [f"w{i+1}" for i in range(weights.shape[1])]
             biases_df = pd.DataFrame(biases.detach().numpy())
+            biases_df.columns = [f"d{i+1}" for i in range(biases_df.shape[1])]
             
-        biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         parameters = pd.concat([weights_df, biases_df], axis=1)
 
         return parameters

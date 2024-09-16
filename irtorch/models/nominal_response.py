@@ -152,12 +152,11 @@ class NominalResponse(BaseIRTModel):
         weights = weights.reshape(-1, self.max_item_responses * self.latent_variables)
 
         weights_df = pd.DataFrame(weights.detach().numpy())
+        weights_df.columns = [f"a{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
         if irt_format and self.latent_variables == 1:
             biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
-            weights_df.columns = [f"a{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
         else:
             biases_df = pd.DataFrame(biases.detach().numpy())
-            weights_df.columns = [f"w{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
             
         biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         parameters = pd.concat([weights_df, biases_df], axis=1)

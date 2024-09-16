@@ -1,7 +1,140 @@
+import logging
 import torch
-from irtorch.models import BaseIRTModel
+import copy
+import pandas as pd
 import numpy as np
-import itertools
+from itertools import product
+import torch.multiprocessing as mp
+from irtorch.models import BaseIRTModel
+
+__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data"]
+
+logger = logging.getLogger("irtorch")
+
+def cross_validation(
+    model: BaseIRTModel,
+    data: torch.Tensor,
+    folds: int,
+    params_grid: dict,
+    theta_estimation: str = "ML",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    cores_to_use: int = None,
+    **kwargs
+) -> pd.DataFrame:
+    """
+    Perform cross-validation on the given model and data. Uses log-likelihood for model evaluation. Note that for running on the CPU on windows, `if __name__ == '__main__':` needs to be added to the main script before calling this function, see examples.
+
+    Parameters
+    ----------
+    model : IRT
+        The irt model to train. Note that this should be an untrained model.
+    data : torch.Tensor
+        The data to use for cross-validation. The data is randomly shuffled before splitting into folds.
+    folds : int
+        The number of folds to use for cross-validation.
+    params_grid : dict
+        The hyperparameters to use for cross-validation. All need to be arguments for the model fit method.
+    theta_estimation : str, optional
+        Method used to obtain the theta scores. Also used for bit scores as they require the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+    device : str, optional
+        The device to use for training. Can be 'cpu' for CPU or 'cuda' for GPU (if available). The default is 'cuda' if a GPU is available, otherwise 'cpu'.
+    **kwargs
+        Additional keyword arguments to pass to the model fit method.
+
+    Returns
+    -------
+    list
+        A list of dictionaries containing the hyperparameters and the corresponding cross-validation scores.
+
+    Examples
+    --------
+    This example demonstrates how to use cross_validation() function with the Swedish National Mathematics dataset.
+
+    First, we import necessary modules, load the data and split it into a training and testing set:
+
+    >>> from irtorch.models import MonotoneNN
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.load_dataset import swedish_national_mathematics_2
+    >>> from irtorch.utils import split_data, cross_validation
+    >>> data_math = swedish_national_mathematics_2()
+    >>> train_data, test_data = split_data(data_math, 0.8)
+
+    Next, we initialize the IRT model:
+
+    >>> model = MonotoneNN(data=data_math)
+
+    We then set up a grid of parameters for cross-validation:
+
+    >>> params_grid = {
+    ...     'learning_rate': [0.05, 0.1],
+    ...     'batch_size': [64, 128],
+    ... }
+
+    Finally, we perform cross-validation to find a good set of parameters:
+
+    >>> if __name__ == '__main__':
+    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = AE())
+    """
+    if device == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
+
+    # randomly scrable the data
+    data = data[torch.randperm(data.shape[0])]
+    data_folds = torch.chunk(data, folds, dim=0)
+
+    param_combinations = list(product(*params_grid.values()))
+    param_comb_names = list(params_grid.keys())
+    param_dicts = [
+        {name: value for name, value in zip(param_comb_names, combination)}
+        for combination in param_combinations
+    ]
+    # Add additional kwargs to each parameter dictionary
+    for param_dict in param_dicts:
+        param_dict.update(kwargs)
+
+    logger.info(f"Performing cross-validation with {len(param_dicts)} parameter combinations")
+
+    # Prepare arguments for multiprocessing
+    jobs = []
+    for params in param_dicts:
+        for fold in range(folds):
+            train_data = torch.cat([data_folds[i] for i in range(folds) if i != fold])
+            validation_data = data_folds[fold]
+            jobs.append((copy.deepcopy(model), train_data, validation_data, params, theta_estimation, device))
+
+    if device == "cpu":
+        if cores_to_use is None:
+            cores_to_use = min(mp.cpu_count(), len(jobs))
+        print(f"Using {cores_to_use} cores")
+        original_threads = torch.get_num_threads()
+        try:
+            # Ensure each subprocess uses a single thread for PyTorch.
+            torch.set_num_threads(1)
+            with mp.Pool(cores_to_use) as pool:
+                results = pool.starmap(_cv_fold, jobs)
+        finally:
+            torch.set_num_threads(original_threads)
+
+    elif device == "cuda":
+        results = []
+        for job in jobs:
+            results.append(_cv_fold(*job))
+
+    # average over folds
+    results = pd.DataFrame(results)
+    results.drop(list(kwargs.keys()), axis=1, inplace=True)
+    results = results.groupby(param_comb_names).mean().reset_index()
+    return results
+
+def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, theta_estimation, device):
+    if device == "cpu":
+        torch.set_num_threads(1) # One thread per core, to avoid overloading the CPU
+
+    irt_model.fit(train_data, device=device, **params)
+    log_likelihood = irt_model.evaluate.log_likelihood(validation_data, theta_estimation = theta_estimation, reduction="sum").item()
+
+    return {**params, "log_likelihood": log_likelihood}
+
 
 def gauss_hermite(n, mean, covariance):
     r"""
@@ -56,8 +189,8 @@ def gauss_hermite(n, mean, covariance):
     x = torch.tensor(x, dtype=torch.float64)
     w = torch.tensor(w, dtype=torch.float64)
     const = torch.pi**(-0.5 * mvn_dim)
-    xn = torch.tensor(list(itertools.product(*(x,)*mvn_dim)), dtype=torch.float64)
-    wn = torch.prod(torch.tensor(list(itertools.product(*(w,)*mvn_dim)), dtype=torch.float64), dim=1)
+    xn = torch.tensor(list(product(*(x,)*mvn_dim)), dtype=torch.float64)
+    wn = torch.prod(torch.tensor(list(product(*(w,)*mvn_dim)), dtype=torch.float64), dim=1)
     chol_decomp = torch.linalg.cholesky(covariance).to(torch.float64)
     # Transformation of the quadrature points
     # See change of variables in the docstring
@@ -161,6 +294,65 @@ def impute_missing(
         )
 
     return imputed_data
+
+def fit_multiple_models_cpu(
+    models: list[BaseIRTModel],
+    train_data: torch.Tensor,
+    cores_to_use: int = None,
+    **kwargs
+) -> list[BaseIRTModel]:
+    """
+    Train multiple models on the same data using multiprocessing.
+
+    Parameters
+    ----------
+    models : BaseIRTModel
+        The IRT models to train. Note that these should be untrained model instances.
+    train_data : torch.Tensor
+        The data to use for training.
+    cores_to_use : int, optional
+        Number of cores to use for multiprocessing when device is 'cpu'. (default uses one per model)
+    **kwargs
+        Additional keyword arguments to pass to the model fit method.
+
+    Returns
+    -------
+    list[BaseIRTModel]
+        A list of trained models.
+
+    Examples
+    --------
+    >>> from irtorch.models import GeneralizedPartialCredit
+    >>> from irtorch.estimation_algorithms import VAE
+    >>> from irtorch.load_dataset import swedish_national_mathematics_1
+    >>> from irtorch.utils import train_multiple_models_cpu
+    >>> data = swedish_national_mathematics_1()
+    >>> # train 3 models with 1, 2 and 3 latent variables
+    >>> models = [GeneralizedPartialCredit(latent_variables = i+1, data=data) for i in range(3)]
+    >>> if __name__ == '__main__':
+    ...     train_multiple_models_cpu(models, data, algorithm = VAE())
+    """
+    if cores_to_use is None:
+        cores_to_use = min(len(models), mp.cpu_count())
+
+    print(f"Using {cores_to_use} cores")
+    original_threads = torch.get_num_threads()
+    try:
+        # Ensure each subprocess uses a single thread for PyTorch.
+        torch.set_num_threads(1)
+        with mp.Pool(cores_to_use) as pool:
+            trained_models = pool.starmap(_fit_model, [(model, train_data, kwargs) for model in models])
+    finally:
+        torch.set_num_threads(original_threads)
+
+    return trained_models
+
+def _fit_model(model: BaseIRTModel, train_data: torch.Tensor, kwargs):
+    """
+    This is a worker function used in multiprocessing
+    """
+    model.fit(train_data, device="cpu", **kwargs)
+    return model
 
 def split_data(data, train_ratio=0.8, shuffle=True):
     """

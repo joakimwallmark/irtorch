@@ -1,6 +1,7 @@
 import logging
 import copy
 import torch
+import numpy as np
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import StandardEncoder
@@ -29,6 +30,12 @@ class AE(BaseIRTAlgorithm):
             "train_loss": [],
             "validation_loss": [],
         }
+        self.best_model_state = None
+        self.batch_mean_losses = []
+        self.best_avg_loss = float("Inf"), 0
+        self.total_iterations = 0
+        self.lr_update_count = 0
+        self.evaluation_interval_size = 60
 
     def fit(
         self,
@@ -39,12 +46,12 @@ class AE(BaseIRTAlgorithm):
         imputation_method: str = None,
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
-        batch_normalization_encoder: bool = True,
-        batch_size: int = 64,
+        batch_normalization_encoder: bool = False,
+        batch_size: int = 256,
         max_epochs: int = 1000,
-        learning_rate: float = 0.04,
-        learning_rate_update_patience: int = 4,
-        learning_rate_updates_before_stopping: int = 5,
+        learning_rate: float = 0.005,
+        learning_rate_updates_before_stopping: int = 2,
+        evaluation_interval_size: int = 60,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
@@ -76,20 +83,32 @@ class AE(BaseIRTAlgorithm):
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 1000)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.04)
-        learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 4)
+            The initial learning rate for the optimizer. (default is 0.005)
         learning_rate_updates_before_stopping : int, optional
-            The number of times the learning rate can be reduced before stopping training. (default is 5)
+            The number of times the learning rate can be reduced before stopping training. (default is 2)
+        evaluation_interval_size: int, optional
+            The number of iterations between each model evaluation during training. (default is 60)
         device : str, optional
             The device to run the model on. (default is "cuda" if available else "cpu".)
         """
         super().fit(model = model, train_data = train_data)
+        # Re-initialize the training history
+        self.training_history = {
+            "train_loss": [],
+            "validation_loss": [],
+        }
+        self.best_model_state = None
+        self.batch_mean_losses = []
+        self.best_avg_loss = float("Inf"), 0
+        self.total_iterations = 0
+        self.lr_update_count = 0
+
         self.one_hot_encoded = one_hot_encoded
         self.batch_normalization = batch_normalization_encoder
         self.imputation_method = imputation_method
         self.item_categories = model.item_categories
         self.mc_correct = model.mc_correct
+        self.evaluation_interval_size = evaluation_interval_size
 
         if self.one_hot_encoded:
             input_dim = sum(model.item_categories)
@@ -106,12 +125,6 @@ class AE(BaseIRTAlgorithm):
             batch_normalization=batch_normalization_encoder,
             nonlinear=nonlinear_encoder,
         )
-
-        # Re-initialize the training history
-        self.training_history = {
-            "train_loss": [],
-            "validation_loss": [],
-        }
 
         if not one_hot_encoded and imputation_method is None:
             raise ValueError("imputation_method must be supplied for non-one-hot encoded data.")
@@ -149,14 +162,14 @@ class AE(BaseIRTAlgorithm):
 
         # Reduce learning rate when loss stops decreasing ("min")
         # we multiply the learning rate by the factor
-        # patience: We need no improvement after x epochs for it to trigger
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
+        # patience: We need no improvement after learning_rate_update_patience steps for it to trigger
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.6, patience=1
         )
 
         self.encoder.to(device)
         model.to(device)
-        self._training_loop(model, max_epochs, scheduler, validation_data, learning_rate_updates_before_stopping)
+        self._training_loop(model, max_epochs, validation_data, learning_rate_updates_before_stopping)
         self.encoder.to("cpu")
         model.to("cpu")
         self.encoder.eval()
@@ -172,7 +185,6 @@ class AE(BaseIRTAlgorithm):
         self,
         model: BaseIRTModel,
         max_epochs: int,
-        scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
         validation_data: torch.Tensor = None,
         learning_rate_updates_before_stopping: int = 5,
     ):
@@ -192,59 +204,34 @@ class AE(BaseIRTAlgorithm):
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 5)
         """
-        lr_update_count = 0
-        best_loss = float("inf")
-        prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
-            if hasattr(self, "anneal"):
-                if self.anneal:
-                    self.annealing_factor = min(1.0, epoch / self.annealing_epochs)
-                else:
-                    self.annealing_factor = 1.0
-
-            train_loss = self._train_step(model)
-
-            if validation_data is not None:
-                validation_loss = self._validation_step(model)
-                current_loss = validation_loss
-                scheduler.step(validation_loss)
-                dynamic_print(f"Epoch: {epoch}. Average training batch loss: {train_loss:.4f}. Average validation batch loss: {validation_loss:.4f}")
-            else:
-                current_loss = train_loss
-                scheduler.step(train_loss)
-                dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
-
-            if current_loss < best_loss:
-                best_loss = current_loss
-                best_epoch = epoch
-                best_model_state = { 
-                    "state_dict_model": copy.deepcopy(model.state_dict()),
-                    "state_dict_encoder": copy.deepcopy(self.encoder.state_dict()),
-                    "optimizer": copy.deepcopy(self.optimizer.state_dict()) 
-                }
-            
-            if lr_update_count >= learning_rate_updates_before_stopping:
-                logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
+            train_loss = self._train_step(model, epoch, validation_data, learning_rate_updates_before_stopping)
+            if np.isnan(train_loss):
+                break
+            if self.lr_update_count >= learning_rate_updates_before_stopping:
                 break
 
-            current_lr = [group["lr"] for group in self.optimizer.param_groups]
-            # Check if the learning rate has been updated
-            if current_lr != prev_lr:
-                lr_update_count += 1
-                prev_lr = current_lr
-
-            logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
-
         # Load the best model state
-        if best_model_state is not None:
-            model.load_state_dict(best_model_state["state_dict_model"])
-            self.encoder.load_state_dict(best_model_state["state_dict_encoder"])
-            self.optimizer.load_state_dict(best_model_state["optimizer"])
-            logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
+        if self.best_model_state is not None:
+            model.load_state_dict(self.best_model_state["state_dict_model"])
+            self.encoder.load_state_dict(self.best_model_state["state_dict_encoder"])
+            self.optimizer.load_state_dict(self.best_model_state["optimizer"])
+            logger.info("Best model found after %d iterations (%d interval updates) with interval averaged loss %.4f.", self.best_avg_loss[1], self.best_avg_loss[1]/self.evaluation_interval_size, self.best_avg_loss[0])
 
-    def _train_step(self, model: BaseIRTModel):
+    def _train_step(self, model: BaseIRTModel, epoch: int, validation_data: torch.Tensor = None, learning_rate_updates_before_stopping: int = 5) -> torch.Tensor:
         """
         Perform a training step for the model.
+
+        Parameters
+        ----------
+        model : BaseIRTModel
+            The model to train.
+        epoch : int
+            The current epoch.
+        validation_data : torch.Tensor, optional
+            The validation data.
+        learning_rate_updates_before_stopping : int, optional
+            The number of times the learning rate can be reduced before stopping training. (default is 5)
 
         Returns
         -------
@@ -253,7 +240,7 @@ class AE(BaseIRTAlgorithm):
         """
         self.encoder.train()
         model.train()
-        loss = 0
+        epoch_mean_loss = 0
 
         for _, (batch, mask, input_batch) in enumerate(self.data_loader):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
@@ -261,15 +248,54 @@ class AE(BaseIRTAlgorithm):
                 continue
             self.optimizer.zero_grad()
             batch_loss = self._train_batch(model, input_batch, batch, mask)
+            if torch.isnan(batch_loss):
+                logger.warning("Batch loss is nan. Try increasing batch size or lowering the learning rate.")
+                return float("nan")
+
             batch_loss.backward()
 
             self.optimizer.step()
-            loss += batch_loss.item()
+            self.total_iterations += 1
+            epoch_mean_loss += batch_loss.item()
 
-        # Calculate averge per batch loss and accuracy per epoch and print
-        loss /= len(self.data_loader)
-        self.training_history["train_loss"].append(loss)
-        return loss
+            avg_batch_loss = batch_loss.item()
+            learning_rate = self.optimizer.param_groups[0]['lr']
+            dynamic_print(f"Epoch: {epoch + 1}. Iteration: {self.total_iterations}. Average batch loss: {avg_batch_loss:.4f}. Current learning rate: {learning_rate:.4f}")
+
+            if validation_data is None:
+                self.batch_mean_losses.append(avg_batch_loss)
+                if len(self.batch_mean_losses) > self.evaluation_interval_size:
+                    self.batch_mean_losses.pop(0)
+
+            # Update the learning rate scheduler every self.evaluation_interval_size iterations if no improvement
+            if (self.total_iterations) % self.evaluation_interval_size == 0 and self.total_iterations != 1:
+                mean_loss = np.mean(self.batch_mean_losses)
+                self.training_history["train_loss"].append(mean_loss)
+                if validation_data is not None:
+                    mean_loss = self._validation_step(model)
+                    self.scheduler.step(mean_loss)
+                    self.encoder.train()
+                    model.train()
+                else:
+                    self.scheduler.step(mean_loss)
+
+                # Check if the learning rate has been updated
+                if learning_rate != self.optimizer.param_groups[0]['lr']:
+                    self.lr_update_count += 1
+                
+                if mean_loss < self.best_avg_loss[0]:
+                    self.best_avg_loss = mean_loss, self.total_iterations
+                    self.best_model_state = {
+                        "state_dict_model": copy.deepcopy(model.state_dict()),
+                        "state_dict_encoder": copy.deepcopy(self.encoder.state_dict()),
+                        "optimizer": copy.deepcopy(self.optimizer.state_dict()) 
+                    }
+                elif self.lr_update_count >= learning_rate_updates_before_stopping:
+                    logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
+                    break
+
+        epoch_mean_loss /= len(self.data_loader)
+        return epoch_mean_loss
 
     def _train_batch(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
         """
@@ -292,6 +318,9 @@ class AE(BaseIRTAlgorithm):
             The logits and loss after training on the batch.
         """
         outputs = model(self.encoder(input_batch))
+        # check if all outputs are nan
+        if torch.isnan(outputs).all():
+            return torch.tensor(torch.nan)
         batch_loss = -model.log_likelihood(batch, outputs, missing_mask) / batch.shape[0]
         return batch_loss
 

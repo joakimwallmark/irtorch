@@ -189,12 +189,11 @@ class ThreeParameterLogistic(BaseIRTModel):
         weights[self.free_weights] = self.weight_param
 
         weights_df = pd.DataFrame(weights.detach().numpy())
+        weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
         if irt_format:
-            weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
             biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
             biases_df.columns = ["b"]
         else:
-            weights_df.columns = [f"w{i+1}" for i in range(weights.shape[1])]
             biases_df = pd.DataFrame(biases.detach().numpy())
             biases_df.columns = ["d"]
 

@@ -98,11 +98,25 @@ class GradedResponse(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.uniform_(self.weight_param, a=0.8, b=1.2)
-        # initialize bias parameters in an order from -1 to 1 to avoid 0 probabilities
-        initial_bias = -torch.arange(-1., 1.01, 2/(self.max_item_responses - 1)).tile((self.items, 1)).flatten()
-        self.bias_param = nn.Parameter(initial_bias[self.free_bias])
-    
+        # Xavier uniform initialization for weights https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.xavier_uniform_
+        a = torch.sqrt(torch.tensor(6 / (self.latent_variables + self.items)))
+        nn.init.uniform_(self.weight_param, a=-a, b=a)
+        # initialize bias parameters
+        bias = torch.zeros_like(self.free_bias, dtype=torch.float)
+        for item in range(self.items):
+            item_bias = torch.zeros(self.max_item_responses, dtype=torch.float)
+            item_ind = range(item * self.max_item_responses, item * self.max_item_responses + self.max_item_responses)
+            probabilities = torch.linspace(
+                1/(1+torch.exp(torch.tensor(4))),
+                1/(1+torch.exp(torch.tensor(-4))),
+                self.free_bias[item_ind].sum() + 2
+            )[1:-1]
+            item_bias[self.free_bias[item_ind]] = probabilities.pow(-1).add(-1).log()
+            bias[item_ind] = item_bias
+
+        self.bias_param = nn.Parameter(bias[self.free_bias])
+        # initial_bias = -torch.arange(-1., 1.01, 2/(self.max_item_responses - 1)).tile((self.items, 1)).flatten()
+
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         r"""
         Forward pass of the model.
@@ -219,14 +233,14 @@ class GradedResponse(BaseIRTModel):
         weights[self.free_weights] = self.weight_param
 
         weights_df = pd.DataFrame(weights.detach().numpy())
+        weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
         if irt_format and self.latent_variables == 1:
-            weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
             biases_df = pd.DataFrame(-(weights*biases).detach()[:, 1:].numpy())
+            biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         else:
-            weights_df.columns = [f"w{i+1}" for i in range(weights.shape[1])]
-            biases_df = pd.DataFrame(biases.detach().numpy())
+            biases_df = pd.DataFrame(biases.detach()[:, 1:].numpy())
+            biases_df.columns = [f"d{i+1}" for i in range(biases_df.shape[1])]
             
-        biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         parameters = pd.concat([weights_df, biases_df], axis=1)
 
         return parameters

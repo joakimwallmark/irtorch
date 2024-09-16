@@ -3,11 +3,10 @@ from .bit_scales import BitScales
 from .evaluator import Evaluator
 from .plotter import Plotter
 from . import load_dataset
-from . import config
-from . import utils
-from . import cross_validation
+from .config import *
+from .utils import *
 
-__version__ = "0.2.5"
+__version__ = "0.3.0"
 
 logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s: %(message)s",

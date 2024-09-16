@@ -33,6 +33,13 @@ class VariationalEncoder(BaseEncoder):
         # variational layers
         self.mu_layer = nn.Linear(hidden_dim[-1], latent_variables)
         self.sigma_layer = nn.Linear(hidden_dim[-1], latent_variables)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.mu_layer.weight, mean=0., std=0.001)
+        nn.init.normal_(self.mu_layer.bias, mean=0., std=0.001)
+        nn.init.normal_(self.sigma_layer.weight, mean=0., std=0.001)
+        nn.init.normal_(self.sigma_layer.bias, mean=1., std=0.001)
 
     def forward(self, x):
         encoded = self.layers(x)

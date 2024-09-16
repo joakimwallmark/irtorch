@@ -16,7 +16,7 @@ class VAE(AE):
     def __init__(self):
         super().__init__()
         self.iw_samples = 1
-        self.annealing_epochs = 5
+        self.annealing_iterations = 5
         self.anneal = True
         self.annealing_factor = 1.0
 
@@ -29,15 +29,15 @@ class VAE(AE):
         imputation_method: str = None,
         hidden_layers_encoder: list[int] = None,
         nonlinear_encoder = torch.nn.ELU(),
-        batch_normalization_encoder: bool = True,
-        batch_size: int = 32,
+        batch_normalization_encoder: bool = False,
+        batch_size: int = 256,
         max_epochs: int = 1000,
-        learning_rate: float = 0.004,
-        learning_rate_update_patience: int = 4,
-        learning_rate_updates_before_stopping: int = 5,
+        learning_rate: float = 0.002,
+        learning_rate_updates_before_stopping: int = 2,
+        evaluation_interval_size: int = 60,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         anneal: int = True,
-        annealing_epochs: int = 5,
+        annealing_iterations: int = 5,
         iw_samples: int = 5,
     ):
         """
@@ -69,17 +69,17 @@ class VAE(AE):
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 1000)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.004)
-        learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 4)
+            The initial learning rate for the optimizer. (default is 0.002)
         learning_rate_updates_before_stopping : int, optional
-            The number of times the learning rate can be reduced before stopping training. (default is 5)
+            The number of times the learning rate can be reduced before stopping training. (default is 2)
+        evaluation_interval_size: int, optional
+            The number of iterations between each model evaluation during training. (default is 60)
         device : str, optional
             The device to run the model on. (default is "cuda" if available else "cpu".)
         anneal : bool, optional
             Whether to anneal the KL divergence. (default is True)
-        annealing_epochs : int, optional
-            The number of epochs to anneal the KL divergence. (default is 5)
+        annealing_iterations : int, optional
+            The number of iterations to anneal the KL divergence. (default is 5)
         iw_samples : int, optional
             The number of importance weighted samples to use. (default is 5)
         """
@@ -88,8 +88,20 @@ class VAE(AE):
         else:
             self.train_data = train_data.contiguous()
 
+        # Re-initialize the training history
+        self.training_history = {
+            "train_loss": [],
+            "validation_loss": [],
+        }
+        self.best_model_state = None
+        self.batch_mean_losses = []
+        self.best_avg_loss = float("Inf"), 0
+        self.total_iterations = 0
+        self.lr_update_count = 0
+        self.evaluation_interval_size = evaluation_interval_size
+
         self.iw_samples = iw_samples
-        self.annealing_epochs = annealing_epochs
+        self.annealing_iterations = annealing_iterations
         self.anneal = anneal
         self.one_hot_encoded = one_hot_encoded
 
@@ -107,12 +119,6 @@ class VAE(AE):
             batch_normalization=batch_normalization_encoder,
             nonlinear=nonlinear_encoder,
         )
-        
-        # Re-initialize the training history
-        self.training_history = {
-            "train_loss": [],
-            "validation_loss": [],
-        }
 
         if not one_hot_encoded and imputation_method is None:
             raise ValueError("imputation_method must be supplied for non-one-hot encoded data.")
@@ -151,13 +157,13 @@ class VAE(AE):
         # Reduce learning rate when loss stops decreasing ("min")
         # we multiply the learning rate by the factor
         # patience: We need no improvement after x epochs for it to trigger
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.6, patience=1
         )
 
         self.encoder.to(device)
         model.to(device)
-        self._training_loop(model, max_epochs, scheduler, validation_data, learning_rate_updates_before_stopping)
+        self._training_loop(model, max_epochs, validation_data, learning_rate_updates_before_stopping)
         self.encoder.to("cpu")
         model.to("cpu")
         self.encoder.eval()
@@ -190,6 +196,8 @@ class VAE(AE):
             The loss after training on the batch.
         """
         mean, logvar = self.encoder(input_batch)
+        if torch.isnan(mean).all():
+            return torch.tensor(torch.nan)
 
         # takes iw_samples from the latent space for each data point (for importance weighting)
         mean = mean.repeat(self.iw_samples, 1)
@@ -243,6 +251,11 @@ class VAE(AE):
         torch.Tensor
             The calculated loss.
         """
+        if self.anneal:
+            self.annealing_factor = min(1.0, self.total_iterations / self.annealing_iterations)
+        else:
+            self.annealing_factor = 1.0
+
         log_p_x_theta = model.log_likelihood(
             data.repeat(self.iw_samples, 1),
             logits,

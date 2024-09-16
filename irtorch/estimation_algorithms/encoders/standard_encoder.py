@@ -34,6 +34,11 @@ class StandardEncoder(BaseEncoder):
         self.layers.add_module(
             f"linear{len(hidden_dim)+1}", nn.Linear(hidden_dim[-1], latent_variables)
         )
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.layers[-1].weight, mean=0., std=0.001)
+        nn.init.normal_(self.layers[-1].bias, mean=0., std=0.001)
 
     def forward(self, x):
         return self.layers(x)

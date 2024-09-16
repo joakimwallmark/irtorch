@@ -52,7 +52,7 @@ class Plotter:
         data_frames = []
 
         if isinstance(self.model.algorithm, (AE, VAE)):
-            x_label = "Epoch"
+            x_label = "Iteration interval"
         else:
             x_label = "Iteration"
 
@@ -168,6 +168,10 @@ class Plotter:
                 )[0]
         else:
             scores = scores_to_plot
+
+        if scores[:, [i - 1 for i in latent_variables_to_plot]].shape[1] > 1:
+            x_label = x_label or f"Latent variable {latent_variables_to_plot[0]}"
+            y_label = y_label or f"Latent variable {latent_variables_to_plot[1]}"
 
         return self._distribution_plot(
             latent_scores=scores[:, [i - 1 for i in latent_variables_to_plot]],
@@ -1158,7 +1162,7 @@ class Plotter:
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         fig = go.Figure(data =
             go.Contour(
-                theta=histogram2d,
+                z=histogram2d,
                 x=x_centers, # Centers of bins (x-axis)
                 y=y_centers, # Centers of bins (y-axis)
                 colorscale=contour_colorscale

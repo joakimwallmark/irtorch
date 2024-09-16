@@ -80,15 +80,12 @@ def test_item_parameters(latent_variables):
     parameters = model.item_parameters(irt_format=False)
 
     assert isinstance(parameters, pd.DataFrame), "Output should be a DataFrame"
-    assert parameters.shape == (model.items, model.latent_variables + model.max_item_responses), "Incorrect shape of parameters DataFrame"
+    assert parameters.shape == (model.items, model.latent_variables + model.max_item_responses - 1), "Incorrect shape of parameters DataFrame"
 
     parameters_irt = model.item_parameters(irt_format=True)
 
     assert isinstance(parameters_irt, pd.DataFrame), "Output should be a DataFrame"
-    if model.latent_variables == 1:
-        assert parameters_irt.shape == (model.items, model.latent_variables + model.max_item_responses - 1), "Incorrect shape of parameters DataFrame"
-    else:
-        assert parameters_irt.shape == (model.items, model.latent_variables + model.max_item_responses), "Incorrect shape of parameters DataFrame"
+    assert parameters_irt.shape == (model.items, model.latent_variables + model.max_item_responses - 1), "Incorrect shape of parameters DataFrame"
 
 def test_item_theta_relationship_directions():
     model = GradedResponse(

@@ -1,0 +1,50 @@
+E. I am the life of the party.
+E. I don't talk a lot.
+E. I feel comfortable around people.
+E. I keep in the background.
+E. I start conversations.
+E. I have little to say.
+E. I talk to a lot of different people at parties.
+E. I don't like to draw attention to myself.
+E. I don't mind being the center of attention.
+E. I am quiet around strangers.
+N. I get stressed out easily.
+N. I am relaxed most of the time.
+N. I worry about things.
+N. I seldom feel blue.
+N. I am easily disturbed.
+N. I get upset easily.
+N. I change my mood a lot.
+N. I have frequent mood swings.
+N. I get irritated easily.
+N. I often feel blue.
+A. I feel little concern for others.
+A. I am interested in people.
+A. I insult people.
+A. I sympathize with others' feelings.
+A. I am not interested in other people's problems.
+A. I have a soft heart.
+A. I am not really interested in others.
+A. I take time out for others.
+A. I feel others' emotions.
+A. I make people feel at ease.
+C. I am always prepared.
+C. I leave my belongings around.
+C. I pay attention to details.
+C. I make a mess of things.
+C. I get chores done right away.
+C. I often forget to put things back in their proper place.
+C. I like order.
+C. I shirk my duties.
+C. I follow a schedule.
+C. I am exacting in my work.
+O. I have a rich vocabulary.
+O. I have difficulty understanding abstract ideas.
+O. I have a vivid imagination.
+O. I am not interested in abstract ideas.
+O. I have excellent ideas.
+O. I do not have a good imagination.
+O. I am quick to understand things.
+O. I use difficult words.
+O. I spend time reflecting on things.
+O. I am full of ideas.

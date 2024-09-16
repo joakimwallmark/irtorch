@@ -215,7 +215,7 @@ class MML(BaseIRTAlgorithm):
         if best_model_state is not None:
             model.load_state_dict(best_model_state["state_dict"])
             self.optimizer.load_state_dict(best_model_state["optimizer"])
-            logger.info("Best model found at epoch %s with loss %.4f.", best_epoch, best_loss)
+            logger.info("Best model found at iteration %s with loss %.4f.", best_epoch, best_loss)
 
     def _train_step(
         self,

@@ -290,7 +290,8 @@ class AE(BaseIRTAlgorithm):
                         "state_dict_encoder": copy.deepcopy(self.encoder.state_dict()),
                         "optimizer": copy.deepcopy(self.optimizer.state_dict()) 
                     }
-                elif self.lr_update_count >= learning_rate_updates_before_stopping:
+                
+                if self.lr_update_count >= learning_rate_updates_before_stopping:
                     logger.info("Stopping training after %s learning rate updates.", learning_rate_updates_before_stopping)
                     break
 

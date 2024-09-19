@@ -1,13 +1,14 @@
 import logging
-import torch
+import random
 import copy
+from itertools import product
+import torch
+import torch.multiprocessing as mp
 import pandas as pd
 import numpy as np
-from itertools import product
-import torch.multiprocessing as mp
 from irtorch.models import BaseIRTModel
 
-__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data"]
+__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed"]
 
 logger = logging.getLogger("irtorch")
 
@@ -397,3 +398,23 @@ def split_data(data, train_ratio=0.8, shuffle=True):
     test_data = data_shuffled[train_size:]
 
     return train_data, test_data
+
+def set_seed(seed: int):
+    """
+    Seed all random number generators for reproducibility (random, numpy and torch).
+
+    Parameters
+    ----------
+    seed : int
+        The seed value to use for seeding the random number generators.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # for multi-GPU, but also works for single.
+    # CuDNN (CUDA Deep Neural Network library) provides highly optimized implementations for many neural network operations.
+    # Some of these implementations are non-deterministic due to parallelism and optimization techniques.
+    # Setting torch.backends.cudnn.deterministic = True ensures that CuDNN selects deterministic algorithms, eliminating randomness from these operations.
+    torch.backends.cudnn.deterministic = True
+    # CuDNN's benchmarking feature selects the most efficient algorithm for your specific hardware configuration, but introduces randomness
+    torch.backends.cudnn.benchmark = False

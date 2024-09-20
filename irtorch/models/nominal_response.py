@@ -18,7 +18,7 @@ class NominalResponse(BaseIRTModel):
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     mc_correct : list[int], optional
-        The correct response category for each item. If specified, the logits for the correct responses are cumulative logits. (Default: None)
+        Only for multiple choice data. The correct response category for each item. (Default: None)
     reference_category : bool, optional
         Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by :cite:t:`bock1972`)
 
@@ -97,7 +97,7 @@ class NominalResponse(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.weight_param, mean=1., std=0.01)
+        nn.init.ones_(self.weight_param)
         nn.init.zeros_(self.bias_param)
     
     def forward(self, theta: torch.Tensor) -> torch.Tensor:

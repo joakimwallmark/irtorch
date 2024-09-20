@@ -9,10 +9,10 @@ class GeneralizedPartialCredit(BaseIRTModel):
 
     Parameters
     ----------
-    latent_variables : int
-        Number of latent variables.
     data: torch.Tensor, optional
         A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    latent_variables : int
+        Number of latent variables.
     item_categories : list[int]
         Number of categories for each item. One integer for each item. Missing responses exluded.
     item_theta_relationships : torch.Tensor, optional
@@ -43,19 +43,19 @@ class GeneralizedPartialCredit(BaseIRTModel):
     >>> from irtorch.estimation_algorithms import AE
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
-    >>> model = GeneralizedPartialCredit(1, data)
+    >>> model = GeneralizedPartialCredit(data)
     >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,
-        latent_variables: int = 1,
         data: torch.Tensor = None,
+        latent_variables: int = 1,
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
     ):
         if item_categories is None:
             if data is None:
-                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+                raise ValueError("Either item_categories or data must be provided to initialize the model.")
             else:
                 # replace nan with -inf to get max
                 item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()

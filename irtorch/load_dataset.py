@@ -110,7 +110,7 @@ def swedish_sat() -> tuple[torch.Tensor, list[int]]:
 def swedish_sat_binary() -> torch.Tensor:
     """
     Load a sample from Swedish SAT dataset coded as incorrect/correct. 
-    The first 40 items are from the quantitative part of the test. The last 40 items are from the verbal part.
+    The first 80 items are from the quantitative part of the test. The last 80 items are from the verbal part.
 
     Returns
     -------

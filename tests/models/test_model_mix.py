@@ -4,8 +4,8 @@ from irtorch.models import ModelMix, TwoParameterLogistic, GeneralizedPartialCre
 
 @pytest.fixture
 def model_mix() -> ModelMix:
-    two_pl = TwoParameterLogistic(2, 2)
-    gpc = GeneralizedPartialCredit(2, 1, [3])
+    two_pl = TwoParameterLogistic(latent_variables=2, items=2)
+    gpc = GeneralizedPartialCredit(latent_variables=2, item_categories=[3])
     return ModelMix([two_pl, gpc])
 
 def test_forward_loss(model_mix: ModelMix):

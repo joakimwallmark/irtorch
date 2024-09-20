@@ -384,16 +384,12 @@ def split_data(data, train_ratio=0.8, shuffle=True):
     >>> print("Testing data size:", test_data.shape)
     """
     if shuffle:
-        # Shuffle data
         indices = torch.randperm(data.size(0))
         data_shuffled = data[indices]
     else:
         data_shuffled = data
 
-    # Calculate the number of training samples
     train_size = int(data.size(0) * train_ratio)
-
-    # Split the data
     train_data = data_shuffled[:train_size]
     test_data = data_shuffled[train_size:]
 

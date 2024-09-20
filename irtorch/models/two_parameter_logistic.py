@@ -9,6 +9,8 @@ class TwoParameterLogistic(BaseIRTModel):
 
     Parameters
     ----------
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute the number of items. Columns are items and rows are respondents. (default is None)
     latent_variables : int
         Number of latent variables.
     items : int
@@ -41,15 +43,19 @@ class TwoParameterLogistic(BaseIRTModel):
     >>> from irtorch.load_dataset import swedish_sat_binary
     >>> # Use quantitative part of the SAT data
     >>> data = swedish_sat_binary()[:, :80]
-    >>> model = TwoParameterLogistic(1, items=80)
+    >>> model = TwoParameterLogistic(items=80)
     >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,
-        latent_variables: int,
-        items: int,
+        data: torch.Tensor = None,
+        latent_variables: int = 1,
+        items: int = None,
         item_theta_relationships: torch.Tensor = None
     ):
+        if items is None and data is None:
+            raise ValueError("Either items or data must be provided to initialize the model.")
+        
         super().__init__(latent_variables=latent_variables, item_categories = [2] * items)
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (items, latent_variables):

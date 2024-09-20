@@ -19,10 +19,10 @@ class MonotoneNN(BaseIRTModel):
 
     Parameters
     ----------
-    latent_variables : int, optional
-        Number of latent variables. (default is 1)
     data: torch.Tensor, optional
         A 2D torch tensor with test data. Used to automatically compute item_categories. Columns are items and rows are respondents. (default is None)
+    latent_variables : int, optional
+        Number of latent variables. (default is 1)
     item_categories : list[int], optional
         Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
     hidden_dim : list[int]
@@ -68,13 +68,13 @@ class MonotoneNN(BaseIRTModel):
     >>> from irtorch.estimation_algorithms import AE
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
-    >>> model = MonotoneNN(1, data)
+    >>> model = MonotoneNN(data)
     >>> model.fit(train_data=data, algorithm=AE())
     """
     def __init__(
         self,
-        latent_variables: int = 1,
         data: torch.Tensor = None,
+        latent_variables: int = 1,
         item_categories: list[int] = None,
         hidden_dim: list[int] = None,
         mc_correct: list[int] = None,
@@ -85,7 +85,7 @@ class MonotoneNN(BaseIRTModel):
     ):
         if item_categories is None:
             if data is None:
-                raise ValueError("Either an instantiated model, item_categories or data must be provided to initialize the model.")
+                raise ValueError("Either item_categories or data must be provided to initialize the model.")
             else:
                 # replace nan with -inf to get max
                 item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()

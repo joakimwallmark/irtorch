@@ -37,7 +37,7 @@ def test_log_likelihood():
 
 
 def test_split_activation():
-    model = MonotoneNN(2, [2, 2, 2], [6], use_bounded_activation=True)
+    model = MonotoneNN(latent_variables=2, item_categories=[2, 2, 2], hidden_dim=[6], use_bounded_activation=True)
 
     input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
     output_tensor_true = model.split_activation(input_tensor)

@@ -246,12 +246,13 @@ class BaseIRTModel(ABC, nn.Module):
         rescale_by_item_score: bool = True,
     ) -> torch.Tensor:
         """
-        Computes the slope of the expected item scores, averaged over the sample intheta. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median theta scores for the other latent variables.
+        Computes the slope of the expected item scores with respect to each latent variable, 
+        averaged over the population thetas. Similar to loadings in traditional factor analysis.
 
         Parameters
         ----------
         theta : torch.Tensor, optional
-            A 2D tensor with latent theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training theta scores. (default is None)
+            A 2D tensor with theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
 
@@ -265,11 +266,9 @@ class BaseIRTModel(ABC, nn.Module):
         if theta.requires_grad:
             theta.requires_grad_(False)
 
-        median, _ = torch.median(theta, dim=0)
         mean_slopes = torch.zeros(theta.shape[0], len(self.item_categories),theta.shape[1])
         for latent_variable in range(theta.shape[1]):
-            theta_scores = median.repeat(theta.shape[0], 1)
-            theta_scores[:, latent_variable], _ = theta[:, latent_variable].sort()
+            theta_scores = theta.clone()
             theta_scores.requires_grad_(True)
             expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
             if not self.mc_correct and rescale_by_item_score:
@@ -514,7 +513,7 @@ class BaseIRTModel(ABC, nn.Module):
     def _ml_map_theta_scores(
         self,
         data: torch.Tensor,
-        encoder_theta_scores:torch.Tensor = None,
+        initial_theta_scores:torch.Tensor = None,
         theta_estimation: str = "ML",
         learning_rate: float = 0.3,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -526,7 +525,7 @@ class BaseIRTModel(ABC, nn.Module):
         ----------
         data: torch.Tensor
             A 2D tensor with test data. Columns are items and rows are respondents
-        encoder_theta_scores: torch.Tensor
+        initial_theta_scores: torch.Tensor
             A 2D tensor with the theta scores of the training data. Columns are latent variables and rows are respondents.
         theta_estimation: str, optional
             Method used to obtain the theta scores. Can be 'ML', 'MAP' for maximum likelihood or maximum a posteriori respectively. (default is 'ML')
@@ -555,19 +554,19 @@ class BaseIRTModel(ABC, nn.Module):
             # Ensure model parameters gradients are not updated
             self.requires_grad_(False)
 
-            if encoder_theta_scores is None:
-                encoder_theta_scores = torch.zeros(data.shape[0], self.latent_variables).float()
+            if initial_theta_scores is None:
+                initial_theta_scores = torch.zeros(data.shape[0], self.latent_variables).float()
 
             if device == "cuda":
                 self.to(device)
-                encoder_theta_scores = encoder_theta_scores.to(device)
+                initial_theta_scores = initial_theta_scores.to(device)
                 data = data.to(device)
                 max_iter = 30
             else:
                 max_iter = 20
 
             # Initial guess for the theta_scores are the outputs from the encoder
-            optimized_theta_scores = encoder_theta_scores.clone().detach().requires_grad_(True)
+            optimized_theta_scores = initial_theta_scores.clone().detach().requires_grad_(True)
 
             optimizer = torch.optim.LBFGS([optimized_theta_scores], lr = learning_rate)
             loss_history = []

@@ -81,7 +81,7 @@ def test_expected_item_score_slopes(base_irt_model: BaseIRTModel):
     input_theta = torch.tensor([[-2.0, -3.0], [1.0, 2.0], [1.0, 1.0]])
     expected_item_scores = base_irt_model.expected_item_score_slopes(input_theta)
 
-    assert torch.allclose(expected_item_scores, torch.tensor([[ 0.1236,  0.0619], [-0.1075, -0.0451]]), atol=1e-3)
+    assert torch.allclose(expected_item_scores, torch.tensor([[ 0.0366,  0.0366], [-0.0264, -0.0264]]), atol=1e-3)
 
 def test_information(base_irt_model: BaseIRTModel):
     def item_probabilities_mock(theta):

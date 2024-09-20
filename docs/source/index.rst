@@ -35,7 +35,6 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    bit_scales
    config
    datasets
-   cross_validation
    utils
 
 .. toctree::

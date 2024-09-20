@@ -41,8 +41,11 @@ def test_swedish_sat_binary():
     assert data[~data.isnan()].min() == 0.0
 
 def test_big_five():
-    data = big_five()
+    data, df, items = big_five()
     assert data.dtype == torch.float32
-    assert data.shape == (19719, 50)
+    assert data.shape == (667701, 50)
     assert data[~data.isnan()].max() == 4.0
     assert data[~data.isnan()].min() == 0.0
+    assert len(df) == 1015341
+    assert len(df.columns) == 110
+    assert len(items) == 50

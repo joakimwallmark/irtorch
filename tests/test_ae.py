@@ -44,8 +44,8 @@ class TestAE:
             list(algorithm.encoder.parameters()) + list(irt_model.parameters()), lr=0.1, amsgrad=True
         )
         first_loss = float("inf")
-        for _ in range(5):
-            loss = algorithm._train_step(irt_model)
+        for epoch in range(5):
+            loss = algorithm._train_step(irt_model, epoch)
             if first_loss == float("inf"):
                 first_loss = loss
         
@@ -63,10 +63,7 @@ class TestAE:
         # Mock the inner functions that would be called during training
         with patch.object(
             algorithm, "_train_step", return_value=torch.tensor(0.5)
-        ) as mocked_train_step, patch.object(
-            algorithm, "_validation_step", return_value=torch.tensor(0.5)
-        ) as mocked_validation_step:
-            # Call fit function
+        ) as mocked_train_step:
             algorithm.fit(
                 model=irt_model,
                 train_data=test_data[0:100],
@@ -76,4 +73,3 @@ class TestAE:
 
             # Check if inner functions are called
             assert mocked_train_step.call_count == 5
-            assert mocked_validation_step.call_count == 5

@@ -18,9 +18,7 @@ class NominalResponse(BaseIRTModel):
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     mc_correct : list[int], optional
-        Only for multiple choice data. The correct response category for each item. (Default: None)
-    reference_category : bool, optional
-        Whether to use the first category as an unparameterized reference category. (Default: False and uses the original parameterization given by :cite:t:`bock1972`)
+        Only for multiple choice data. The correct response option for each item. (Default: None)
 
     Notes
     -----
@@ -40,6 +38,12 @@ class NominalResponse(BaseIRTModel):
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_{jm}` is a vector of weights for item :math:`j` and response category :math:`m`.
     - :math:`d_{jm}` is the bias term for item :math:`j` and response category :math:`m`.
+
+    The model is fitted with the following constraints of the item parameters for model identifiability:
+
+    .. math::
+
+        \sum_{m=0}^{M_j} a_{jm} = 0, \quad \sum_{m=0}^{M_j} d_{jm} = 0.
     """
     def __init__(
         self,
@@ -48,7 +52,6 @@ class NominalResponse(BaseIRTModel):
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
         mc_correct: list[int] = None,
-        reference_category: bool = False
     ):
         if item_categories is None:
             if data is None:
@@ -70,36 +73,34 @@ class NominalResponse(BaseIRTModel):
 
         free_weights = torch.zeros(self.items, self.max_item_responses, latent_variables)
         for item, item_cat in enumerate(self.item_categories):
-            start_1 = 1 if reference_category else 0
             if item_theta_relationships is not None:
-                free_weights[item, start_1:item_cat, :] = item_theta_relationships[item, :]
+                free_weights[item, 1:item_cat, :] = item_theta_relationships[item, :]
             else:
-                free_weights[item, start_1:item_cat, :] = 1.0
+                free_weights[item, 1:item_cat, :] = 1.0
 
         free_weights = free_weights.reshape(-1, latent_variables)
         self.weight_param = nn.Parameter(torch.zeros(free_weights.sum().int()))
 
-        number_of_bias_parameters = sum(self.item_categories) if not reference_category else sum(self.item_categories) - self.items
+        number_of_bias_parameters = sum(self.item_categories) - self.items
         self.bias_param = nn.Parameter(torch.zeros(number_of_bias_parameters))
-        first_category = torch.zeros(self.items, self.max_item_responses)
-        if reference_category:
-            first_category[:, 0] = 1.0
-        first_category = first_category.reshape(-1)
         missing_category = torch.zeros(self.items, self.max_item_responses)
         for item, item_cat in enumerate(self.item_categories):
             missing_category[item, item_cat:self.max_item_responses] = 1.0
         missing_category = missing_category.reshape(-1)
+
+        first_category = torch.zeros(self.items, self.max_item_responses)
+        first_category[:, 0] = 1.0
+        first_category = first_category.reshape(-1)
         free_bias = (1 - first_category) * (1 - missing_category)
         self.register_buffer("free_weights", free_weights.bool())
         self.register_buffer("free_bias", free_bias.bool())
         self.register_buffer("missing_category", missing_category.bool())
-        self.register_buffer("first_category", first_category.bool())
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.ones_(self.weight_param)
+        nn.init.zeros_(self.weight_param)
         nn.init.zeros_(self.bias_param)
-    
+
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
@@ -116,27 +117,24 @@ class NominalResponse(BaseIRTModel):
         """
         bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
-        
+        bias = bias.view(self.items, -1)
+        bias[:, 0] = -bias[:, 1:].sum(dim=1) # all biases sum to 0 for identifiability
+
         weights = torch.zeros(self.output_size, self.latent_variables, device=theta.device)
         weights[self.free_weights] = self.weight_param
-        weighted_theta = torch.matmul(theta, weights.T)
+        weights = weights.view(self.items, -1, self.latent_variables)
+        weights[:, 0] = -weights[:, 1:].sum(dim=1) # all weights sum to 0 for identifiability
+        weighted_theta = torch.matmul(theta, weights.view(-1, self.latent_variables).T)
 
-        output = weighted_theta + bias
+        output = weighted_theta + bias.flatten()
         # stop gradients from flowing through the missing categories
         output[:, self.missing_category] = -torch.inf
 
-        output[:, self.first_category] = 0
-
         return output
 
-    def item_parameters(self, irt_format = False) -> pd.DataFrame:
+    def item_parameters(self) -> pd.DataFrame:
         """
         Get the item parameters for a fitted model.
-
-        Parameters
-        ----------
-        irt_format : bool, optional
-            Only for unidimensional models. Whether to return the item parameters in traditional IRT format. Otherwise returns weights and biases. (default is False)
 
         Returns
         -------
@@ -146,19 +144,19 @@ class NominalResponse(BaseIRTModel):
         biases = torch.zeros(self.output_size)
         biases[self.free_bias] = self.bias_param
         biases = biases.reshape(-1, self.max_item_responses)
+        biases[:, 0] = -biases[:, 1:].sum(dim=1)
 
         weights = torch.zeros(self.output_size, self.latent_variables)
         weights[self.free_weights] = self.weight_param
-        weights = weights.reshape(-1, self.max_item_responses * self.latent_variables)
+        weights = weights.reshape(-1, self.max_item_responses, self.latent_variables)
+        weights[:, 0] = -weights[:, 1:].sum(dim=1)
+        weights = weights.permute(0, 2, 1).reshape(-1, self.max_item_responses * self.latent_variables)
 
         weights_df = pd.DataFrame(weights.detach().numpy())
         weights_df.columns = [f"a{i+1}{j+1}" for i in range(self.latent_variables) for j in range(int(weights.shape[1]/self.latent_variables))]
-        if irt_format and self.latent_variables == 1:
-            biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
-        else:
-            biases_df = pd.DataFrame(biases.detach().numpy())
+        biases_df = pd.DataFrame(biases.detach().numpy())
             
-        biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
+        biases_df.columns = [f"d{i+1}" for i in range(biases_df.shape[1])]
         parameters = pd.concat([weights_df, biases_df], axis=1)
 
         return parameters

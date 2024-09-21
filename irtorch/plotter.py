@@ -441,7 +441,7 @@ class Plotter:
         if fixed_thetas is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
                 fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 fixed_thetas = torch.zeros(model_dim)
 
         elif len(fixed_thetas) is not model_dim - len(latent_variables):

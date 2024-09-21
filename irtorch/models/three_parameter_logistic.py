@@ -57,6 +57,8 @@ class ThreeParameterLogistic(BaseIRTModel):
     ):
         if items is None and data is None:
             raise ValueError("Either items or data must be provided to initialize the model.")
+        if data is not None:
+            items = data.size(1)
 
         super().__init__(latent_variables=latent_variables, item_categories = [2] * items)
         if item_theta_relationships is not None:
@@ -78,7 +80,7 @@ class ThreeParameterLogistic(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.weight_param, mean=1., std=0.01)
+        nn.init.ones_(self.weight_param)
         nn.init.zeros_(self.bias_param)
         nn.init.constant_(self.guessing_param, -1.1)
 

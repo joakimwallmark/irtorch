@@ -940,7 +940,7 @@ class Evaluator:
                 theta_min = theta.min(dim=0)[0]
                 theta_max = theta.max(dim=0)[0]
                 theta_stds = theta.std(dim=0)
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 theta_min = torch.full((self.model.latent_variables,), -3)
                 theta_max = torch.full((self.model.latent_variables,), 3)
                 theta_stds = torch.ones(self.model.latent_variables)

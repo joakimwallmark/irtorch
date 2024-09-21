@@ -49,7 +49,7 @@ class MML(BaseIRTAlgorithm):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         max_epochs: int = 1000,
-        integration_method: str = "gauss_hermite",
+        integration_method: str = "quasi_mc",
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
         learning_rate: float = 0.2,
@@ -70,7 +70,7 @@ class MML(BaseIRTAlgorithm):
             The maximum number of epochs to train for. (default is 1000)
         integration_method : str, optional
             The method to use for approximating integrals over the latent variables. Can be either "gauss_hermite" for Gauss-Hermite quadrature
-            or "quasi_mc" for quasi-Monte Carlo. (default is "gauss_hermite").
+            or "quasi_mc" for quasi-Monte Carlo. (default is "quasi_mc").
         quadrature_points : int, optional
             The number of quadrature points to use for latent variable integration. Note that large datasets may lead to memory issues if quadratures points are too high. (default is 'None' and uses a function of the number of latent variables)
         covariance_matrix : torch.Tensor, optional

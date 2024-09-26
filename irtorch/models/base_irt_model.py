@@ -314,20 +314,18 @@ class BaseIRTModel(ABC, nn.Module):
         -----
         In the context of IRT, the Fisher information matrix measures the amount of information
         that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\mathbf{\theta}`.
-
-        The formula for the Fisher information matrix in the case of multiple parameters is:
+        :math:`\mathbf{\theta}`. It is defined as:
 
         .. math::
 
-            I(\mathbf{\theta}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}\right) \left(\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}\right]
+            I(\mathbf{\theta}) = E\left[ \left(\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}\right) \left(\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}\right]
 
         Where:
 
         - :math:`I(\mathbf{\theta})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \mathbf{\theta})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial^2 \log f(X; \mathbf{\theta})}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
+        - :math:`\ell(\mathbf{\theta}|X)` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{\theta}`.
+        - :math:`\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
+        - :math:`\frac{\partial^2 \log f(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
         
         For additional details, see :cite:t:`Chang2017`.
         """

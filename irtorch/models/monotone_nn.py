@@ -277,4 +277,7 @@ class MonotoneNN(BaseIRTModel):
         torch.Tensor
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
-        return torch.stack([getattr(self, f"negation_dim{i}").all_item_weights().sign() for i in range(self.latent_variables)], dim=1).int()
+        if hasattr(self, "negation_dim0"):
+            return torch.stack([getattr(self, f"negation_dim{i}").all_item_weights().sign() for i in range(self.latent_variables)], dim=1).int()
+        else:
+            return torch.ones(self.items, self.latent_variables, dtype=torch.int)

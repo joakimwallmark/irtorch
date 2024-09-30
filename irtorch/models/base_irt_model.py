@@ -245,9 +245,15 @@ class BaseIRTModel(ABC, nn.Module):
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
     ) -> torch.Tensor:
-        """
-        Computes the slope of the expected item scores with respect to each latent variable, 
-        averaged over the population thetas. Similar to loadings in traditional factor analysis.
+        r"""
+        Approximates the population average expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
+        For :math:`n` supplied :math:`\theta` scores, the average slopes are copmuted as:
+
+        .. math ::
+
+            \int\frac{\partial E[X_j|\mathbf{\theta}]}{\partial \mathbf{\theta}} d\mathbf{\theta}\approx \sum_{i=1}^{n}\frac{\partial E[X_j|\mathbf{\theta}_i]}{\partial \mathbf{\theta}_i}.	
+        
+        These are similar to loadings in traditional factor analysis.
 
         Parameters
         ----------
@@ -323,9 +329,9 @@ class BaseIRTModel(ABC, nn.Module):
         Where:
 
         - :math:`I(\mathbf{\theta})` is the Fisher Information Matrix.
-        - :math:`\ell(\mathbf{\theta}|X)` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial^2 \log f(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
+        - :math:`\ell(\mathbf{\theta}|X)` is the log-likelihood of :math:`\mathbf{\theta}`, given the latent variable vector :math:`X`.
+        - :math:`\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}` is the gradient vector of the log-likelihood with respect to :math:`\mathbf{\theta}`.
+        - :math:`\frac{\partial^2 \log f(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix (the second derivatives of the log-likelihood with respect to :math:`\mathbf{\theta}`).
         
         For additional details, see :cite:t:`Chang2017`.
         """

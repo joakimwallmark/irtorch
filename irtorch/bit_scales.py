@@ -153,9 +153,9 @@ class BitScales:
         start_theta_guessing_probabilities: list[float] = None,
         start_theta_guessing_iterations: int = 10000,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Computes the bit scores from theta scores.
-
+        r"""
+        Transforms :math:`\mathbf{\theta}` scores into bit scores :math:`B(\mathbf{\theta})`.
+        
         Parameters
         ----------
         theta : torch.Tensor
@@ -185,6 +185,35 @@ class BitScales:
         -------
         tuple[torch.Tensor, torch.Tensor]
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_theta.
+
+        Notes
+        -----
+        First, item bit scores for each item :math:`j` are computed from :math:`\mathbf{\theta}` scores as follows:
+
+        .. math ::
+
+            \begin{equation}
+                \begin{aligned}
+                    B_j(\mathbf{\theta})=
+                    \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}
+                    \left|\frac{dH_j(t)}{dt}\right| dt.
+                \end{aligned}
+            \end{equation}
+
+        where
+
+        - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
+        - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
+            
+        The total bit scores :math:`B(\mathbf{\theta})` are then the sum of the item scores:
+
+        .. math ::
+
+            \begin{equation}
+                \begin{aligned}
+                    B(\mathbf{\theta}) = \sum_{j=1}^{J} B_j(\mathbf{\theta}).
+                \end{aligned}
+            \end{equation}
         """
         if grid_points <= 0:
             raise ValueError("steps must be a positive integer")
@@ -270,7 +299,7 @@ class BitScales:
 
         .. math ::
 
-            f^{\prime}(\mathbf{\theta}) \approx \frac{f(\mathbf{\theta}+h)-f(\mathbf{\theta}-h)}{2 h}
+            f^{\prime}(B(\mathbf{\theta})) \approx \frac{f(B(\mathbf{\theta})+h)-f(B(\mathbf{\theta})-h)}{2 h}
 
         Parameters
         ----------
@@ -370,16 +399,14 @@ class BitScales:
         **kwargs
     ) -> torch.Tensor:
         """
-        Computes the slope of the expected item scores with respect to the bit scores, averaged over the sample intheta. Similar to loadings in traditional factor analysis. For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median theta scores for the other latent variables.
+        Computes the slope of the expected item scores with respect to the bit scores, averaged over the provided sample of theta scores. 
+        Similar to loadings in traditional factor analysis. 
+        For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median theta scores for the other latent variables.
 
         Parameters
         ----------
         theta : torch.Tensor, optional
             A 2D tensor with latent theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, uses the training theta scores. (default is None)
-        scale : str, optional
-            The latent trait scale to differentiate with respect to. Can be 'bit' or 'theta'. 
-            'bit' is only a linear approximation for multidimensional models since multiple theta scores can lead to the same bit scores, 
-            and thus there are no unique derivatives of the item scores with respect to the bit scores for multidimensional models. (default is 'theta')
         bit_scores: torch.Tensor, optional
             A 2D tensor with bit scores corresponding to the theta scores. If not provided, computes the bit scores from the theta scores. (default is None)
         rescale_by_item_score : bool, optional
@@ -461,22 +488,20 @@ class BitScales:
 
         Notes
         -----
-        In the context of IRT, the Fisher information matrix measures the amount of information
-        that a test taker's responses :math:`X` carries about the latent variable(s)
-        :math:`\mathbf{\theta}`.
-
-        The formula for the Fisher information matrix in the case of multiple parameters is:
+        The Fisher information matrix measures the amount of information
+        that a test taker's responses :math:`X` carries about the bit scale transformed latent variable(s)
+        :math:`B(\mathbf{\theta})`.
 
         .. math::
 
-            I(\mathbf{\theta}) = E\left[ \left(\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}\right) \left(\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}\right]
+            I(B(\mathbf{\theta})) = E\left[ \left(\frac{\partial \ell(B(\mathbf{\theta})|X)}{\partial B(\mathbf{\theta})}\right) \left(\frac{\partial \ell(B(\mathbf{\theta})|X)}{\partial B(\mathbf{\theta})}\right)^T \right] = -E\left[\frac{\partial^2 \ell(B(\mathbf{\theta})|X)}{\partial B(\mathbf{\theta}) \partial B(\mathbf{\theta})^T}\right]
 
         Where:
 
-        - :math:`I(\mathbf{\theta})` is the Fisher Information Matrix.
-        - :math:`\ell(X; \mathbf{\theta})` is the log-likelihood of :math:`X`, given the latent variable vector :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial \ell(X; \mathbf{\theta})}{\partial \mathbf{\theta}}` is the gradient vector of the first derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial^2 \log f(X; \mathbf{\theta})}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix of the second derivatives of the log-likelihood of :math:`X` with respect to :math:`\mathbf{\theta}`.
+        - :math:`I(B(\mathbf{\theta}))` is the Fisher Information Matrix.
+        - :math:`\ell(B(\mathbf{\theta})|X)` is the log-likelihood of :math:`B(\mathbf{\theta})`, given the latent variable vector :math:`X`.
+        - :math:`\frac{\partial \ell(B(\mathbf{\theta})|X)}{\partial B(\mathbf{\theta})}` is the gradient vector of the log-likelihood with respect to :math:`B(\mathbf{\theta})`.
+        - :math:`\frac{\partial^2 \log f(B(\mathbf{\theta})|X)}{\partial B(\mathbf{\theta}) \partial B(\mathbf{\theta})^T}` is the Hessian matrix (the second derivatives of the log-likelihood with respect to :math:`B(\mathbf{\theta})`).
         
         For additional details, see :cite:t:`Chang2017`.
         """

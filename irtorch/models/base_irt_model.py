@@ -240,20 +240,13 @@ class BaseIRTModel(ABC, nn.Module):
             return expected_item_scores.sum(dim=1)
 
     @torch.inference_mode(False)
-    def expected_item_score_slopes(
+    def expected_item_score_gardients(
         self,
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
     ) -> torch.Tensor:
         r"""
-        Approximates the population average expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
-        For :math:`n` supplied :math:`\theta` scores, the average slopes are computed as:
-
-        .. math ::
-
-            \int\frac{\partial E[X_j|\mathbf{\theta}]}{\partial \mathbf{\theta}} d\mathbf{\theta}\approx \sum_{i=1}^{n}\frac{\partial E[X_j|\mathbf{\theta}_i]}{\partial \mathbf{\theta}_i}.	
-        
-        These are similar to loadings in traditional factor analysis.
+        Computes expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
 
         Parameters
         ----------
@@ -265,14 +258,12 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         torch.Tensor
-            A 2D tensor with the expected item score slopes. Rows are items and columns are latent variables.
+            A 3D tensor with the expected item score gradients. Dimensions are (theta row, item, latent_variable).
         """
-        if theta.shape[0] < 2:
-            raise ValueError("theta must have at least 2 rows.")
         if theta.requires_grad:
             theta.requires_grad_(False)
 
-        mean_slopes = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
+        gradients = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
         for latent_variable in range(theta.shape[1]):
             theta_scores = theta.clone()
             theta_scores.requires_grad_(True)
@@ -285,11 +276,9 @@ class BaseIRTModel(ABC, nn.Module):
                 if theta_scores.grad is not None:
                     theta_scores.grad.zero_()
                 expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
-                mean_slopes[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
+                gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
 
-        mean_slopes = mean_slopes.mean(dim=0)
-
-        return mean_slopes
+        return gradients
 
     def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
         r"""

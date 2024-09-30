@@ -318,7 +318,7 @@ class Plotter:
         Parameters
         ----------
         relationships : torch.Tensor
-            A tensor of item-latent variable relationships. Typically the returned tensor from expected_item_score_slopes() where each row represents an item and each column represents a latent variable.
+            A tensor of item-latent variable relationships. Each row represents an item and each column represents a latent variable.
         title : str, optional
             The title for the plot. (default is "Relationships: Items vs. latent variables")
         x_label : str, optional

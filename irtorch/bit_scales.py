@@ -295,7 +295,22 @@ class BitScales:
         start_theta_guessing_iterations: int = 10000,
     ) -> torch.Tensor:
         r"""
-        Approximates the gradients of the bit scores with respect to the input theta scores using the central difference method:
+        For unidimensional models: Computes the gradients of the item bit scores for each :math:`j` with respect to the input theta scores
+
+        .. math ::
+
+            \frac{\partial B_j(\mathbf{\theta})}{\partial \mathbf{\theta}} = 
+            \frac{\partial \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}\left|\frac{dH_j(t)}{dt}\right| dt}{\partial \mathbf{\theta}}=
+            \left|\frac{\partial H_j(\mathbf{\theta})}{\partial \mathbf{\theta}}\right|,
+
+        where 
+
+        - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
+        - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
+
+        For total bit score gradients, the gradients for each item can be summed.
+        
+        For multidimmensional models: Approximates the gradients of the total bit scores with respect to the input theta scores using the central difference method:
 
         .. math ::
 
@@ -314,7 +329,7 @@ class BitScales:
         population_theta : torch.Tensor, optional
             A 2D tensor with theta scores of the population. Used to estimate relationships between each theta and sum scores. Columns are latent variables and rows are respondents. (default is None and uses theta_estimation with the model training data)
         one_dimensional: bool, optional
-            Whether to estimate one combined bit score for a multidimensional self.model. (default is True)
+            Whether to estimate one combined bit score for a multidimensional models. (default is True)
         theta_estimation : str, optional
             Method used to obtain the theta score grid for bit score computation. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
@@ -333,9 +348,35 @@ class BitScales:
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, bit scores, theta scores) where the last two dimensions represent the jacobian.
-            If independent_theta is provided, the tensor has dimensions (theta rows, bit scores).
+            A torch tensor with the gradients for each theta score. Dimensions are (theta row, bit score, latent variable).
+            If independent_theta is provided, the tensor has dimensions (theta row, bit score).
         """
+        if self.model.latent_variables == 1:
+            if theta.requires_grad:
+                theta.requires_grad_(False)
+
+            gradients = torch.zeros(theta.shape[0], len(self.model.item_categories), theta.shape[1])
+            theta_scores = theta.clone()
+            theta_scores.requires_grad_(True)
+            probs = self.model.item_probabilities(theta_scores)
+            entropies = entropy(probs)
+
+            # gradient for each item
+            for item in range(entropies.shape[1]):
+                if theta_scores.grad is not None:
+                    theta_scores.grad.zero_()
+                entropies[:, item].sum().backward(retain_graph=True)
+                for latent_variable in range(theta.shape[1]):
+                    gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
+
+            gradients[gradients.isnan()] = 0.
+            return gradients.abs()
+        
+        if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
+            q1_q3 = torch.quantile(self.model.algorithm.training_theta_scores, torch.tensor([0.25, 0.75]), dim=0)
+        else:
+            q1_q3 = torch.tensor([-0.6745, 0.6745]).unsqueeze(1).expand(-1, self.model.latent_variables)
+
         if start_theta is None:
             start_theta = self.bit_score_starting_theta(
                 theta_estimation=theta_estimation,
@@ -345,15 +386,6 @@ class BitScales:
                 guessing_probabilities=start_theta_guessing_probabilities,
                 guessing_iterations=start_theta_guessing_iterations,
             )
-
-        if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-        # if isinstance(self.algorithm, (AE, VAE)):
-            q1_q3 = torch.quantile(self.model.algorithm.training_theta_scores, torch.tensor([0.25, 0.75]), dim=0)
-        else:
-        # elif isinstance(self.algorithm, MML):
-            q1_q3 = torch.tensor([-0.6745, 0.6745]).unsqueeze(1).expand(-1, self.model.latent_variables)
-
-        
         iqr = q1_q3[1] - q1_q3[0]
         lower_bound = q1_q3[0] - 1.5 * iqr
         upper_bound = q1_q3[1] + 1.5 * iqr
@@ -389,9 +421,8 @@ class BitScales:
 
         return gradients
 
-
     @torch.inference_mode(False)
-    def bit_expected_item_score_slopes(
+    def expected_item_score_slopes(
         self,
         theta: torch.Tensor,
         bit_scores: torch.Tensor = None,
@@ -399,9 +430,9 @@ class BitScales:
         **kwargs
     ) -> torch.Tensor:
         """
-        Computes the slope of the expected item scores with respect to the bit scores, averaged over the provided sample of theta scores. 
-        Similar to loadings in traditional factor analysis. 
-        For each separate latent variable, the slope is computed as the average of the slopes of the expected item scores for each item, using the median theta scores for the other latent variables.
+        For unidimensional models: Computes the derivatives of the expected item scores with respect to the bit scores, averaged over the provided sample of theta scores.
+        
+        For multidimensional models: Computes the linear regression slopes of each latent variable with the expected item scores as response variables. 
 
         Parameters
         ----------
@@ -417,48 +448,50 @@ class BitScales:
         Returns
         -------
         torch.Tensor
-            A tensor with the expected item score slopes.
+            A 3D tensor with the expected item score gradients. The first dimension corresponds to the rows in the supplied theta, second is the item, and third is the latent variable.
         """
-        if theta.shape[0] < 2:
-            raise ValueError("theta must have at least 2 rows.")
-        if theta.requires_grad:
-            theta.requires_grad_(False)
-
         if self.model.latent_variables > 1:
+            if theta.requires_grad:
+                theta.requires_grad_(False)
             expected_item_sum_scores = self.model.expected_scores(theta, return_item_scores=True).detach()
             if not self.model.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
             if bit_scores is None:
                 bit_scores = self.bit_scores(theta)[0]
             # item score slopes for each item
-            mean_slopes = linear_regression(bit_scores, expected_item_sum_scores).t()[:, 1:]
+            gradients = linear_regression(bit_scores, expected_item_sum_scores).t()[:, 1:]
+            # median, _ = torch.median(theta, dim=0)
+            # mean_slopes = torch.zeros(theta.shape[0], len(self.model.item_categories),theta.shape[1])
+            # for latent_variable in range(theta.shape[1]):
+            #     theta_scores = median.repeat(theta.shape[0], 1)
+            #     theta_scores[:, latent_variable], _ = theta[:, latent_variable].sort()
+            #     theta_scores.requires_grad_(True)
+            #     expected_item_sum_scores = self.model.expected_scores(theta_scores, return_item_scores=True)
+            #     if not self.model.mc_correct and rescale_by_item_score:
+            #         expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
+
+            #     # item score slopes for each item
+            #     for item in range(expected_item_sum_scores.shape[1]):
+            #         if theta_scores.grad is not None:
+            #             theta_scores.grad.zero_()
+            #         expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
+            #         gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
         else:
-            median, _ = torch.median(theta, dim=0)
-            mean_slopes = torch.zeros(theta.shape[0], len(self.model.item_categories),theta.shape[1])
-            for latent_variable in range(theta.shape[1]):
-                theta_scores = median.repeat(theta.shape[0], 1)
-                theta_scores[:, latent_variable], _ = theta[:, latent_variable].sort()
-                theta_scores.requires_grad_(True)
-                expected_item_sum_scores = self.model.expected_scores(theta_scores, return_item_scores=True)
-                if not self.model.mc_correct and rescale_by_item_score:
-                    expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
-
-                # item score slopes for each item
-                for item in range(expected_item_sum_scores.shape[1]):
-                    if theta_scores.grad is not None:
-                        theta_scores.grad.zero_()
-                    expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
-                    mean_slopes[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
-
-            if self.model.latent_variables == 1:
-                dbit_dtheta = self.bit_score_gradients(theta, independent_theta=1, **kwargs)
-                # divide by the derivative of the bit scores with respect to the theta scores
-                # to get the expected item score slopes with respect to the bit scores
-                mean_slopes = torch.einsum("ab...,a...->ab...", mean_slopes, 1/dbit_dtheta)
+            dx_dtheta = self.model.expected_item_score_gardients(theta, rescale_by_item_score)
+            # sum over items to get dB(theta)/dtheta from dB_j(theta)/dtheta
+            dbit_dtheta = self.bit_score_gradients(theta, **kwargs).sum(dim=1)
+            if theta.shape[0] > 1:
+                inverted_scales = self._inverted_scales(theta)
             else:
-                mean_slopes = mean_slopes.mean(dim=0)
+                inverted_scales = torch.tensor([1.])
 
-        return mean_slopes
+            # divide by the derivative of the bit scores with respect to the theta scores
+            # to get the expected item score slopes with respect to the bit scores (chain rule)
+            gradients = inverted_scales.flatten() * dx_dtheta/dbit_dtheta.unsqueeze(1)
+            gradients[gradients.isnan()] = 0. # set nans to 0. Sometimes 0/0 can be nan
+            gradients[gradients == torch.inf] = 0. # Remove dx_dtheta/0
+
+        return gradients
 
 
     def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:

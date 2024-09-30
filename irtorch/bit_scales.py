@@ -35,8 +35,8 @@ class BitScales:
         guessing_probabilities: list[float] = None,
         guessing_iterations: int = 10000,
     ):
-        """
-        Computes the starting theta score from which to compute bit scores.
+        r"""
+        Computes the starting theta score :math:`\mathbf{\theta}^{(0)}` from which to compute bit scores. See notes under :meth:`bit_scores` for more details.
         
         Parameters
         ----------
@@ -139,7 +139,7 @@ class BitScales:
 
 
     @torch.inference_mode()
-    def bit_scores_from_theta(
+    def bit_scores(
         self,
         theta: torch.Tensor,
         start_theta: torch.Tensor = None,
@@ -295,11 +295,11 @@ class BitScales:
         start_theta_guessing_iterations: int = 10000,
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of the bit scores with respect to the input theta scores using the central difference method:
+        Approximates the gradients of the bit scores with respect to the input theta scores using the central difference method:
 
         .. math ::
 
-            f^{\prime}(B(\mathbf{\theta})) \approx \frac{f(B(\mathbf{\theta})+h)-f(B(\mathbf{\theta})-h)}{2 h}
+            \frac{\partial B(\mathbf{\theta})}{\partial \mathbf{\theta}} \approx \frac{f(B(\mathbf{\theta})+h)-f(B(\mathbf{\theta})-h)}{2 h}
 
         Parameters
         ----------
@@ -365,11 +365,11 @@ class BitScales:
             for latent_variable in range(theta.shape[1]):
                 theta_low_var = torch.cat((theta[:, :latent_variable], theta_low[:, latent_variable].view(-1, 1), theta[:, latent_variable+1:]), dim=1)
                 theta_high_var = torch.cat((theta[:, :latent_variable], theta_high[:, latent_variable].view(-1, 1), theta[:, latent_variable+1:]), dim=1)
-                bit_scores_low = self.bit_scores_from_theta(
+                bit_scores_low = self.bit_scores(
                     theta_low_var, start_theta = start_theta, population_theta=population_theta, one_dimensional=one_dimensional, theta_estimation=theta_estimation,
                     ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
                 )[0]
-                bit_scores_high = self.bit_scores_from_theta(
+                bit_scores_high = self.bit_scores(
                     theta_high_var, start_theta = start_theta, population_theta=population_theta, one_dimensional=one_dimensional, theta_estimation=theta_estimation,
                     ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
                 )[0]
@@ -377,11 +377,11 @@ class BitScales:
         else:
             theta_low_var = torch.cat((theta[:, :independent_theta-1], theta_low[:, independent_theta-1].view(-1, 1), theta[:, independent_theta:]), dim=1)
             theta_high_var = torch.cat((theta[:, :independent_theta-1], theta_high[:, independent_theta-1].view(-1, 1), theta[:, independent_theta:]), dim=1)
-            bit_scores_low = self.bit_scores_from_theta(
+            bit_scores_low = self.bit_scores(
                 theta_low_var, start_theta = start_theta, population_theta=population_theta, one_dimensional=one_dimensional, theta_estimation=theta_estimation,
                 ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
             )[0]
-            bit_scores_high = self.bit_scores_from_theta(
+            bit_scores_high = self.bit_scores(
                 theta_high_var, start_theta = start_theta, population_theta=population_theta, one_dimensional=one_dimensional, theta_estimation=theta_estimation,
                 ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, grid_points=grid_points, items=items
             )[0]
@@ -412,7 +412,7 @@ class BitScales:
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
         **kwargs
-            Additional keyword arguments for the bit_score_gradients method.
+            Additional keyword arguments for the :meth:`bit_score_gradients` method.
 
         Returns
         -------
@@ -429,7 +429,7 @@ class BitScales:
             if not self.model.mc_correct and rescale_by_item_score:
                 expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.model.item_categories) - 1)
             if bit_scores is None:
-                bit_scores = self.bit_scores_from_theta(theta)[0]
+                bit_scores = self.bit_scores(theta)[0]
             # item score slopes for each item
             mean_slopes = linear_regression(bit_scores, expected_item_sum_scores).t()[:, 1:]
         else:
@@ -461,7 +461,7 @@ class BitScales:
         return mean_slopes
 
 
-    def bit_information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
+    def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
         r"""
         Calculate the Fisher information matrix (FIM) for the theta corresponding bit scores (or the information in the direction supplied by degrees).
 
@@ -474,7 +474,7 @@ class BitScales:
         degrees : list[int], optional
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`bit_score_gradients` for details.
+            Additional keyword arguments to be passed to the :meth:`bit_score_gradients` method if scale is 'bit'.
             
         Returns
         -------

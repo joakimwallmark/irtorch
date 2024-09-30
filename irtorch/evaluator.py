@@ -240,7 +240,7 @@ class Evaluator:
         population_theta : torch.Tensor, optional
             Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_scores_from_theta method if scale is 'bit'. See :meth:`bit_scores_from_theta` for details.
+            Additional keyword arguments to be passed to the :meth:`irtorch.BitScales.bit_scores` method if scale is 'bit'.
             
         Returns
         -------
@@ -550,7 +550,7 @@ class Evaluator:
         population_theta : torch.Tensor, optional
             Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_scores_from_theta method.
+            Additional keyword arguments to be passed to the :meth:`irtorch.BitScales.bit_scores` method.
 
         Returns
         -------
@@ -571,7 +571,7 @@ class Evaluator:
             if population_theta is None and data is self.model.algorithm.train_data:
                 population_theta = theta
             
-            bit_scores, _ = self.model.bit_scales.bit_scores_from_theta(
+            bit_scores, _ = self.model.bit_scales.bit_scores(
                 theta=theta,
                 one_dimensional=False,
                 theta_estimation=theta_estimation,

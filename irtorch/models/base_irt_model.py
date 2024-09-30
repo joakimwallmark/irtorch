@@ -211,8 +211,8 @@ class BaseIRTModel(ABC, nn.Module):
         return ll
 
     def expected_scores(self, theta: torch.Tensor, return_item_scores: bool = True) -> torch.Tensor:
-        """
-        Computes the model expected item scores/test scores for each respondent.
+        r"""
+        Computes the model expected item scores/test scores for each respondent (row in theta).
 
         Parameters
         ----------
@@ -247,7 +247,7 @@ class BaseIRTModel(ABC, nn.Module):
     ) -> torch.Tensor:
         r"""
         Approximates the population average expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
-        For :math:`n` supplied :math:`\theta` scores, the average slopes are copmuted as:
+        For :math:`n` supplied :math:`\theta` scores, the average slopes are computed as:
 
         .. math ::
 
@@ -265,14 +265,14 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         torch.Tensor
-            A tensor with the expected item score slopes.
+            A 2D tensor with the expected item score slopes. Rows are items and columns are latent variables.
         """
         if theta.shape[0] < 2:
             raise ValueError("theta must have at least 2 rows.")
         if theta.requires_grad:
             theta.requires_grad_(False)
 
-        mean_slopes = torch.zeros(theta.shape[0], len(self.item_categories),theta.shape[1])
+        mean_slopes = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
         for latent_variable in range(theta.shape[1]):
             theta_scores = theta.clone()
             theta_scores.requires_grad_(True)
@@ -361,7 +361,7 @@ class BaseIRTModel(ABC, nn.Module):
 
     def item_theta_relationship_directions(self, theta: torch.Tensor) -> torch.Tensor:
         """
-        Get the relationships between each item and latent variable for a fitted model.
+        Get the directions of the relationships between each item and latent variable for a fitted model.
 
         Parameters
         ----------
@@ -436,8 +436,8 @@ class BaseIRTModel(ABC, nn.Module):
         lbfgs_learning_rate: float = 0.25,
         eap_theta_integration_points: int = None
     ):
-        """
-        Returns the latent scores for given test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
+        r"""
+        Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
         ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
         EAP for models with more than three factors is not recommended since the integration grid becomes huge.
 

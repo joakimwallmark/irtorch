@@ -93,10 +93,10 @@ def test_bit_scores(bit_scales: BitScales, one_dimensional, latent_variables, bi
         with patch.object(BitScales, "_get_grid_boundaries", return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
             if one_dimensional:
                 with patch.object(BitScales, "_compute_1d_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
-                    bit_scores, _ = bit_scales.bit_scores_from_theta(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
+                    bit_scores, _ = bit_scales.bit_scores(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
             else:
                 with patch.object(BitScales, "_compute_multi_dimensional_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
-                    bit_scores, _ = bit_scales.bit_scores_from_theta(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
+                    bit_scores, _ = bit_scales.bit_scores(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
 
     # Assert the result
     if one_dimensional:

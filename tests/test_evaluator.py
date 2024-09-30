@@ -35,10 +35,10 @@ def algorithm(latent_variables):
 def bit_scales():
     mock_bit_scales = MagicMock(spec=BitScales)
     # Mock bit_score_distance method based on input
-    def bit_scores_from_theta_mock(theta, **kwargs):
+    def bit_scores_mock(theta, **kwargs):
         return torch.randn(theta.shape[0],theta.shape[1]).abs() * 10, torch.randn(1,theta.shape[1])
     
-    mock_bit_scales.bit_scores_from_theta = MagicMock(side_effect=bit_scores_from_theta_mock)
+    mock_bit_scales.bit_scores = MagicMock(side_effect=bit_scores_mock)
     return mock_bit_scales
 
 @pytest.fixture
@@ -212,7 +212,7 @@ def test_latent_group_probabilities(evaluation: Evaluator, scale):
 
     if scale == "bit":
         # check if bit score was called
-        evaluation.model.bit_scales.bit_scores_from_theta.assert_called_once()
+        evaluation.model.bit_scales.bit_scores.assert_called_once()
 
 def test_group_fit_residuals(evaluation: Evaluator):
     data = torch.cat(

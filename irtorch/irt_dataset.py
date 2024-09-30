@@ -20,7 +20,7 @@ class PytorchIRTDataset(torch.utils.data.Dataset):
         See :func:`irtorch.utils.impute_missing` for available methods.
         Note that only methods not relying on a fitted model can be used. (The default is None)
     **kwargs
-        Additional keyword arguments to pass to :func:`irtorch.utils.impute_missing`.
+        Additional keyword arguments passed to :func:`irtorch.utils.impute_missing`.
     """
     def __init__(self,
         data: torch.Tensor,

@@ -450,11 +450,12 @@ class Evaluator:
             missing_mask,
             loss_reduction="none"
         )
-        
+
+        likelihoods = likelihoods.view(theta.shape[0], -1)
         if reduction in "mean":
-            return likelihoods.view(theta.shape[0], -1).nanmean(dim=dim)
+            return likelihoods.nanmean(dim=dim)
         if reduction == "sum":
-            return likelihoods.view(theta.shape[0], -1).nansum(dim=dim)
+            return likelihoods.nansum(dim=dim)
         
         return likelihoods
 

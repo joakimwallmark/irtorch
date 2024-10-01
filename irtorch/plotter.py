@@ -663,6 +663,128 @@ class Plotter:
                 colorscale = colorscale
             )
 
+    def plot_response_pattern_likelihood(
+        self,
+        data: torch.Tensor,
+        scale: str = "theta",
+        latent_variables: tuple[int] = (1,),
+        items: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = "Plasma",
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_thetas: torch.Tensor = None,
+        **kwargs
+    ) -> go.Figure:
+        """
+        Plots the log-likelihood function against the latent variable(s) for the supplied response pattern.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The response data. Needs to be a one row tensor with the same number of columns as the model has items.
+        scale : str, optional
+            The scale to plot against. Can be 'bit' or 'theta'. (default is 'bit')
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        items : list[int], optional
+            The items to consider for computing the log-likelihood. If None, all items in the model are used. (default is None)
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Information" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+        theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+        second_theta_range : tuple[float, float], optional
+            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        **kwargs : dict, optional
+            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+        """
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
+        if steps is None:
+            steps = 100 if len(latent_variables) == 1 else 18
+
+        latent_indices = [theta - 1 for theta in latent_variables]
+
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
+        
+        if scale == "bit":
+            scores_to_plot, _ = self.model.bit_scales.bit_scores(
+                theta=theta_grid,
+                **kwargs
+            )
+            scores_to_plot = scores_to_plot[:, latent_indices]
+        else:
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
+
+        duplicated_data = data.repeat(theta_grid.shape[0], 1)
+        log_likelihood = self.model.evaluate.log_likelihood(duplicated_data, theta_grid, reduction="none")
+        if items is not None:
+            item_mask = torch.zeros(self.model.items, dtype=bool)
+            item_mask[[item - 1 for item in items]] = 1
+            log_likelihood = log_likelihood[:, item_mask]
+
+        log_likelihood = log_likelihood.sum(dim=1)
+
+        if len(latent_variables) == 1:
+            scores_to_plot.squeeze_()
+            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
+                start_idx = min_indices[0].item()  # get the first index
+                scores_to_plot = scores_to_plot[:start_idx]
+                log_likelihood = log_likelihood.detach_().squeeze_()[:start_idx]
+            else:
+                start_idx = min_indices[-1].item()  # get the last index
+                scores_to_plot = scores_to_plot[start_idx:]
+                log_likelihood = log_likelihood.detach_().squeeze_()[start_idx:]
+                
+            return self._2d_line_plot(
+                x = scores_to_plot,
+                y = log_likelihood,
+                title = title or "Log-likelihood",
+                x_label = x_label or "Latent variable",
+                y_label = y_label or "Log-likelihood",
+                color = color or None
+            )
+        if len(latent_variables) == 2:
+            grid_size = int(np.sqrt(log_likelihood.size()))
+            return self._3d_surface_plot(
+                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
+                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
+                z = log_likelihood.reshape((grid_size, grid_size)),
+                title = title or "Log-likelihood",
+                x_label = x_label or "Latent variable 1",
+                y_label = y_label or "Latent variable 2",
+                z_label = "Log-likelihood",
+                colorscale = colorscale
+            )
+
     def plot_expected_sum_score(
         self,
         items: list[int] = None,
@@ -795,12 +917,12 @@ class Plotter:
 
     def _get_theta_grid_for_plotting(self, latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices):
         mask = torch.ones(self.model.latent_variables, dtype=bool)
-        mask[latent_indices] = 0
+        mask[latent_indices] = False
         if fixed_thetas is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
                 fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
             elif isinstance(self.model.algorithm, MML):
-                fixed_thetas = torch.zeros(self.model.latent_variables)
+                fixed_thetas = torch.zeros(self.model.latent_variables)[mask]
         
         if theta_range is None:
             if isinstance(self.model.algorithm, (AE, VAE)):

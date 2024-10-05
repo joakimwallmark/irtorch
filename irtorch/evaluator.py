@@ -240,7 +240,7 @@ class Evaluator:
         population_theta : torch.Tensor, optional
             Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the :meth:`irtorch.BitScales.bit_scores` method if scale is 'bit'.
+            Additional keyword arguments to be passed to the :meth:`irtorch.rescale.Bit.transform` method if scale is 'bit'.
             
         Returns
         -------
@@ -539,8 +539,7 @@ class Evaluator:
         theta : torch.Tensor, optional
             The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation. (default is None)
         scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'theta'. Note: for uni-dimensional
-            models, 'theta' and 'bit' are equivalent. (default is 'theta')
+            The scale on which to do the grouping. Refer to the :doc:`scales` documentation section for available options. Note: for uni-dimensional models, all monotone scale transformations are equivalent. (default is 'theta')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         groups: int
@@ -551,8 +550,8 @@ class Evaluator:
         population_theta : torch.Tensor, optional
             Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the :meth:`irtorch.BitScales.bit_scores` method.
-
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
+        
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor, torch.Tensor]
@@ -562,32 +561,38 @@ class Evaluator:
 
             The third tensor contains the average latent variable values within each group along the specified latent_variable.
         """
-
-        if scale not in ["bit", "theta"]:
-            raise ValueError("Invalid scale. Choose either 'theta' or 'bit'.")
-
         data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        if scale == "bit":
-            if population_theta is None and data is self.model.algorithm.train_data:
-                population_theta = theta
+        if scale == "theta":
+                    _, indices = torch.sort(theta[:, latent_variable - 1], dim=0)
+                    theta = theta[indices]
+                    grouped_theta = torch.chunk(theta, groups)
+                    group_mid_points = torch.tensor(
+                        [group[:, latent_variable - 1].median() for group in grouped_theta]
+                    )
+        else:
+            if scale == "bit":
+                if population_theta is None and data is self.model.algorithm.train_data:
+                    population_theta = theta
             
-            bit_scores, _ = self.model.bit_scales.bit_scores(
-                theta=theta,
-                one_dimensional=False,
-                theta_estimation=theta_estimation,
-                **kwargs
-            )
+                transformed_scores = self.model.rescale.get_scale(scale)(
+                    theta=theta,
+                    one_dimensional=False,
+                    theta_estimation=theta_estimation,
+                    **kwargs
+                )
+            else:
+                transformed_scores = self.model.rescale.get_scale(scale)(theta, **kwargs)
 
             # Sort based on correct column and get the sorted indices
             _, indices = torch.sort(
-                bit_scores[:, latent_variable - 1], dim=0
+                transformed_scores[:, latent_variable - 1], dim=0
             )
             # Use the indices to sort
-            bit_scores = bit_scores[indices]
+            transformed_scores = transformed_scores[indices]
             theta = theta[indices]
 
-            grouped_bit = torch.chunk(bit_scores, groups)
+            grouped_bit = torch.chunk(transformed_scores, groups)
             grouped_theta = torch.chunk(theta, groups)
 
             group_mid_points = torch.tensor(
@@ -596,13 +601,7 @@ class Evaluator:
                     for group in grouped_bit
                 ]
             )
-        elif scale == "theta":
-            _, indices = torch.sort(theta[:, latent_variable - 1], dim=0)
-            theta = theta[indices]
-            grouped_theta = torch.chunk(theta, groups)
-            group_mid_points = torch.tensor(
-                [group[:, latent_variable - 1].median() for group in grouped_theta]
-            )
+    
 
         data = data[indices]
         grouped_data = torch.chunk(data, groups)

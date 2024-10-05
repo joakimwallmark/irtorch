@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
-from irtorch.torch_modules import MonotonePolynomialModule
+from irtorch.torch_modules.monotone_polynomial import MonotonePolynomialModule
 
 logger = logging.getLogger("irtorch")
 

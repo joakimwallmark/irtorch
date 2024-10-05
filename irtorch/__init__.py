@@ -1,5 +1,4 @@
 import logging
-from .bit_scales import BitScales
 from .evaluator import Evaluator
 from .plotter import Plotter
 from . import load_dataset

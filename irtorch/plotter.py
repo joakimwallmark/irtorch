@@ -115,7 +115,8 @@ class Plotter:
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
+            The scale to plot against. Refer to the :doc:`scales` documentation section for available options.
+            Use 'theta' for the original theta scale. (default is 'theta')
         latent_variables_to_plot : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
         title : str, optional
@@ -161,11 +162,11 @@ class Plotter:
                 data=population_data,
                 **kwargs
             )
-            if scale == "bit":
-                scores = self.model.bit_scales.bit_scores(
+            if scale != "theta":
+                scores = self.model.rescale.get_scale(scale)(
                     theta=scores,
                     **kwargs
-                )[0]
+                )
         else:
             scores = scores_to_plot
 
@@ -207,7 +208,8 @@ class Plotter:
         item : int
             The item for which to plot the entropy.
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
+            The scale to plot against. Refer to the :doc:`scales` documentation section for available options.
+            Use 'theta' for the original theta scale. (default is 'theta')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -229,7 +231,7 @@ class Plotter:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -257,15 +259,15 @@ class Plotter:
         mean_output = self.model(theta_grid)
         item_entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
-        if scale == "bit":
-            scores_to_plot = self.model.bit_scales.bit_scores(
-                theta=theta_grid,
-                **kwargs
-            )[0][:, latent_indices]
-        else:
+        if scale == "theta":
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
+        else:
+            scores_to_plot = self.model.rescale.get_scale(scale)(
+                theta=theta_grid,
+                **kwargs
+            )[:, latent_indices]
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
@@ -385,7 +387,8 @@ class Plotter:
         item : int
             The item to plot (starts from 1).
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
+            The scale to plot against. Refer to the :doc:`scales` documentation section for available options.
+            Use 'theta' for the original theta scale. (default is 'theta')
         latent_variables : tuple, optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -415,7 +418,7 @@ class Plotter:
         plot_derivative : bool, optional
             Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -465,20 +468,31 @@ class Plotter:
             theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
             theta_grid[:, mask] = fixed_thetas
             
-        if scale == "bit":
-            scores_to_plot, start_theta = self.model.bit_scales.bit_scores(
+
+        if scale == "theta":
+            scores_to_plot = theta_grid
+        elif scale == "bit":
+            scores_to_plot, start_theta = self.model.rescale.bit(
                 theta=theta_grid,
                 one_dimensional=False,
+                return_start_theta=True,
                 **kwargs
             )
         else:
-            scores_to_plot = theta_grid
-
+            scores_to_plot = self.model.rescale.get_scale(scale)(
+                theta=theta_grid,
+                **kwargs
+            )
+        
         if plot_derivative and len(latent_variables) == 1:
             prob_matrix = self.model.probability_gradients(theta_grid)[:, item - 1, :self.model.item_categories[item - 1], latent_variables[0] - 1]
-            if scale == "bit":
-                bit_theta_gradients = self.model.bit_scales.bit_score_gradients(theta_grid, independent_theta=latent_variables[0], start_theta=start_theta, **kwargs)
-                prob_matrix = prob_matrix / bit_theta_gradients[:, latent_variables[0] - 1].view(-1, 1)
+            if scale != "theta":
+                if scale == "bit":
+                    scale_theta_gradients = self.model.rescale.bit.gradients(theta_grid, independent_theta=latent_variables[0], start_theta=start_theta, **kwargs)
+                    prob_matrix = prob_matrix / scale_theta_gradients[:, latent_variables[0] - 1].view(-1, 1)
+                else:
+                    scale_theta_gradients = self.model.rescale.get_scale(scale).gradients(theta_grid, **kwargs)
+                    prob_matrix = prob_matrix / scale_theta_gradients[:, latent_variables[0] - 1].view(-1, 1)
         else:
             prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.item_categories[item - 1]]
 
@@ -579,7 +593,7 @@ class Plotter:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -604,31 +618,39 @@ class Plotter:
         if theta_grid.shape[0] > 2000:
             logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
-        if scale == "bit":
-            scores_to_plot, start_theta = self.model.bit_scales.bit_scores(
-                theta=theta_grid,
-                **kwargs
-            )
-            scores_to_plot = scores_to_plot[:, latent_indices]
-        else:
+        if scale == "theta":
             start_theta = None
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
+        elif scale == "bit":
+            scores_to_plot, start_theta = self.model.rescale.bit(
+                theta=theta_grid,
+                return_start_theta=True,
+                **kwargs
+            )
+            scores_to_plot = scores_to_plot[:, latent_indices]
+        else:
+            scores_to_plot = self.model.rescale.get_scale(scale)(
+                theta=theta_grid,
+                **kwargs
+            )
 
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
-            if scale == "bit":
-                information = self.model.bit_scales.information(theta_grid, item=True, degrees=degrees, start_theta = start_theta, **kwargs)[:, item_mask].sum(dim=1)
-            else:
+            if scale == "theta":
                 information = self.model.information(theta_grid, item=True, degrees=degrees, **kwargs)[:, item_mask].sum(dim=1)
+            if scale == "bit":
+                information = self.model.rescale.bit.information(theta_grid, item=True, degrees=degrees, start_theta = start_theta, **kwargs)[:, item_mask].sum(dim=1)
+            else:
+                information = self.model.rescale.get_scale(scale).information(theta_grid, item=True, degrees=degrees, **kwargs)[:, item_mask].sum(dim=1)
 
         else:
-            if scale == "bit":
-                information = self.model.bit_scales.information(theta_grid, item=False, degrees=degrees, start_theta = start_theta, **kwargs)
-            else:
+            if scale == "theta":
                 information = self.model.information(theta_grid, item=False, degrees=degrees, **kwargs)
+            else:
+                information = self.model.rescale.get_scale(scale).information(theta_grid, item=False, degrees=degrees, start_theta = start_theta, **kwargs)
 
         if len(latent_variables) == 1:
             scores_to_plot.squeeze_()
@@ -712,7 +734,7 @@ class Plotter:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -732,16 +754,16 @@ class Plotter:
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
-        if scale == "bit":
-            scores_to_plot, _ = self.model.bit_scales.bit_scores(
+        if scale == "theta":
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
+        else:
+            scores_to_plot = self.model.rescale.get_scale(scale)(
                 theta=theta_grid,
                 **kwargs
             )
             scores_to_plot = scores_to_plot[:, latent_indices]
-        else:
-            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
-            if scores_to_plot.dim() == 1:
-                scores_to_plot = scores_to_plot.unsqueeze(1)
 
         duplicated_data = data.repeat(theta_grid.shape[0], 1)
         log_likelihood = self.model.evaluate.log_likelihood(duplicated_data, theta_grid, reduction="none")
@@ -810,7 +832,8 @@ class Plotter:
         items : list[int], optional
             The items used to compte the sum score. If None, all items are used. (default is None)
         scale : str, optional
-            The scale to plot against. Can be 'bit' or 'theta'. (default is 'theta')
+            The scale to plot against. Refer to the :doc:`scales` documentation section for available options.
+            Use 'theta' for the original theta scale. (default is 'theta')
         latent_variables : tuple[int], optional
             The latent variables to plot. (default is (1,))
         title : str, optional
@@ -832,7 +855,7 @@ class Plotter:
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         **kwargs : dict, optional
-            Additional keyword arguments used for bit score computation. See :meth:`irtorch.BitScales.bit_scores` for details. 
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -864,15 +887,16 @@ class Plotter:
         else:
             sum_scores = self.model.expected_scores(theta_grid, return_item_scores=False)
 
-        if scale == "bit":
-            scores_to_plot = self.model.bit_scales.bit_scores(
-                theta=theta_grid,
-                **kwargs
-            )[0][:, latent_indices]
-        else:
+                
+        if scale == "theta":
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
                 scores_to_plot = scores_to_plot.unsqueeze(1)
+        else:
+            scores_to_plot = self.model.rescale.get_scale(scale)(
+                theta=theta_grid,
+                **kwargs
+            )[:, latent_indices]
 
         if items is not None and len(items) == 1:
             title = f"Expected score. Item {items[0]}" if title is None else title

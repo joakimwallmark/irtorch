@@ -3,10 +3,11 @@ import torch
 import numpy as np
 import pandas as pd
 import pytest
-from irtorch.evaluator import Evaluator
-from irtorch.bit_scales import BitScales
-from irtorch.estimation_algorithms import AE
 from irtorch.models import BaseIRTModel
+from irtorch.evaluator import Evaluator
+from irtorch.rescale.bit import Bit
+from irtorch.estimation_algorithms import AE
+from irtorch.models.base_irt_model import Scales
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 
@@ -32,17 +33,15 @@ def algorithm(latent_variables):
     return mock_algorithm
 
 @pytest.fixture
-def bit_scales():
-    mock_bit_scales = MagicMock(spec=BitScales)
-    # Mock bit_score_distance method based on input
-    def bit_scores_mock(theta, **kwargs):
-        return torch.randn(theta.shape[0],theta.shape[1]).abs() * 10, torch.randn(1,theta.shape[1])
+def bit():
+    def bit_mock(theta, **kwargs):
+        return torch.randn(theta.shape[0],theta.shape[1]).abs() * 10
     
-    mock_bit_scales.bit_scores = MagicMock(side_effect=bit_scores_mock)
-    return mock_bit_scales
+    mock_bit = MagicMock(spec=Bit, side_effect=bit_mock)
+    return mock_bit
 
 @pytest.fixture
-def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
+def irt_model(latent_variables, algorithm: AE, bit: Bit):
     item_categories = [2, 3]
 
     def model_forward_mock(input_tensor: torch.Tensor):
@@ -64,9 +63,14 @@ def irt_model(latent_variables, algorithm: AE, bit_scales: BitScales):
         theta_scores = torch.randn(data.shape[0], latent_variables)
         return theta_scores
     
+    def get_scale_mock(theta, **kwargs):
+        return bit
+    
     mock_model = MagicMock(spec=BaseIRTModel, side_effect=model_forward_mock)
     mock_model.algorithm = algorithm
-    mock_model.bit_scales = bit_scales
+    mock_model.rescale = MagicMock(spec=Scales)
+    mock_model.rescale.bit = bit
+    mock_model.rescale.get_scale = MagicMock(side_effect=get_scale_mock)
     mock_model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     mock_model.latent_scores = MagicMock(side_effect=latent_scores)
     mock_model.item_categories = item_categories
@@ -211,8 +215,7 @@ def test_latent_group_probabilities(evaluation: Evaluator, scale):
     assert group_averages.shape == (groups,)
 
     if scale == "bit":
-        # check if bit score was called
-        evaluation.model.bit_scales.bit_scores.assert_called_once()
+        evaluation.model.rescale.bit.assert_called_once()
 
 def test_group_fit_residuals(evaluation: Evaluator):
     data = torch.cat(

@@ -32,7 +32,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    estimation_algorithms
    evaluator
    plotter
-   bit_scales
+   scales
    config
    datasets
    utils

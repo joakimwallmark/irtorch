@@ -13,6 +13,78 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("irtorch")
 
+class Scales:
+    valid_scales = ['bit', 'flow', 'cdf']
+
+    def __init__(self, model: BaseIRTModel):
+        self._model = model
+        self._bit = None
+        self._flow = None
+        self._cdf = None
+
+    @property
+    def bit(self):
+        """
+        Instance of :class:`irtorch.rescale.Bit`.
+        Bit scales are used to put the latent variable scores on a metric scale.
+
+        Returns
+        -------
+        BitScales
+            An instance of the :class:`irtorch.rescale.Bit` class.
+        """
+        if self._bit is None:
+            from ..rescale.bit import Bit
+            self._bit = Bit(self._model)
+        return self._bit
+
+    @property
+    def flow(self):
+        """
+        Normalizing flow transformation to a distribution of choice.
+
+        Returns
+        -------
+        BitScales
+            An instance of the :class:`irtorch.rescale.` class.
+        """
+        if self._bit is None:
+            raise NotImplementedError("Flow transformation is not implemented yet.")
+        return self._bit
+    
+    @property
+    def cdf(self):
+        """
+        Rank cdf transformation to a distribution of choice.
+
+        Returns
+        -------
+        BitScales
+            An instance of the :class:`irtorch.rescale.` class.
+        """
+        if self._bit is None:
+            raise NotImplementedError("CDF transformation is not implemented yet.")
+        return self._bit
+    
+    def get_scale(self, scale_type: str):
+        """
+        Get the scale instance by name.
+
+        Parameters
+        ----------
+        scale_type : str
+            The name of the scale.
+            
+        Returns
+        -------
+        Scale
+            An instance inheriting :class:`irtorch.rescale.Scale`.
+        """
+        scale_type = scale_type.lower()
+        if scale_type not in self.valid_scales:
+            raise ValueError(f"Unknown scale type '{scale_type}'. Valid options are {self.valid_scales}.")
+        return getattr(self, scale_type)
+
 class BaseIRTModel(ABC, nn.Module):
     """
     Abstract base class for Item Response Theory models. All IRT models should inherit from this class.
@@ -43,25 +115,24 @@ class BaseIRTModel(ABC, nn.Module):
         self.mc_correct = mc_correct
         self.algorithm = None
 
-        self._bit_scales = None
+        self._scales = None
         self._evaluate = None
         self._plot = None
 
     @property
-    def bit_scales(self):
+    def rescale(self):
         """
-        Various bit scale related functions as described in :class:`irtorch.BitScales`.
-        Bit scales are used to put the latent variable scores on a metric scale.
+        Various methods for IRT model rescaling. This property holds class instances of classes inheriting :class:`irtorch.rescale.Scales` class.
+        For more details on each scale, refer to the :doc:`scales` documentation section.
 
         Returns
         -------
-        BitScales
-            An instance of the :class:`irtorch.BitScales` class.
+        Scales
+            An instance of the :class:`irtorch.base_irt_model.Scales` class.
         """
-        if self._bit_scales is None:
-            from ..bit_scales import BitScales
-            self._bit_scales = BitScales(self)
-        return self._bit_scales
+        if self._scales is None:
+            self._scales = Scales(self)
+        return self._scales
 
     @property
     def evaluate(self):
@@ -105,7 +176,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         Returns
         -------
-        output : torch.Tensor
+        torch.Tensor
             Output tensor.
         """
 
@@ -280,7 +351,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         return gradients
 
-    def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None, **kwargs) -> torch.Tensor:
+    def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
         r"""
         Calculate the Fisher information matrix (FIM) for the theta scores (or the information in the direction supplied by degrees).
 
@@ -292,9 +363,7 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
         degrees : list[int], optional
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
-        **kwargs : dict, optional
-            Additional keyword arguments to be passed to the bit_score_gradients method if scale is 'bit'. See :meth:`irtorch.BitScales.bit_score_gradients` for details.
-            
+
         Returns
         -------
         torch.Tensor
@@ -437,7 +506,7 @@ class BaseIRTModel(ABC, nn.Module):
         standard_errors : bool, optional
             Whether to return standard errors for the latent scores. (default is False)
         theta_estimation : str, optional
-            Method used to obtain the theta scores. Also used for bit scores as they require the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
             For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional

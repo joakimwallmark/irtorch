@@ -11,12 +11,31 @@ class RationalQuadraticSpline(nn.Module):
     def __init__(
         self,
         variables: int,
-        num_bins=14,
-        tail_bound=1.0,
+        num_bins=30,
+        tail_bound=5.0,
         min_bin_width=DEFAULT_MIN_BIN_WIDTH,
         min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
         min_derivative=DEFAULT_MIN_DERIVATIVE,
     ):
+        """
+        This module implements a rational quadratic spline, as described in the paper
+        "Neural Spline Flows" by :cite:t:`Durkan2019`.
+
+        Parameters
+        ----------
+        variables : int
+            The number of variables (dimensions) to transform.
+        num_bins : int, optional
+            The number of bins to use for the spline (default is 14).
+        tail_bound : float, optional
+            The boundary beyond which the transformation is linear (default is 1.0).
+        min_bin_width : float, optional
+            The minimum width of each bin (default is 1e-3).
+        min_bin_height : float, optional
+            The minimum height of each bin (default is 1e-3).
+        min_derivative : float, optional
+            The minimum derivative value at the knots (default is 1e-3).
+        """
         super(RationalQuadraticSpline, self).__init__()
         self.num_bins = num_bins
         self.tail_bound = tail_bound
@@ -29,6 +48,23 @@ class RationalQuadraticSpline(nn.Module):
         self.unnormalized_derivatives = nn.Parameter(torch.rand(variables, num_bins - 1))
 
     def forward(self, inputs, inverse=False):
+        """
+        Apply the rational quadratic spline transformation.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            The input tensor to transform.
+        inverse : bool, optional
+            If True, computes the inverse transformation (default is False).
+
+        Returns
+        -------
+        outputs : torch.Tensor
+            The transformed outputs.
+        logabsdet : torch.Tensor
+            The logarithm of the absolute value of the determinant of the Jacobian.
+        """
         return self._unconstrained_rational_quadratic_spline(
             inputs,
             self.unnormalized_widths.unsqueeze(0).expand(inputs.shape[0], *self.unnormalized_widths.shape),
@@ -53,6 +89,37 @@ class RationalQuadraticSpline(nn.Module):
         min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
         min_derivative=DEFAULT_MIN_DERIVATIVE,
     ):
+        """
+        Compute the unconstrained rational quadratic spline transformation (linear relationship outside the interval).
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            The input tensor to transform.
+        unnormalized_widths : torch.Tensor
+            The unnormalized widths for the bins.
+        unnormalized_heights : torch.Tensor
+            The unnormalized heights for the bins.
+        unnormalized_derivatives : torch.Tensor
+            The unnormalized derivatives at the knots.
+        inverse : bool, optional
+            If True, computes the inverse transformation (default is False).
+        tail_bound : float, optional
+            The boundary beyond which the transformation is linear (default is 1.0).
+        min_bin_width : float, optional
+            The minimum width of each bin (default is 1e-3).
+        min_bin_height : float, optional
+            The minimum height of each bin (default is 1e-3).
+        min_derivative : float, optional
+            The minimum derivative value at the knots (default is 1e-3).
+
+        Returns
+        -------
+        outputs : torch.Tensor
+            The transformed outputs.
+        logabsdet : torch.Tensor
+            The logarithm of the absolute value of the determinant of the Jacobian.
+        """
         inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
         outside_interval_mask = ~inside_interval_mask
 
@@ -103,6 +170,48 @@ class RationalQuadraticSpline(nn.Module):
         min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
         min_derivative=DEFAULT_MIN_DERIVATIVE,
     ):
+        """
+        Compute the rational quadratic spline transformation.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            The input tensor to transform.
+        unnormalized_widths : torch.Tensor
+            The unnormalized widths for the bins.
+        unnormalized_heights : torch.Tensor
+            The unnormalized heights for the bins.
+        unnormalized_derivatives : torch.Tensor
+            The unnormalized derivatives at the knots.
+        inverse : bool, optional
+            If True, computes the inverse transformation (default is False).
+        left : float, optional
+            The left boundary of the transformation interval (default is 0.0).
+        right : float, optional
+            The right boundary of the transformation interval (default is 1.0).
+        bottom : float, optional
+            The bottom boundary of the transformation interval (default is 0.0).
+        top : float, optional
+            The top boundary of the transformation interval (default is 1.0).
+        min_bin_width : float, optional
+            The minimum width of each bin (default is 1e-3).
+        min_bin_height : float, optional
+            The minimum height of each bin (default is 1e-3).
+        min_derivative : float, optional
+            The minimum derivative value at the knots (default is 1e-3).
+
+        Returns
+        -------
+        outputs : torch.Tensor
+            The transformed outputs.
+        logabsdet : torch.Tensor
+            The logarithm of the absolute value of the determinant of the Jacobian.
+
+        Raises
+        ------
+        ValueError
+            If minimal bin width or height is too large for the number of bins.
+        """
         if torch.min(inputs) < left or torch.max(inputs) > right:
             pass
 

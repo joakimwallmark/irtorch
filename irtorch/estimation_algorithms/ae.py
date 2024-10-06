@@ -162,7 +162,7 @@ class AE(BaseIRTAlgorithm):
 
         # Reduce learning rate when loss stops decreasing ("min")
         # we multiply the learning rate by the factor
-        # patience: We need no improvement after learning_rate_update_patience steps for it to trigger
+        # patience: We need no improvement every step for it to trigger
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.6, patience=1
         )
@@ -186,7 +186,7 @@ class AE(BaseIRTAlgorithm):
         model: BaseIRTModel,
         max_epochs: int,
         validation_data: torch.Tensor = None,
-        learning_rate_updates_before_stopping: int = 5,
+        learning_rate_updates_before_stopping: int = 2,
     ):
         """
         The training loop for the model.
@@ -202,7 +202,7 @@ class AE(BaseIRTAlgorithm):
         validation_data : torch.Tensor, optional
             The validation data.
         learning_rate_updates_before_stopping : int, optional
-            The number of times the learning rate can be reduced before stopping training. (default is 5)
+            The number of times the learning rate can be reduced before stopping training. (default is 2)
         """
         for epoch in range(max_epochs):
             train_loss = self._train_step(model, epoch, validation_data, learning_rate_updates_before_stopping)
@@ -241,7 +241,7 @@ class AE(BaseIRTAlgorithm):
         self.encoder.train()
         model.train()
         epoch_mean_loss = 0
-
+        learning_rate = self.optimizer.param_groups[0]['lr']
         for _, (batch, mask, input_batch) in enumerate(self.data_loader):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
             if batch.shape[0] < 4 and self.batch_normalization:
@@ -259,7 +259,6 @@ class AE(BaseIRTAlgorithm):
             epoch_mean_loss += batch_loss.item()
 
             avg_batch_loss = batch_loss.item()
-            learning_rate = self.optimizer.param_groups[0]['lr']
             dynamic_print(f"Epoch: {epoch + 1}. Iteration: {self.total_iterations}. Average batch loss: {avg_batch_loss:.4f}. Current learning rate: {learning_rate:.4f}")
 
             if validation_data is None:
@@ -282,6 +281,7 @@ class AE(BaseIRTAlgorithm):
                 # Check if the learning rate has been updated
                 if learning_rate != self.optimizer.param_groups[0]['lr']:
                     self.lr_update_count += 1
+                    learning_rate = self.optimizer.param_groups[0]['lr']
                 
                 if mean_loss < self.best_avg_loss[0]:
                     self.best_avg_loss = mean_loss, self.total_iterations

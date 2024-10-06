@@ -41,16 +41,18 @@ class Scales:
     @property
     def flow(self):
         """
+        Instance of :class:`irtorch.rescale.Flow`.
         Normalizing flow transformation to a distribution of choice.
 
         Returns
         -------
-        BitScales
-            An instance of the :class:`irtorch.rescale.` class.
+        Flow
+            An instance of the :class:`irtorch.rescale.Flow` class.
         """
-        if self._bit is None:
-            raise NotImplementedError("Flow transformation is not implemented yet.")
-        return self._bit
+        if self._flow is None:
+            from ..rescale.flow import Flow
+            self._flow = Flow(self._model.latent_variables)
+        return self._flow
     
     @property
     def cdf(self):
@@ -59,12 +61,12 @@ class Scales:
 
         Returns
         -------
-        BitScales
-            An instance of the :class:`irtorch.rescale.` class.
+        CDF
+            An instance of the :class:`irtorch.rescale.CDF` class.
         """
-        if self._bit is None:
+        if self._cdf is None:
             raise NotImplementedError("CDF transformation is not implemented yet.")
-        return self._bit
+        return self._cdf
     
     def get_scale(self, scale_type: str):
         """
@@ -796,6 +798,7 @@ class BaseIRTModel(ABC, nn.Module):
         to_save = {
             "model_state_dict": self.state_dict(),
             "algorithm": self.algorithm,
+            "scales": self._scales,
         }
         torch.save(to_save, path)
 
@@ -812,3 +815,5 @@ class BaseIRTModel(ABC, nn.Module):
         self.load_state_dict(checkpoint["model_state_dict"])
         if "algorithm" in checkpoint:
             self.algorithm = checkpoint["algorithm"]
+        if "scales" in checkpoint:
+            self._scales = checkpoint["scales"]

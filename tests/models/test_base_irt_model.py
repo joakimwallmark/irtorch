@@ -92,7 +92,7 @@ def test_information(base_irt_model: BaseIRTModel):
         side_effect=item_probabilities_mock
     )
 
-    def probability_gradients_mock(theta):
+    def probability_gradients_mock(theta, rescale):
         return torch.tensor([
             [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]],
             [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]]

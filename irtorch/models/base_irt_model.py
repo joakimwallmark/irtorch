@@ -7,85 +7,12 @@ from torch import nn
 from torch.distributions import MultivariateNormal
 import torch.nn.functional as F
 from irtorch._internal_utils import linear_regression, impute_missing_internal, dynamic_print, one_hot_encode_test_data, get_missing_mask
+from irtorch.rescale.scale import Scale
 
 if TYPE_CHECKING:
     from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
 logger = logging.getLogger("irtorch")
-
-class Scales:
-    valid_scales = ['bit', 'flow', 'cdf']
-
-    def __init__(self, model: BaseIRTModel):
-        self._model = model
-        self._bit = None
-        self._flow = None
-        self._cdf = None
-
-    @property
-    def bit(self):
-        """
-        Instance of :class:`irtorch.rescale.Bit`.
-        Bit scales are used to put the latent variable scores on a metric scale.
-
-        Returns
-        -------
-        BitScales
-            An instance of the :class:`irtorch.rescale.Bit` class.
-        """
-        if self._bit is None:
-            from ..rescale.bit import Bit
-            self._bit = Bit(self._model)
-        return self._bit
-
-    @property
-    def flow(self):
-        """
-        Instance of :class:`irtorch.rescale.Flow`.
-        Normalizing flow transformation to a distribution of choice.
-
-        Returns
-        -------
-        Flow
-            An instance of the :class:`irtorch.rescale.Flow` class.
-        """
-        if self._flow is None:
-            from ..rescale.flow import Flow
-            self._flow = Flow(self._model.latent_variables)
-        return self._flow
-    
-    @property
-    def cdf(self):
-        """
-        Rank cdf transformation to a distribution of choice.
-
-        Returns
-        -------
-        CDF
-            An instance of the :class:`irtorch.rescale.CDF` class.
-        """
-        if self._cdf is None:
-            raise NotImplementedError("CDF transformation is not implemented yet.")
-        return self._cdf
-    
-    def get_scale(self, scale_type: str):
-        """
-        Get the scale instance by name.
-
-        Parameters
-        ----------
-        scale_type : str
-            The name of the scale.
-            
-        Returns
-        -------
-        Scale
-            An instance inheriting :class:`irtorch.rescale.Scale`.
-        """
-        scale_type = scale_type.lower()
-        if scale_type not in self.valid_scales:
-            raise ValueError(f"Unknown scale type '{scale_type}'. Valid options are {self.valid_scales}.")
-        return getattr(self, scale_type)
 
 class BaseIRTModel(ABC, nn.Module):
     """
@@ -116,25 +43,10 @@ class BaseIRTModel(ABC, nn.Module):
         self.items = len(item_categories)
         self.mc_correct = mc_correct
         self.algorithm = None
+        self.scale : Scale = None
 
-        self._scales = None
         self._evaluate = None
         self._plot = None
-
-    @property
-    def rescale(self):
-        """
-        Various methods for IRT model rescaling. This property holds class instances of classes inheriting :class:`irtorch.rescale.Scales` class.
-        For more details on each scale, refer to the :doc:`scales` documentation section.
-
-        Returns
-        -------
-        Scales
-            An instance of the :class:`irtorch.base_irt_model.Scales` class.
-        """
-        if self._scales is None:
-            self._scales = Scales(self)
-        return self._scales
 
     @property
     def evaluate(self):
@@ -202,6 +114,12 @@ class BaseIRTModel(ABC, nn.Module):
         """
         algorithm.fit(self, train_data=train_data, **kwargs)
         self.algorithm = algorithm
+
+    def rescale(self, scale):
+        """
+        Add rescaling instance to the model. The rescaling instance should inherit from :class:`irtorch.rescale.Scale`.
+        """
+        self.scale = scale
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
@@ -317,6 +235,8 @@ class BaseIRTModel(ABC, nn.Module):
         self,
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
+        rescale: bool = True,
+        **kwargs
     ) -> torch.Tensor:
         r"""
         Computes expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
@@ -327,11 +247,15 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
+        rescale : bool, optional
+            Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
+        **kwargs
+            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
         torch.Tensor
-            A 3D tensor with the expected item score gradients. Dimensions are (theta row, item, latent_variable).
+            A 3D tensor with the expected item score gradients. Dimensions are (theta rows, items, latent_variables).
         """
         if theta.requires_grad:
             theta.requires_grad_(False)
@@ -351,9 +275,24 @@ class BaseIRTModel(ABC, nn.Module):
                 expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
                 gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
 
+        if rescale and self.scale is not None:
+            rescale_gradients = self.scale.gradients(theta, **kwargs)
+            # divide by the derivative of the transformed scores with respect to the theta scores
+            # to get the expected item score slopes with respect to the transformed scores (chain rule)
+            gradients = gradients / rescale_gradients
+            gradients[gradients.isnan()] = 0. # set nans to 0. Sometimes 0/0 can be nan
+            gradients[gradients == torch.inf] = 0. # Remove dx_dtheta/0
+
         return gradients
 
-    def information(self, theta: torch.Tensor, item: bool = True, degrees: list[int] = None) -> torch.Tensor:
+    def information(
+        self,
+        theta: torch.Tensor,
+        item: bool = True,
+        degrees: list[int] = None,
+        rescale: bool = True,
+        **kwargs
+    ) -> torch.Tensor:
         r"""
         Calculate the Fisher information matrix (FIM) for the theta scores (or the information in the direction supplied by degrees).
 
@@ -365,6 +304,10 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to compute the information for each item (True) or for the test as a whole (False). (default is True)
         degrees : list[int], optional
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
+        rescale : bool, optional
+            Whether to compute information on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
+        **kwargs
+            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -399,7 +342,7 @@ class BaseIRTModel(ABC, nn.Module):
             raise ValueError("There must be one degree for each latent variable.")
 
         probabilities = self.item_probabilities(theta.clone())
-        gradients = self.probability_gradients(theta).detach()
+        gradients = self.probability_gradients(theta, rescale=rescale, **kwargs).detach()
 
         # squared gradient matrices for each latent variable
         # Uses einstein summation with batch permutation ...
@@ -415,9 +358,9 @@ class BaseIRTModel(ABC, nn.Module):
             information = information_matrices
 
         if item:
-            return information
+            return information.detach()
         else:
-            return information.nansum(dim=1) # sum over items
+            return information.detach().nansum(dim=1) # sum over items
 
     def item_theta_relationship_directions(self, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -461,7 +404,7 @@ class BaseIRTModel(ABC, nn.Module):
         return dist.sample().float()
     
     @torch.inference_mode(False)
-    def probability_gradients(self, theta: torch.Tensor) -> torch.Tensor:
+    def probability_gradients(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
         """
         Calculate the gradients of the item response probabilities with respect to the theta scores.
 
@@ -469,6 +412,10 @@ class BaseIRTModel(ABC, nn.Module):
         ----------
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
+        rescale : bool, optional
+            Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
+        **kwargs
+            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -484,6 +431,13 @@ class BaseIRTModel(ABC, nn.Module):
         logger.info("Computing Jacobian for all items and item categories...")
         # vectorized version of jacobian
         gradients = torch.vmap(compute_jacobian)(theta)
+
+        if rescale and self.scale is not None:
+            rescale_gradients = self.scale.gradients(theta, **kwargs)
+            # we divide by diagonal of the transformed score gradients (the gradients in the direction of the transformed score corresponding original theta scores)
+            rescale_gradients_diag = torch.einsum("...ii->...i", rescale_gradients)
+            gradients = (gradients.permute(1, 2, 0, 3) / rescale_gradients_diag).permute(2, 0, 1, 3)
+
         return gradients
 
     @torch.inference_mode()
@@ -494,7 +448,9 @@ class BaseIRTModel(ABC, nn.Module):
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.25,
-        eap_theta_integration_points: int = None
+        eap_theta_integration_points: int = None,
+        rescale: bool = True,
+        **kwargs
     ):
         r"""
         Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
@@ -515,7 +471,11 @@ class BaseIRTModel(ABC, nn.Module):
             For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
         eap_theta_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-
+        rescale : bool, optional
+            Whether to compute the latent scores on the rescaled scale if it exists. (default is True)
+        **kwargs
+            Additional keyword arguments to pass to the transformation method for the rescale transformation method.
+            
         Returns
         -------
         torch.Tensor or tuple[torch.Tensor, torch.Tensor]
@@ -566,10 +526,14 @@ class BaseIRTModel(ABC, nn.Module):
             if theta_estimation == "ML" or theta_estimation == "NN":
                 fisher_info = self.information(theta, item=False, degrees=None)
                 se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
+                if rescale and self.scale is not None:
+                    logger.info("Latent scores and standard errors computed on the original scale. Transformed standard errors are not yet implemented.")
                 return theta, se
             else:
                 logger.warning("Standard errors are only available for theta scores with ML or NN estimation.")
         
+        if rescale and self.scale is not None:
+            theta = self.scale(theta, **kwargs)
         return theta
     
 
@@ -798,7 +762,7 @@ class BaseIRTModel(ABC, nn.Module):
         to_save = {
             "model_state_dict": self.state_dict(),
             "algorithm": self.algorithm,
-            "scales": self._scales,
+            "scales": self.scale,
         }
         torch.save(to_save, path)
 
@@ -816,4 +780,4 @@ class BaseIRTModel(ABC, nn.Module):
         if "algorithm" in checkpoint:
             self.algorithm = checkpoint["algorithm"]
         if "scales" in checkpoint:
-            self._scales = checkpoint["scales"]
+            self.scale = checkpoint["scales"]

@@ -41,19 +41,3 @@ def test_gradients():
     gradients = flow.gradients(thetas)
     assert gradients.size() == torch.Size([5, 2, 2]), f"Gradients size is off: {gradients.size()}"
     assert torch.allclose(gradients[:, 1, 0], torch.tensor(0.0)) and torch.allclose(gradients[:, 0, 1], torch.tensor(0.0)), f"Off diagonals are non-zero: {gradients}"
-
-def _plot_thetas(thetas: torch.Tensor):
-    import matplotlib.pyplot as plt
-    if thetas.size(1) > 1:
-        fig, axes = plt.subplots(thetas.size(1), 1, figsize=(6, 10))  # 4 rows, 1 column for the subplots
-        fig.tight_layout(pad=3.0)
-        for i in range(thetas.size(1)):
-            axes[i].hist(thetas[:, i].detach().numpy(), bins=30, density=True, alpha=0.6, color='b')
-            axes[i].set_xlabel('Value')
-            axes[i].set_ylabel('Density')
-        plt.show()
-    else:
-        plt.hist(thetas[:, 0].detach().numpy(), bins=30, density=True, alpha=0.6, color='b')
-        plt.xlabel('Value')
-        plt.ylabel('Density')
-        plt.show()

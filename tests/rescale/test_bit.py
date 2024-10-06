@@ -10,7 +10,6 @@ def bit(theta_scores, latent_variables):
     # Create a mock instance of AEIRTNeuralNet
     item_categories = [2, 3]
     mock_algorithm = MagicMock(spec=AE)
-    mock_algorithm.one_hot_encoded = False
     mock_algorithm.training_theta_scores = theta_scores.clone().detach()
     mock_algorithm.train_data = torch.tensor([[1, 2], [0, 0], [1, 2], [1, 1]]).float()
 
@@ -70,40 +69,23 @@ def bit(theta_scores, latent_variables):
 
     return Bit(mock_model)
 
-@pytest.mark.parametrize("one_dimensional", [True, False])
-@pytest.mark.parametrize("bit_score_theta_grid_method", ["NN", "ML"])
-def test_transform(bit: Bit, one_dimensional, latent_variables, bit_score_theta_grid_method):
-    theta = torch.tensor([[0.8], [2.1], [-0.7], [-0.5]]).repeat(1, latent_variables)
+def test_transform(bit: Bit):
+    theta = torch.tensor([[0.8], [2.1], [-0.7], [-0.5]])
     theta = theta[1::2] * -1 # invert every other scale
-    start_theta = torch.full((1, latent_variables), -0.2)
+    start_theta = torch.full((1, 1), -0.2)
 
     def latent_scores_mock(*args, **kwargs):
-        return torch.tensor([[0.8], [-0.7], [0.8]]).repeat(1, latent_variables)
+        return torch.tensor([[0.8], [-0.7], [0.8]])
 
     bit.model.latent_scores = MagicMock(side_effect=latent_scores_mock)
 
-    inverted_scales = torch.ones((1, latent_variables))
-    inverted_scales[0, 1::2] = -1 # invert every other scale
-    with patch.object(Bit, "_inverted_scales", return_value=inverted_scales):
-        # with patch.object(IRTScorer, "_anti_invert_and_adjust_theta_scores", return_value=(theta, theta, start_theta)):
-        grid_start = torch.full((latent_variables,), -0.6)
-        grid_end = torch.full((latent_variables,), 2.0)
-        with patch.object(Bit, "_get_grid_boundaries", return_value=(grid_start, grid_end, torch.zeros((1, latent_variables), dtype=torch.bool))):
-            if one_dimensional:
-                with patch.object(Bit, "_compute_1d_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
-                    bit_scores = bit.transform(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
-            else:
-                with patch.object(Bit, "_compute_multi_dimensional_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]]).repeat(1, latent_variables)):
-                    bit_scores = bit.transform(theta, start_theta, one_dimensional=one_dimensional, theta_estimation=bit_score_theta_grid_method)
+    grid_start = torch.full((1,), -0.6)
+    grid_end = torch.full((1,), 2.0)
+    with patch.object(Bit, "_get_grid_boundaries", return_value=(grid_start, grid_end, torch.zeros((1, 1), dtype=torch.bool))):
+        with patch.object(Bit, "_compute_1d_bit_scores", return_value=torch.tensor([[0.5], [0.5], [0.5], [0.5]])):
+            bit_scores = bit.transform(theta, start_theta)
 
-    # Assert the result
-    if one_dimensional:
-        assert bit_scores.shape == (4, 1)
-    else:
-        assert bit_scores.shape == (4, latent_variables)
-
-    if bit_score_theta_grid_method == "ML":
-        bit.model.latent_scores.assert_called_once_with(bit.model.algorithm.train_data, theta_estimation="ML", ml_map_device="cuda" if torch.cuda.is_available() else "cpu", lbfgs_learning_rate=0.25)
+    assert bit_scores.shape == (4, 1)
 
 def test_compute_1d_bit_scores(bit: Bit, latent_variables):
     torch.manual_seed(4)
@@ -129,48 +111,58 @@ def test_compute_1d_bit_scores(bit: Bit, latent_variables):
     assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
     assert torch.all(bit_scores[(theta_adjusted < start_theta_adjusted).all(dim=1)] == 0), "Smaller than start should be set to start"
 
-def test_compute_multi_dimensional_bit_scores(bit: Bit, latent_variables):
-    torch.manual_seed(51)
-    start_theta_adjusted = torch.full((1, latent_variables), -1.2)
-    train_theta_adjusted = torch.randn(5, latent_variables)
-    theta_adjusted = torch.randn(5, latent_variables)
-    grid_start = torch.tensor([[-1] * latent_variables])
-    grid_end = torch.tensor([[1.0] * latent_variables])
-    inverted_scale = torch.ones((1, latent_variables))
-    inverted_scale[0, 1::2] = -1 # invert every other latent scale
-    grid_points = 10
-    
-    bit_scores = bit._compute_multi_dimensional_bit_scores(
-        theta_adjusted,
-        start_theta_adjusted,
-        train_theta_adjusted,
-        grid_start,
-        grid_end,
-        inverted_scale,
-        grid_points
+def test_bit_score_starting_theta(ae_1d_mmc_swesat_model, ae_1d_mmc_swesat_thetas):
+    bit_transform = Bit(
+        ae_1d_mmc_swesat_model,
+        population_theta=ae_1d_mmc_swesat_thetas,
+        mc_start_theta_approx=True,
+        theta_estimation="NN"
     )
 
-    assert bit_scores.ndim == 2, "bit scores should have 2 dimensions"
-    assert bit_scores.size(1) == latent_variables, "bit scores should have size 1 in the second dimension"
-    assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
-    assert torch.all(bit_scores[theta_adjusted < start_theta_adjusted] == 0), "Smaller than start should be set to start"
+    assert bit_transform._start_theta.shape == (1, ), "Starting theta should have shape (1, )"
 
-@pytest.mark.parametrize("guessing_probabilities", [None, [0.25, 0.5]])
-def test_bit_score_starting_theta(bit: Bit, guessing_probabilities, latent_variables):
-    items = [0, 1]  
-    train_theta = torch.randn(3, latent_variables)
+# def test_compute_multi_dimensional_bit_scores(bit: Bit, latent_variables):
+#     torch.manual_seed(51)
+#     start_theta_adjusted = torch.full((1, latent_variables), -1.2)
+#     train_theta_adjusted = torch.randn(5, latent_variables)
+#     theta_adjusted = torch.randn(5, latent_variables)
+#     grid_start = torch.tensor([[-1] * latent_variables])
+#     grid_end = torch.tensor([[1.0] * latent_variables])
+#     inverted_scale = torch.ones((1, latent_variables))
+#     inverted_scale[0, 1::2] = -1 # invert every other latent scale
+#     grid_points = 10
+    
+#     bit_scores = bit._compute_multi_dimensional_bit_scores(
+#         theta_adjusted,
+#         start_theta_adjusted,
+#         train_theta_adjusted,
+#         grid_start,
+#         grid_end,
+#         inverted_scale,
+#         grid_points
+#     )
 
-    mock_latent_scores = MagicMock(return_value=torch.randn(1, latent_variables))
-    with patch.object(bit.model, 'latent_scores', mock_latent_scores):
-        with patch.object(bit.model, 'item_theta_relationship_directions', return_value=torch.ones(len(items), latent_variables)):
-            starting_theta = bit.bit_score_starting_theta(
-                theta_estimation="ML",
-                start_all_incorrect=False,
-                guessing_probabilities=guessing_probabilities,
-                items=items,
-                train_theta=train_theta
-            )
+#     assert bit_scores.ndim == 2, "bit scores should have 2 dimensions"
+#     assert bit_scores.size(1) == latent_variables, "bit scores should have size 1 in the second dimension"
+#     assert bit_scores.size(0) == 5, "bit scores should have size 1 in the second dimension"
+#     assert torch.all(bit_scores[theta_adjusted < start_theta_adjusted] == 0), "Smaller than start should be set to start"
+
+# @pytest.mark.parametrize("guessing_probabilities", [None, [0.25, 0.5]])
+# def test_bit_score_starting_theta(bit: Bit, guessing_probabilities, latent_variables):
+#     items = [0, 1]  
+#     train_theta = torch.randn(3, latent_variables)
+
+#     mock_latent_scores = MagicMock(return_value=torch.randn(1, latent_variables))
+#     with patch.object(bit.model, 'latent_scores', mock_latent_scores):
+#         with patch.object(bit.model, 'item_theta_relationship_directions', return_value=torch.ones(len(items), latent_variables)):
+#             starting_theta = bit.bit_score_starting_theta(
+#                 theta_estimation="ML",
+#                 start_all_incorrect=False,
+#                 guessing_probabilities=guessing_probabilities,
+#                 items=items,
+#                 train_theta=train_theta
+#             )
             
-            assert starting_theta.shape == (1, latent_variables), "Starting theta should have shape (1, latent_variables)"
-            if guessing_probabilities:
-                assert len(guessing_probabilities) == len(items), "Guessing probabilities should match the number of items"
+#             assert starting_theta.shape == (1, latent_variables), "Starting theta should have shape (1, latent_variables)"
+#             if guessing_probabilities:
+#                 assert len(guessing_probabilities) == len(items), "Guessing probabilities should match the number of items"

@@ -22,7 +22,7 @@ class Scale(ABC):
         theta: torch.Tensor
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of scale scores for each :math:`j` with respect to the input theta scores.
+        Computes the gradients of scale scores with respect to the input theta scores.
 
         Parameters
         ----------
@@ -32,24 +32,5 @@ class Scale(ABC):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta row, items, latent variable).
-        """
-
-    @abstractmethod
-    def information(
-        self,
-        theta: torch.Tensor
-    ) -> torch.Tensor:
-        r"""
-        Computes the gradients of scale scores for each :math:`j` with respect to the input theta scores.
-
-        Parameters
-        ----------
-        theta : torch.Tensor
-            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
-
-        Returns
-        -------
-        torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta row, items, latent variable).
+            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """

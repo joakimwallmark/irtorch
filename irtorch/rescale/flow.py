@@ -71,22 +71,27 @@ class Flow(Scale):
         --------
         >>> from irtorch.models import GradedResponse
         >>> from irtorch.estimation_algorithms import AE
+        >>> from irtorch.rescale import Flow
         >>> from irtorch.load_dataset import swedish_national_mathematics_1
         >>> data = swedish_national_mathematics_1()
         >>> model = GradedResponse(data)
         >>> model.fit(train_data=data, algorithm=AE())
         >>> thetas = model.latent_scores(data)
-        >>> # Fit the flow scale
-        >>> model.rescale.flow.fit(thetas)
-        >>> # Put the thetas on the new scale
-        >>> rescaled_thetas = model.rescale.flow(thetas)
+        >>> # Initalize and fit the flow scale
+        >>> flow = Flow(1)
+        >>> flow.fit(thetas)
+        >>> model.rescale(flow)
+        >>> # Estimate thetas on the transformed scale
+        >>> rescaled_thetas = model.latent_scores(data)
+        >>> # Or alternatively by directly converting the old ones
+        >>> rescaled_thetas = model.scale(thetas)
         >>> # Plot the differences
         >>> model.plot.plot_latent_score_distribution(thetas).show()
         >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
         >>> # Put the thetas back to the original scale
-        >>> original_thetas = model.rescale.flow.inverse(rescaled_thetas)
+        >>> original_thetas = model.scale.inverse(rescaled_thetas)
         >>> # Plot an item on the flow transformed scale
-        >>> model.plot.plot_item_probabilities(1, scale="flow").show()
+        >>> model.plot.plot_item_probabilities(1).show()
         """
         if transformation is None:
             transformation = RationalQuadraticSpline(self.latent_variables, **kwargs)
@@ -212,22 +217,3 @@ class Flow(Scale):
         transformed_thetas.sum().backward()
         jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score
         return jacobians
-
-    def information(
-        self,
-        theta: torch.Tensor
-    ) -> torch.Tensor:
-        r"""
-        Computes the gradients of scale scores for each :math:`j` with respect to the input theta scores.
-
-        Parameters
-        ----------
-        theta : torch.Tensor
-            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
-
-        Returns
-        -------
-        torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta row, items, latent variable).
-        """
-        raise NotImplementedError("The information method is not implemented for the flow scale.")

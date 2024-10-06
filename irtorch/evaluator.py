@@ -68,7 +68,7 @@ class Evaluator:
             data = data.contiguous()
 
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
 
         missing_mask = get_missing_mask(data)
 
@@ -204,12 +204,11 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        scale: str = "theta",
         latent_variable: int = 1,
         standardize: bool = True,
         groups: int = 10,
         theta_estimation: str = "ML",
-        population_theta: torch.Tensor = None,
+        rescale: bool = True,
         **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -226,9 +225,6 @@ class Evaluator:
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         theta : torch.Tensor, optional
             A 2D tensor containing the pre-estimated theta scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        scale : str, optional
-            The grouping method scale, which can either be 'bit' or 'theta'. Note: for uni-dimensional
-            models, 'theta' and 'bit' are equivalent. (default is 'theta')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         standardize : bool, optional
@@ -237,10 +233,10 @@ class Evaluator:
             The number of groups. (default is 10)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
-        population_theta : torch.Tensor, optional
-            Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
+        rescale : bool, optional
+            Whether to compute the latent scores on the theta transformation scale if it exists. (default is True)
         **kwargs : dict, optional
-            Additional keyword arguments to be passed to the :meth:`irtorch.rescale.Bit.transform` method if scale is 'bit'.
+            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
             
         Returns
         -------
@@ -251,11 +247,10 @@ class Evaluator:
             self.latent_group_probabilities(
                 data=data,
                 theta=theta,
-                scale=scale,
+                rescale=rescale,
                 latent_variable=latent_variable,
                 groups=groups,
                 theta_estimation=theta_estimation,
-                population_theta=population_theta,
                 **kwargs
             )
 
@@ -520,11 +515,10 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        scale: str = "theta",
         latent_variable: int = 1,
         groups: int = 10,
         theta_estimation: str = "ML",
-        population_theta: torch.Tensor = None,
+        rescale: bool = True,
         **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -538,8 +532,6 @@ class Evaluator:
         data : torch.Tensor, optional
         theta : torch.Tensor, optional
             The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation. (default is None)
-        scale : str, optional
-            The scale on which to do the grouping. Refer to the :doc:`scales` documentation section for available options. Note: for uni-dimensional models, all monotone scale transformations are equivalent. (default is 'theta')
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
         groups: int
@@ -547,8 +539,8 @@ class Evaluator:
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        population_theta : torch.Tensor, optional
-            Only for bit scores. The latent variable theta scores for the population. If not provided, they will be computed using theta_estimation with the model training data. (default is None)
+        rescale : bool, optional
+            Whether to group the latent scores on the theta transformation scale if it exists. Note: for uni-dimensional models, all monotone scale transformations are equivalent in this case. (default is True)
         **kwargs : dict, optional
             Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         
@@ -563,27 +555,8 @@ class Evaluator:
         """
         data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
 
-        if scale == "theta":
-                    _, indices = torch.sort(theta[:, latent_variable - 1], dim=0)
-                    theta = theta[indices]
-                    grouped_theta = torch.chunk(theta, groups)
-                    group_mid_points = torch.tensor(
-                        [group[:, latent_variable - 1].median() for group in grouped_theta]
-                    )
-        else:
-            if scale == "bit":
-                if population_theta is None and data is self.model.algorithm.train_data:
-                    population_theta = theta
-            
-                transformed_scores = self.model.rescale.get_scale(scale)(
-                    theta=theta,
-                    one_dimensional=False,
-                    theta_estimation=theta_estimation,
-                    **kwargs
-                )
-            else:
-                transformed_scores = self.model.rescale.get_scale(scale)(theta, **kwargs)
-
+        if rescale and self.model.scale is not None:
+            transformed_scores = self.model.scale(theta, **kwargs)
             # Sort based on correct column and get the sorted indices
             _, indices = torch.sort(
                 transformed_scores[:, latent_variable - 1], dim=0
@@ -592,16 +565,22 @@ class Evaluator:
             transformed_scores = transformed_scores[indices]
             theta = theta[indices]
 
-            grouped_bit = torch.chunk(transformed_scores, groups)
+            grouped_transformed = torch.chunk(transformed_scores, groups)
             grouped_theta = torch.chunk(theta, groups)
 
             group_mid_points = torch.tensor(
                 [
                     group[:, latent_variable - 1].mean()
-                    for group in grouped_bit
+                    for group in grouped_transformed
                 ]
             )
-    
+        else:
+            _, indices = torch.sort(theta[:, latent_variable - 1], dim=0)
+            theta = theta[indices]
+            grouped_theta = torch.chunk(theta, groups)
+            group_mid_points = torch.tensor(
+                [group[:, latent_variable - 1].median() for group in grouped_theta]
+            )
 
         data = data[indices]
         grouped_data = torch.chunk(data, groups)
@@ -658,7 +637,7 @@ class Evaluator:
         else:
             data = data.contiguous()
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation)
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, rescale=False)
 
         data_joint_entropies = joint_entropy_matrix(data, log_base=log_base)
         data_entropies = data_joint_entropies.diag()
@@ -821,7 +800,7 @@ class Evaluator:
         else:
             data = data.contiguous()
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation)
+            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, rescale=False)
 
         residuals = self.residuals(data, theta, theta_estimation, average_over="none")
         corr_matrix = correlation_matrix(residuals)
@@ -1027,7 +1006,7 @@ class Evaluator:
                 mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.model.algorithm.covariance_matrix)
                 theta_scores = mvn.sample((4000,)).to(dtype=torch.float32)
         else:
-            theta_scores = self.model.latent_scores(population_data, theta_estimation="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate)
+            theta_scores = self.model.latent_scores(population_data, theta_estimation="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
 
         if latent_density_method in ["data", "encoder sampling"]:
             weights = (

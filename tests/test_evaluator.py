@@ -7,7 +7,6 @@ from irtorch.models import BaseIRTModel
 from irtorch.evaluator import Evaluator
 from irtorch.rescale.bit import Bit
 from irtorch.estimation_algorithms import AE
-from irtorch.models.base_irt_model import Scales
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 
@@ -63,14 +62,9 @@ def irt_model(latent_variables, algorithm: AE, bit: Bit):
         theta_scores = torch.randn(data.shape[0], latent_variables)
         return theta_scores
     
-    def get_scale_mock(theta, **kwargs):
-        return bit
-    
     mock_model = MagicMock(spec=BaseIRTModel, side_effect=model_forward_mock)
     mock_model.algorithm = algorithm
-    mock_model.rescale = MagicMock(spec=Scales)
-    mock_model.rescale.bit = bit
-    mock_model.rescale.get_scale = MagicMock(side_effect=get_scale_mock)
+    mock_model.scale = bit
     mock_model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     mock_model.latent_scores = MagicMock(side_effect=latent_scores)
     mock_model.item_categories = item_categories
@@ -187,8 +181,8 @@ def test_probabilities_from_grouped_data(evaluation: Evaluator):
     assert probabilities.shape == torch.Size([3, 2, 3])
     assert torch.allclose(probabilities.sum(dim=2), torch.ones_like(probabilities[:, :, 0]), atol=1e-7)
 
-@pytest.mark.parametrize("scale", ["bit", "theta"])
-def test_latent_group_probabilities(evaluation: Evaluator, scale):
+@pytest.mark.parametrize("rescale", [True, False])
+def test_latent_group_probabilities(evaluation: Evaluator, rescale):
     # Create some synthetic test data
     data = torch.cat(
         [
@@ -203,9 +197,7 @@ def test_latent_group_probabilities(evaluation: Evaluator, scale):
         grouped_data_probabilities,
         grouped_model_probabilities,
         group_averages,
-    ) = evaluation.latent_group_probabilities(
-        groups=groups, data=data, scale=scale, latent_variable=1
-    )
+    ) = evaluation.latent_group_probabilities(groups=groups, data=data, scale=rescale, latent_variable=1)
 
     # Check the number of groups
     assert grouped_data_probabilities.shape == grouped_model_probabilities.shape
@@ -214,8 +206,8 @@ def test_latent_group_probabilities(evaluation: Evaluator, scale):
     assert torch.allclose(grouped_model_probabilities.sum(dim=2), torch.ones_like(grouped_model_probabilities[:, :, 0]), atol=1e-7)
     assert group_averages.shape == (groups,)
 
-    if scale == "bit":
-        evaluation.model.rescale.bit.assert_called_once()
+    if rescale:
+        evaluation.model.scale.assert_called_once()
 
 def test_group_fit_residuals(evaluation: Evaluator):
     data = torch.cat(

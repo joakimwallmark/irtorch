@@ -357,8 +357,8 @@ class Bit(Scale):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta row, bit score, latent variable) where the last two are the jacobian.
-            If independent_theta is provided, the tensor has dimensions (theta row, bit score).
+            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+            If independent_theta is provided, the tensor has dimensions (theta rows, latent variables).
         """
         if self.model.latent_variables == 1:
             if theta.requires_grad:

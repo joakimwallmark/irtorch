@@ -202,9 +202,16 @@ class Flow(Scale):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta row, items, latent variable).
+            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        raise NotImplementedError("The gradients method is not implemented for the flow scale.")
+        self._flow_exists()
+        theta_scores = theta.clone()
+        theta_scores.requires_grad_(True)
+        standardized_theta_scores = (theta_scores - self.theta_means) / self.theta_stds
+        transformed_thetas = self.flow(standardized_theta_scores)
+        transformed_thetas.sum().backward()
+        jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score
+        return jacobians
 
     def information(
         self,

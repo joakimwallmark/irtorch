@@ -231,7 +231,7 @@ class BaseIRTModel(ABC, nn.Module):
             return expected_item_scores.sum(dim=1)
 
     @torch.inference_mode(False)
-    def expected_item_score_gardients(
+    def expected_item_score_gradients(
         self,
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
@@ -327,14 +327,15 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            I(\mathbf{\theta}) = E\left[ \left(\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}\right) \left(\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}\right)^T \right] = -E\left[\frac{\partial^2 \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}\right]
+            I(\mathbf{\theta}) = E\left[ \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right) \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right)^T \right] =
+            -E\left[\left(\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X) \right)\right]
 
         Where:
 
         - :math:`I(\mathbf{\theta})` is the Fisher Information Matrix.
         - :math:`\ell(\mathbf{\theta}|X)` is the log-likelihood of :math:`\mathbf{\theta}`, given the latent variable vector :math:`X`.
-        - :math:`\frac{\partial \ell(\mathbf{\theta}|X)}{\partial \mathbf{\theta}}` is the gradient vector of the log-likelihood with respect to :math:`\mathbf{\theta}`.
-        - :math:`\frac{\partial^2 \log f(\mathbf{\theta}|X)}{\partial \mathbf{\theta} \partial \mathbf{\theta}^T}` is the Hessian matrix (the second derivatives of the log-likelihood with respect to :math:`\mathbf{\theta}`).
+        - :math:`\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X)` is the gradient vector of the log-likelihood with respect to :math:`\mathbf{\theta}`.
+        - :math:`\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X)` is the Hessian matrix (the second derivatives of the log-likelihood with respect to :math:`\mathbf{\theta}`).
         
         For additional details, see :cite:t:`Chang2017`.
         """
@@ -440,7 +441,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         return gradients
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def latent_scores(
         self,
         data: torch.Tensor,
@@ -536,8 +537,81 @@ class BaseIRTModel(ABC, nn.Module):
             theta = self.scale(theta, **kwargs)
         return theta
     
+    def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
+        r"""
+        The averge population difficulty for each item. Ranges from 0 to 1.
+        
+        Calculated as the average proportion of item points missing for each item as:
+        
+        .. math::
 
-    @torch.inference_mode(False)
+            \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \frac{1}{N} \sum_{i=1}^{N} \left[1 - \frac{\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
+
+        where:
+
+        - :math:`\mathbf{\theta}` is a vector of latent variables.
+        - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
+        - :math:`\text{max}_j` is the maximum score on item :math:`j`.
+        - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
+            
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        rescale_by_item_score : bool, optional
+            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. 
+            This makes different item difficulties comparable. (default is True)
+
+        Returns
+        -------
+        torch.Tensor
+            A 1D tensor with the difficulty for each item.
+        """
+        item_scores = self.expected_scores(theta, return_item_scores=True)
+        if self.mc_correct:
+            item_scores = 1-item_scores
+        else:
+            item_scores = item_scores / (torch.tensor(self.item_categories) - 1)
+            item_scores = 1-item_scores
+        return item_scores.mean(dim=0)
+
+    def population_discimination(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
+        r"""
+        The averge population discrimination for each item. 
+        Relatively large values means that an item is good at distinguishing between higher and lower ability respondents for the population supplied by the theta argument.
+        
+        Calculated as the average gradients of the expected item scores with respect to the latent variables scaled by the maximum item scores.
+        
+        .. math::
+
+            \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \frac{1}{N} \sum_{i=1}^{N} \left[\frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
+
+        where:
+
+        - :math:`\mathbf{\theta}` is a vector of latent variables.
+        - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
+        - :math:`\text{max}_j` is the maximum score on item :math:`j`.
+        - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
+            
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        rescale_by_item_score : bool, optional
+            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. 
+            This makes different item difficulties comparable. (default is True)
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor with the average expected item score gradients. Dimensions are (items, latent_variables).
+        """
+        item_gradients = self.expected_item_score_gradients(theta, rescale_by_item_score=True, rescale=rescale, **kwargs)
+        return item_gradients.mean(dim=0)
+
+    @torch.no_grad()
     def _ml_map_theta_scores(
         self,
         data: torch.Tensor,

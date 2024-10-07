@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("irtorch")
 
 class Bit(Scale):
-    """
+    r"""
     Bit scale transformation, as introduced by :cite:t:`Wallmark2024`.
 
     Parameters
@@ -32,6 +32,35 @@ class Bit(Scale):
     **kwargs
         Additional keyword arguments for the starting theta approximation method. See :meth:`bit_score_starting_theta_mc`.
     
+    Notes
+    -----
+    First, item bit scores for each item :math:`j` are computed from :math:`\mathbf{\theta}` scores as follows:
+
+    .. math ::
+
+        \begin{equation}
+            \begin{aligned}
+                B_j(\mathbf{\theta})=
+                \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}
+                \left|\frac{dH_j(t)}{dt}\right| dt.
+            \end{aligned}
+        \end{equation}
+
+    where
+
+    - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
+    - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
+        
+    The total bit scores :math:`B(\mathbf{\theta})` are then the sum of the item scores:
+
+    .. math ::
+
+        \begin{equation}
+            \begin{aligned}
+                B(\mathbf{\theta}) = \sum_{j=1}^{J} B_j(\mathbf{\theta}).
+            \end{aligned}
+        \end{equation}
+
     Examples
     --------
     >>> import irtorch
@@ -116,35 +145,6 @@ class Bit(Scale):
         -------
         torch.Tensor
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_theta.
-
-        Notes
-        -----
-        First, item bit scores for each item :math:`j` are computed from :math:`\mathbf{\theta}` scores as follows:
-
-        .. math ::
-
-            \begin{equation}
-                \begin{aligned}
-                    B_j(\mathbf{\theta})=
-                    \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}
-                    \left|\frac{dH_j(t)}{dt}\right| dt.
-                \end{aligned}
-            \end{equation}
-
-        where
-
-        - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
-        - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
-            
-        The total bit scores :math:`B(\mathbf{\theta})` are then the sum of the item scores:
-
-        .. math ::
-
-            \begin{equation}
-                \begin{aligned}
-                    B(\mathbf{\theta}) = \sum_{j=1}^{J} B_j(\mathbf{\theta}).
-                \end{aligned}
-            \end{equation}
         """
         if grid_points <= 0:
             raise ValueError("steps must be a positive integer")
@@ -200,35 +200,6 @@ class Bit(Scale):
         -------
         torch.Tensor
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_theta.
-
-        Notes
-        -----
-        First, item bit scores for each item :math:`j` are computed from :math:`\mathbf{\theta}` scores as follows:
-
-        .. math ::
-
-            \begin{equation}
-                \begin{aligned}
-                    B_j(\mathbf{\theta})=
-                    \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}
-                    \left|\frac{dH_j(t)}{dt}\right| dt.
-                \end{aligned}
-            \end{equation}
-
-        where
-
-        - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
-        - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
-            
-        The total bit scores :math:`B(\mathbf{\theta})` are then the sum of the item scores:
-
-        .. math ::
-
-            \begin{equation}
-                \begin{aligned}
-                    B(\mathbf{\theta}) = \sum_{j=1}^{J} B_j(\mathbf{\theta}).
-                \end{aligned}
-            \end{equation}
         """
         if grid_points <= 0:
             raise ValueError("steps must be a positive integer")
@@ -266,19 +237,7 @@ class Bit(Scale):
         items: list[int] = None,
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of the bit scores with respect to the input theta scores
-
-        .. math ::
-
-            \frac{\partial B(\mathbf{\theta})}{\partial \mathbf{\theta}} = 
-            \sum_{j=1}^J\frac{\partial B_j(\mathbf{\theta})}{\partial \mathbf{\theta}} = 
-            \sum_{j=1}^J\frac{\partial \int_{t=\mathbf{\theta}^{(0)}}^{\mathbf{\theta}}\left|\frac{dH_j(t)}{dt}\right| dt}{\partial \mathbf{\theta}}=
-            \sum_{j=1}^J\left|\frac{\partial H_j(\mathbf{\theta})}{\partial \mathbf{\theta}}\right|,
-
-        where 
-
-        - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
-        - :math:`H_j(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
+        Computes the gradients of the bit scores with respect to the input theta scores.
 
         Parameters
         ----------

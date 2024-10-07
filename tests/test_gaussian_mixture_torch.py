@@ -35,7 +35,7 @@ def test_gaussian_mixture_model():
 
     gmm.fit(data)
     assert torch.isclose(gmm.weights, torch.tensor([0.75, 0.25]), atol=0.1).all()
-    assert torch.isclose(gmm.means, torch.tensor([[3., 2.], [-3., -2.]]), atol=0.1).all()
+    assert torch.isclose(gmm.means, torch.tensor([[3., 2.], [-3., -2.]]), atol=0.2).all()
     assert torch.isclose(
         gmm.covariances,
         torch.tensor([

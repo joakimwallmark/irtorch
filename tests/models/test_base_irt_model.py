@@ -67,7 +67,7 @@ def test_expected_scores(base_irt_model: BaseIRTModel):
     expected_item_scores = base_irt_model.expected_scores(torch.randn((1, 2)), return_item_scores=True)
     assert torch.allclose(expected_item_scores, torch.tensor([[0.8, 0.1]]))
 
-def test_expected_item_score_slopes(base_irt_model: BaseIRTModel):
+def test_expected_item_score_gradients(base_irt_model: BaseIRTModel):
     # Create a mock for item_probabilities() method
     def item_probabilities_mock(theta):
         logits = torch.tensor([[[1, 2, 3, 0], [4, 3, 2, 1]]]).expand(3, 2, 4) *theta.sum(dim=1).reshape(-1, 1, 1)
@@ -79,9 +79,9 @@ def test_expected_item_score_slopes(base_irt_model: BaseIRTModel):
     )
 
     input_theta = torch.tensor([[-2.0, -3.0], [1.0, 2.0], [1.0, 1.0]])
-    expected_item_scores = base_irt_model.expected_item_score_slopes(input_theta)
+    expected_item_scores = base_irt_model.expected_item_score_gradients(input_theta)
 
-    assert torch.allclose(expected_item_scores, torch.tensor([[ 0.0366,  0.0366], [-0.0264, -0.0264]]), atol=1e-3)
+    assert torch.allclose(expected_item_scores.mean(dim=0), torch.tensor([[ 0.0366,  0.0366], [-0.0264, -0.0264]]), atol=1e-3)
 
 def test_information(base_irt_model: BaseIRTModel):
     def item_probabilities_mock(theta):
@@ -92,7 +92,7 @@ def test_information(base_irt_model: BaseIRTModel):
         side_effect=item_probabilities_mock
     )
 
-    def probability_gradients_mock(theta):
+    def probability_gradients_mock(theta, rescale):
         return torch.tensor([
             [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]],
             [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]], [[0.9, 1.0], [1.1, 1.2], [1.3, 1.4], [1.5, 1.6]]]

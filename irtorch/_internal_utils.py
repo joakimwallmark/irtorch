@@ -252,8 +252,9 @@ def entropy(probabilities: torch.Tensor, log_base: float = 2.0):
     """
     if not torch.allclose(probabilities.sum(dim=-1), torch.tensor(1.0)):
         raise RuntimeError("The probabilities of the last dimension must sum to 1.")
-
-    surprisal = -torch.log(probabilities) / torch.log(torch.tensor(log_base))
+    # Compute log probabilities safely by adding a small epsilon to avoid log(0) and maintain gradient flow
+    epsilon = 1e-10
+    surprisal = -torch.log(probabilities + epsilon) / torch.log(torch.tensor(log_base))
     surprisal[surprisal.isinf()] = 0 # if surprisal is Inf, set to finite value to get correct entropy instead of NaN
     entropies = (probabilities * surprisal).sum(dim=-1)
     return entropies

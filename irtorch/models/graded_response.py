@@ -20,7 +20,7 @@ class GradedResponse(BaseIRTModel):
 
     Notes
     -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` or higher for all :math:`x>0` as follows:
+    For an item :math:`j` with ordered item scores :math:`x=0, 1, 2, ...` the model defines the probability for responding with a score of :math:`x` or higher for all :math:`x>0` as follows:
 
     .. math::
 

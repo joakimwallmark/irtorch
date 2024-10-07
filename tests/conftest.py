@@ -3,10 +3,117 @@ import random
 import pytest
 import torch
 import numpy as np
-from irtorch.models import MonotoneNN
-from irtorch.estimation_algorithms import AE, VAE, BaseIRTAlgorithm
+import irtorch
+from irtorch.models import MonotoneNN, GradedResponse, GeneralizedPartialCredit, BaseIRTModel
+from irtorch.estimation_algorithms import AE, VAE, MML
 from irtorch.irt_dataset import PytorchIRTDataset
-from irtorch.utils import get_item_categories
+
+# These fixture runs once per module, regardless of how many tests invoke it...
+@pytest.fixture(scope="module")
+def mml_1d_gpc_natmat_model() -> BaseIRTModel:
+    data = irtorch.load_dataset.swedish_national_mathematics_1()
+    torch.manual_seed(125)
+    irt_model = GeneralizedPartialCredit(
+        data=data,
+        latent_variables=1,
+    )
+    file_path = f"tests/fitted_models/mml_1d_gpc_natmat_model.pt"
+    if os.path.isfile(file_path):
+        irt_model.load_model(file_path)
+    else:
+        irt_model.fit(
+            train_data=data,
+            algorithm=MML(),
+        )
+        irt_model.save_model(file_path)
+
+    return irt_model
+
+@pytest.fixture(scope="module")
+def mml_1d_gpc_natmat_thetas(mml_1d_gpc_natmat_model: BaseIRTModel):
+    data = irtorch.load_dataset.swedish_national_mathematics_1()
+    file_path = f"tests/fitted_models/mml_1d_gpc_natmat_thetas.pt"
+    if os.path.isfile(file_path):
+        return torch.load(file_path)
+    else:
+        thetas = mml_1d_gpc_natmat_model.latent_scores(data=data)
+        torch.save(thetas, file_path)
+        return thetas
+
+@pytest.fixture(scope="module")
+def ae_1d_mmc_swesat_model():
+    data_sat, correct_responses = irtorch.load_dataset.swedish_sat_verbal()
+    torch.manual_seed(125)
+    irt_model = MonotoneNN(
+        data=data_sat,
+        latent_variables=1,
+        mc_correct=correct_responses,
+    )
+    file_path = f"tests/fitted_models/ae_1d_mmc_swesat_model.pt"
+    if os.path.isfile(file_path):
+        irt_model.load_model(file_path)
+    else:
+        irt_model.fit(
+            train_data=data_sat,
+            algorithm=AE(),
+        )
+        irt_model.save_model(file_path)
+
+    return irt_model
+
+# @pytest.fixture(scope="module")
+# def aaaa(ae_1d_mmc_swesat_model: BaseIRTModel) -> torch.Tensor:
+@pytest.fixture(scope="module")
+def ae_1d_mmc_swesat_thetas(ae_1d_mmc_swesat_model: BaseIRTModel) -> torch.Tensor:
+    data_sat, _ = irtorch.load_dataset.swedish_sat_verbal()
+    file_path = f"tests/fitted_models/ae_1d_mmc_swesat_thetas.pt"
+    if os.path.isfile(file_path):
+        return torch.load(file_path, weights_only=False)
+    else:
+        thetas = ae_1d_mmc_swesat_model.latent_scores(data=data_sat)
+        torch.save(thetas, file_path)
+        return thetas
+
+@pytest.fixture(scope="module")
+def vae_5d_graded_big_five_model():
+    data = irtorch.load_dataset.big_five()[0]
+    torch.manual_seed(125)
+    irt_model = GradedResponse(
+        data=data,
+        latent_variables=5,
+    )
+    file_path = f"tests/fitted_models/vae_5d_graded_big_five_model.pt"
+    if os.path.isfile(file_path):
+        irt_model.load_model(file_path)
+    else:
+        irt_model.fit(
+            train_data=data,
+            algorithm=VAE(),
+        )
+        irt_model.save_model(file_path)
+
+    return irt_model
+
+@pytest.fixture(scope="module")
+def vae_5d_graded_big_five_thetas(vae_5d_graded_big_five_model: BaseIRTModel):
+    data = irtorch.load_dataset.big_five()[0]
+    file_path = f"tests/fitted_models/vae_5d_graded_big_five_thetas.pt"
+    if os.path.isfile(file_path):
+        return torch.load(file_path, weights_only=False)
+    else:
+        thetas = vae_5d_graded_big_five_model.latent_scores(data=data, theta_estimation = "NN")
+        torch.save(thetas, file_path)
+        return thetas
+
+def ae_1d_mmc_swesat_model_thetas(ae_1d_mmc_swesat_model: BaseIRTModel):
+    data = irtorch.load_dataset.swedish_national_mathematics_1()
+    file_path = f"tests/fitted_models/ae_1d_mmc_swesat_model_thetas.pt"
+    if os.path.isfile(file_path):
+        return torch.load(file_path, weights_only=False)
+    else:
+        thetas = mml_1d_gpc_natmat_model.latent_scores(data=data)
+        torch.save(thetas, file_path)
+        return thetas
 
 @pytest.fixture(
     scope="module",
@@ -16,60 +123,6 @@ from irtorch.utils import get_item_categories
 def device(request):
     return request.param
 
-# This fixture runs once per module, regardless of how many tests invoke it...
-@pytest.fixture(scope="module", params=[VAE, AE])
-def fitting_algorithm(request):
-    return request.param
-
-@pytest.fixture(scope="module", params=["binary", "polytomous", "mc"])
-def data_type(request):
-    return request.param
-
-@pytest.fixture(scope="module")
-def data(data_type):
-    if data_type == "binary":
-        return torch.load("tests/datasets/test_data_bin.pt", weights_only=False)
-    if data_type == "polytomous":
-        return torch.load("tests/datasets/test_data_poly.pt", weights_only=False)
-    if data_type == "mc":
-        return torch.load("tests/datasets/test_data_mc.pt", weights_only=False)
-
-@pytest.fixture(scope="module")
-def model(device, latent_variables, data, data_type, fitting_algorithm: BaseIRTAlgorithm):
-    if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("GPU is not available.")
-    one_hot_encoded=False
-    correct_cat=None
-    if (data_type == "mc"):
-        one_hot_encoded=True
-        with open("tests/datasets/mc_correct.txt", "r") as file:
-            correct_cat = file.read().replace("\n", "")
-        correct_cat = [int(num) - 1 for num in correct_cat]
-        n_cats = [4, 4, 5, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 5, 4, 5, 4, 5]
-    else:
-        n_cats = get_item_categories(data)
-
-    torch.manual_seed(125)
-    irt_model = MonotoneNN(
-        latent_variables=latent_variables,
-        item_categories=n_cats,
-        mc_correct=correct_cat
-    )
-    # check if file exists
-    file_path = f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt"
-    if os.path.isfile(file_path):
-        irt_model.load_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
-    else:
-        irt_model.fit(
-            train_data=data,
-            algorithm=fitting_algorithm(),
-            one_hot_encoded=one_hot_encoded,
-            device=device
-        )
-        irt_model.save_model(f"tests/fitted_models/{fitting_algorithm}_latent_variables{latent_variables}_{data_type}_{device}.pt")
-
-    return irt_model
-
 @pytest.fixture(scope="module")
 def item_categories():
     return [2, 3, 3, 4, 4]
@@ -77,10 +130,6 @@ def item_categories():
 @pytest.fixture(scope="module")
 def item_categories_small():
     return [2, 3]
-
-@pytest.fixture(scope="module")
-def item_categories_binary():
-    return [2] * 5
 
 @pytest.fixture(scope="module")
 def test_data():
@@ -127,7 +176,6 @@ def data_loaders(test_data):
     )
 
     return data_loader, validation_data_loader
-
 
 @pytest.fixture(scope="module")
 def data_loaders_small(test_data):

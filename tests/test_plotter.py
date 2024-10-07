@@ -14,6 +14,7 @@ def mock_model():
     mock_model = MagicMock(spec = BaseIRTModel, side_effect=model_forward_mock)
     mock_model.latent_variables = 2
     mock_model.mc_correct = None
+    mock_model.scale = None
     mock_model.items = 5
     mock_model.item_categories = item_categories
     mock_model.algorithm = MagicMock(spec = MML)

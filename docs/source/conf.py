@@ -16,9 +16,11 @@ release = "0.3.0"
 
 extensions = [
     "nbsphinx", # Support for Jupyter Notebooks
+    # 'myst_nb',  # Alternative for MyST Markdown and notebooks. Loses figures but I think we could link to docs directly
     "sphinx.ext.duration", # Support for durations in the format 1h 30m 15s when using building the documentation
     "sphinx.ext.autodoc", # Automatically document code
     "sphinx.ext.napoleon", # Support for Google-style and NumPy-style docstrings
+    'sphinx.ext.intersphinx', # Support for linking to other Sphinx documentation
     "sphinx.ext.mathjax", # Support for LaTeX math
     "sphinxcontrib.bibtex" # Support for BibTeX
 ]

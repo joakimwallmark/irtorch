@@ -14,7 +14,7 @@ logger = logging.getLogger("irtorch")
 
 class Bit(Scale):
     """
-    Bit scale transformation.
+    Bit scale transformation, as introduced by :cite:t:`Wallmark2024`.
 
     Parameters
     ----------

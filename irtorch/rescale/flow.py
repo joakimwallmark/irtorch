@@ -12,17 +12,39 @@ logger = logging.getLogger("irtorch")
 class Flow(Scale):
     """
     Normalizing flow transformation of IRT theta scales.
-
+    
+    Parameters
+    ----------
+    latent_variables : int
+        The number of latent variables.
+    
+    Examples
+    --------
+    >>> import irtorch
+    >>> from irtorch.models import GradedResponse
+    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.rescale import Flow
+    >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
+    >>> model = GradedResponse(data)
+    >>> model.fit(train_data=data, algorithm=AE())
+    >>> thetas = model.latent_scores(data)
+    >>> # Initalize and fit the flow scale transformation. Supply it to the model.
+    >>> flow = Flow(1)
+    >>> flow.fit(thetas)
+    >>> model.rescale(flow)
+    >>> # Estimate thetas on the transformed scale
+    >>> rescaled_thetas = model.latent_scores(data)
+    >>> # Or alternatively by directly converting the old ones
+    >>> rescaled_thetas = model.scale(thetas)
+    >>> # Plot the differences
+    >>> model.plot.plot_latent_score_distribution(thetas).show()
+    >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
+    >>> # Put the thetas back to the original scale
+    >>> original_thetas = model.scale.inverse(rescaled_thetas)
+    >>> # Plot an item on the flow transformed scale
+    >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, latent_variables: int):
-        """
-        Initializes the normalizing flow scale.
-
-        Parameters
-        ----------
-        latent_variables : int
-            The number of latent variables.
-        """
         self.latent_variables = latent_variables
         self.theta_means = torch.zeros(latent_variables)
         self.theta_stds = torch.ones(latent_variables)
@@ -66,32 +88,6 @@ class Flow(Scale):
             The device to use for the computation. Default is "cuda" if available, otherwise "cpu".
         **kwargs
             Additional keyword arguments for :class:`irtorch.torch_modules.RationalQuadraticSpline` constructor.
-
-        Examples
-        --------
-        >>> from irtorch.models import GradedResponse
-        >>> from irtorch.estimation_algorithms import AE
-        >>> from irtorch.rescale import Flow
-        >>> from irtorch.load_dataset import swedish_national_mathematics_1
-        >>> data = swedish_national_mathematics_1()
-        >>> model = GradedResponse(data)
-        >>> model.fit(train_data=data, algorithm=AE())
-        >>> thetas = model.latent_scores(data)
-        >>> # Initalize and fit the flow scale
-        >>> flow = Flow(1)
-        >>> flow.fit(thetas)
-        >>> model.rescale(flow)
-        >>> # Estimate thetas on the transformed scale
-        >>> rescaled_thetas = model.latent_scores(data)
-        >>> # Or alternatively by directly converting the old ones
-        >>> rescaled_thetas = model.scale(thetas)
-        >>> # Plot the differences
-        >>> model.plot.plot_latent_score_distribution(thetas).show()
-        >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
-        >>> # Put the thetas back to the original scale
-        >>> original_thetas = model.scale.inverse(rescaled_thetas)
-        >>> # Plot an item on the flow transformed scale
-        >>> model.plot.plot_item_probabilities(1).show()
         """
         if transformation is None:
             transformation = RationalQuadraticSpline(self.latent_variables, **kwargs)
@@ -186,10 +182,15 @@ class Flow(Scale):
         ----------
         transformed_theta : torch.Tensor
             A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing theta scores on the the original scale.
         """
         self._flow_exists()
         theta = self.flow.inverse(transformed_theta)
-        # destandardize the data
+        # destandardize
         return theta * self.theta_stds + self.theta_means
 
     def gradients(

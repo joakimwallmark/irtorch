@@ -8,3 +8,7 @@ Rescaling
 .. autoclass:: irtorch.rescale.Bit
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.rescale.Flow
+    :show-inheritance:
+    :members:

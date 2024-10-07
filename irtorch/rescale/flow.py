@@ -11,7 +11,8 @@ logger = logging.getLogger("irtorch")
 
 class Flow(Scale):
     """
-    Normalizing flow transformation of IRT theta scales.
+    Normalizing flow transformation of IRT theta scales using rational quadratic splines as per :cite:t:`Durkan2019`.
+    Supports gradient computation and the transformation is invertible.
     
     Parameters
     ----------

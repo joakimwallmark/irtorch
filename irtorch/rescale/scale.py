@@ -23,7 +23,6 @@ class Scale(ABC):
         theta : torch.Tensor
             A 2D tensor containing transformed theta scores. Each column represents one latent variable.
         """
-        raise NotImplementedError("The scale transform method is not implemented.")
 
     @abstractmethod
     def gradients(
@@ -43,4 +42,3 @@ class Scale(ABC):
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        raise NotImplementedError("The scale gradients method is not implemented.")

@@ -325,7 +325,7 @@ class AE(BaseIRTAlgorithm):
         batch_loss = -model.log_likelihood(batch, outputs, missing_mask) / batch.shape[0]
         return batch_loss
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _validation_step(self, model: BaseIRTModel):
         """
         Perform a validation step.
@@ -351,7 +351,7 @@ class AE(BaseIRTAlgorithm):
         self.training_history["validation_loss"].append(loss)
         return loss
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _batch_fit_measures(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
         """
         Calculate the fit measures for a batch.
@@ -377,7 +377,7 @@ class AE(BaseIRTAlgorithm):
         loss = -log_likelihood / batch.shape[0]
         return loss
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def theta_scores(self, data: torch.Tensor):
         """
         Get the latent scores from an input dataset using the encoder.

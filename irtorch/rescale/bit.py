@@ -49,7 +49,7 @@ class Bit(Scale):
     where
 
     - :math:`\mathbf{\theta}^{(0)}` is the minimum :math:`\mathbf{\theta}`
-    - :math:`H(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
+    - :math:`H_j(\mathbf{\theta})` is entropy for item :math:`j` as a function of :math:`\mathbf{\theta}`
         
     The total bit scores :math:`B(\mathbf{\theta})` are then the sum of the item scores:
 
@@ -122,7 +122,7 @@ class Bit(Scale):
             raise ValueError("start_theta must have the same number of elements as the number of latent variables.")
         self._start_theta = start_theta
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def transform(
         self,
         theta: torch.Tensor,
@@ -176,7 +176,7 @@ class Bit(Scale):
         
         return bit_scores
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def transform_to_1D(
         self,
         theta: torch.Tensor,

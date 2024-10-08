@@ -385,7 +385,7 @@ class BaseIRTModel(ABC, nn.Module):
         
         return item_theta_mask.int()
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def sample_test_data(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Sample test data for the provided theta scores.
@@ -712,7 +712,7 @@ class BaseIRTModel(ABC, nn.Module):
             self.requires_grad_(True)
         return optimized_theta_scores
     
-    @torch.inference_mode()
+    @torch.no_grad()
     def _eap_theta_scores(self, data: torch.Tensor, grid_points: int = None) -> torch.Tensor:
         """
         Get the latent theta scores from test data using an already fitted model.
@@ -790,7 +790,7 @@ class BaseIRTModel(ABC, nn.Module):
         expected_theta = posterior_times_theta.reshape(-1, theta_grid.shape[0], posterior_times_theta.shape[1])
         return expected_theta.sum(dim=1).to(dtype=torch.float32)
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _theta_grid(self, theta_scores: torch.Tensor, grid_size: int = None):
         """
         Returns a new theta score tensor covering a large range of latent variable values in a grid.

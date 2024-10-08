@@ -75,7 +75,7 @@ class Evaluator:
         return data, theta, missing_mask
 
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def approximate_latent_density(
         self,
         theta_scores: torch.Tensor,
@@ -143,7 +143,7 @@ class Evaluator:
         gmm.fit(data)
         return gmm
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def residuals(
         self,
         data: torch.Tensor = None,
@@ -199,7 +199,7 @@ class Evaluator:
 
         return residuals
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def group_fit_residuals(
         self,
         data: torch.Tensor = None,
@@ -269,7 +269,7 @@ class Evaluator:
 
         return raw_residuals, group_mid_points
     
-    @torch.inference_mode()
+    @torch.no_grad()
     def accuracy(
         self,
         data: torch.Tensor = None,
@@ -311,7 +311,7 @@ class Evaluator:
         
         return accuracy.nanmean(dim=dim)
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def infit_outfit(
         self,
         data: torch.Tensor = None,
@@ -397,7 +397,7 @@ class Evaluator:
         
         return infit, outfit
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def log_likelihood(
         self,
         data: torch.Tensor = None,
@@ -454,7 +454,7 @@ class Evaluator:
         
         return likelihoods
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def group_fit_log_likelihood(
         self,
         data: torch.Tensor = None,
@@ -589,7 +589,7 @@ class Evaluator:
         return grouped_data_probabilties, grouped_model_probabilties, group_mid_points
 
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def mutual_information_difference(
         self,
         data: torch.Tensor = None,
@@ -703,7 +703,7 @@ class Evaluator:
         return mid_df, amid_df, None
 
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def sum_score_probabilities(
         self,
         latent_density_method: str = "data",
@@ -895,7 +895,7 @@ class Evaluator:
 
         return item_score_proportions
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _min_max_theta_for_integration(
         self,
         theta: torch.Tensor = None,
@@ -930,7 +930,7 @@ class Evaluator:
 
         return theta_min - theta_stds, theta_max + theta_stds
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _grouped_theta_probabilities(self, grouped_theta: tuple[torch.Tensor, ...]):
         """
         Computes the average probabilities for each potential item response for each group.
@@ -951,7 +951,7 @@ class Evaluator:
             group_probabilities[group_i, :, :] = item_probabilities.mean(dim=0)
         return group_probabilities
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def _grouped_data_probabilities(self, grouped_data: tuple[torch.Tensor, ...]):
         """
         Computes the average probabilities for each potential item response for each group.

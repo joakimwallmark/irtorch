@@ -84,7 +84,7 @@ class MonotonePolynomialModule(nn.Module):
             result += self.intercept
         return result
     
-    @torch.inference_mode()
+    @torch.no_grad()
     def get_polynomial_coefficients(self) -> torch.Tensor:
         """
         Returns the polynomial coefficients.

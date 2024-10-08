@@ -389,7 +389,7 @@ def get_missing_mask(data: torch.Tensor) -> torch.Tensor:
     """
     return (data == -1) | data.isnan()
 
-@torch.inference_mode()
+@torch.no_grad()
 def impute_missing_internal(
     data: torch.Tensor,
     method: str = "zero",

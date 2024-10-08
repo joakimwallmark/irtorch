@@ -96,7 +96,7 @@ class OneParameterLogistic(BaseIRTModel):
 
         return biases_df
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def item_theta_relationship_directions(self, theta:torch.Tensor = None) -> torch.Tensor:
         """
         Get the relationship directions between each item and latent variable for a fitted model.

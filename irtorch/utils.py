@@ -216,7 +216,7 @@ def get_item_categories(data: torch.Tensor):
     """
     return [int(data[~data.isnan().any(dim=1)][:, col].max()) + 1 for col in range(data.shape[1])]
 
-@torch.inference_mode()
+@torch.no_grad()
 def impute_missing(
     data: torch.Tensor,
     method: str = "zero",

@@ -101,7 +101,7 @@ class MonotoneNN(BaseIRTModel):
         else:
             item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)
         if hidden_dim is None:
-            hidden_dim = [3]
+            hidden_dim = [3] if use_bounded_activation else [2]
         else:
             if use_bounded_activation and not all(x % 3 == 0 for x in hidden_dim):
                 raise ValueError("hidden_dim must be a multiple of 3 when use_bounded_activation=True")

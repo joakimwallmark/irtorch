@@ -316,7 +316,7 @@ class VAE(AE):
         )
         return -log_likelihood / batch.shape[0]
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def theta_scores(
         self,
         data: torch.Tensor,
@@ -337,7 +337,7 @@ class VAE(AE):
         data = data.contiguous()
         return self.encoder(data)[0]
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def sample_latent_variables(
         self, model: BaseIRTModel, sample_size: int, input_data: torch.Tensor = None
     ):
@@ -380,7 +380,7 @@ class VAE(AE):
         mean, logvar = self.encoder(samples)
         return self.reparameterize(mean, logvar)
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def latent_credible_interval(
         self, input_data: torch.Tensor, alpha=0.05
     ) -> torch.tensor:

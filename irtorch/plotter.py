@@ -89,7 +89,7 @@ class Plotter:
 
         return fig
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def plot_latent_score_distribution(
         self,
         scores_to_plot: torch.Tensor = None,
@@ -294,7 +294,7 @@ class Plotter:
                 colorscale = colorscale
             )
         
-    @torch.inference_mode()
+    @torch.no_grad()
     def plot_item_latent_variable_relationships(
         self,
         relationships: torch.Tensor,
@@ -347,7 +347,7 @@ class Plotter:
         
         return fig
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def plot_item_probabilities(
         self,
         item: int,
@@ -516,7 +516,7 @@ class Plotter:
                 grayscale=grayscale
             )
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def plot_information(
         self,
         items: list[int] = None,

@@ -8,3 +8,5 @@ from .generalized_partial_credit import GeneralizedPartialCredit
 from .graded_response import GradedResponse
 from .nominal_response import NominalResponse
 from .monotone_polynomial import MonotonePolynomial
+from .surprisal_nn import SurprisalNN
+from .surprisal_spline import SurprisalSpline

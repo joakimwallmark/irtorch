@@ -10,3 +10,4 @@ from .nominal_response import NominalResponse
 from .monotone_polynomial import MonotonePolynomial
 from .surprisal_nn import SurprisalNN
 from .surprisal_spline import SurprisalSpline
+from .probability_spline import ProbabilitySpline

@@ -22,7 +22,7 @@ class Bit(Scale):
         The IRT model to use for bit scale computation.
     population_theta : torch.Tensor, optional
         Theta scores from the population. Usually the training data.
-        Used to find good starting values for the grid of theta scores used for the bit transformation.
+        Used to find good starting values for the grid of theta scores, which are then used for the bit transformation.
         Recommended to use for models with theta distributions for which values far from 0 are common. (default is None)
     start_theta : torch.Tensor, optional
         The starting theta scores for the bit scale computation. If None, the minimum theta scores are used. (default is None)
@@ -126,7 +126,7 @@ class Bit(Scale):
     def transform(
         self,
         theta: torch.Tensor,
-        grid_points: int = 300,
+        grid_points: int = 500,
         items: list[int] = None,
     ) -> torch.Tensor:
         r"""
@@ -153,7 +153,7 @@ class Bit(Scale):
         elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
             raise ValueError("items must be a list of integers.")
 
-        start_theta_adjusted = self._start_theta * self._invert_scale_multiplier 
+        start_theta_adjusted = self._start_theta * self._invert_scale_multiplier
         theta_adjusted = torch.max(theta * self._invert_scale_multiplier, start_theta_adjusted)
         if self._population_theta is None:
             grid_start = torch.full((1, self.model.latent_variables), -7)

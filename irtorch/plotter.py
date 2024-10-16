@@ -157,9 +157,7 @@ class Plotter:
             else:
                 population_data = population_data.contiguous()
 
-            scores = self.model.latent_scores(data=population_data, **kwargs)
-            if rescale and self.model.scale is not None:
-                scores = self.model.scale(theta=scores, **kwargs)
+            scores = self.model.latent_scores(data=population_data, rescale=rescale, **kwargs)
         else:
             scores = scores_to_plot
 
@@ -477,7 +475,7 @@ class Plotter:
         y_label: str = None,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
-        steps: int = 300,
+        steps: int = 1000,
         fixed_thetas: torch.Tensor = None,
         plot_group_fit: bool = False,
         group_fit_groups: int = 10,
@@ -509,7 +507,7 @@ class Plotter:
         second_theta_range : tuple, optional
             Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
         steps : int, optional
-            The number of steps along each theta axis used for probability evaluation. (default is 300)
+            The number of steps along each theta axis used for probability evaluation. (default is 1000)
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         plot_group_fit : bool, optional
@@ -567,12 +565,13 @@ class Plotter:
         if second_theta_range is None and len(latent_indices) > 1:
             second_theta_range = min_theta[latent_indices[1]].item(), max_theta[latent_indices[1]].item()
 
-        latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
         if len(latent_indices) == 1:
+            latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
             theta_grid = latent_theta_1.unsqueeze(1).repeat(1, model_dim)
             theta_grid[:, mask] = fixed_thetas
         else:
-            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
+            latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=200)
+            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=200)
             latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
             theta_grid = torch.zeros(latent_theta_1.numel(), model_dim)
             theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
@@ -1061,7 +1060,10 @@ class Plotter:
             "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
             "y": y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
         })
-        fig = px.line(df, x="x", y="y", title=title, color_discrete_sequence=[color])
+        fig = px.line(
+            df, x="x", y="y", title=title, color_discrete_sequence=[color],
+            line_shape='spline'
+        )
         fig.update_layout(xaxis_title=x_label, yaxis_title=y_label)
         return fig
 

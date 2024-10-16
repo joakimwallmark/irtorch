@@ -448,7 +448,7 @@ class BaseIRTModel(ABC, nn.Module):
         standard_errors: bool = False,
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.25,
+        lbfgs_learning_rate: float = 0.2,
         eap_theta_integration_points: int = None,
         rescale: bool = True,
         **kwargs

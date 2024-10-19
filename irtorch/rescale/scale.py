@@ -25,12 +25,12 @@ class Scale(ABC):
         """
 
     @abstractmethod
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of scale scores with respect to the input theta scores.
+        Computes the Jacobian matrix of the scale transformations for each row in the input theta scores.
 
         Parameters
         ----------
@@ -40,5 +40,5 @@ class Scale(ABC):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+            A torch tensor with the Jacobians for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians for each row.
         """

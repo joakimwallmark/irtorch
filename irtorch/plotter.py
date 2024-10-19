@@ -554,7 +554,7 @@ class Plotter:
             if isinstance(self.model.algorithm, (AE, VAE)):
                 fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
             else:
-                fixed_thetas = torch.zeros(model_dim)
+                fixed_thetas = torch.zeros(model_dim)[mask]
 
         elif len(fixed_thetas) is not model_dim - len(latent_variables):
             raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")

@@ -38,6 +38,6 @@ def test_gradients():
     flow = Flow(latent_variables=2)
     thetas = torch.randn(5, 2)
     flow.fit(theta=thetas, max_epochs=1)
-    gradients = flow.gradients(thetas)
+    gradients = flow.jacobian(thetas)
     assert gradients.size() == torch.Size([5, 2, 2]), f"Gradients size is off: {gradients.size()}"
     assert torch.allclose(gradients[:, 1, 0], torch.tensor(0.0)) and torch.allclose(gradients[:, 0, 1], torch.tensor(0.0)), f"Off diagonals are non-zero: {gradients}"

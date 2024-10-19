@@ -276,7 +276,7 @@ class BaseIRTModel(ABC, nn.Module):
                 gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
 
         if rescale and self.scale is not None:
-            rescale_gradients = self.scale.gradients(theta, **kwargs)
+            rescale_gradients = self.scale.jacobian(theta, **kwargs)
             # divide by the derivative of the transformed scores with respect to the theta scores
             # to get the expected item score slopes with respect to the transformed scores (chain rule)
             gradients = gradients / rescale_gradients
@@ -434,7 +434,7 @@ class BaseIRTModel(ABC, nn.Module):
         gradients = torch.vmap(compute_jacobian)(theta)
 
         if rescale and self.scale is not None:
-            rescale_gradients = self.scale.gradients(theta, **kwargs)
+            rescale_gradients = self.scale.jacobian(theta, **kwargs)
             # we divide by diagonal of the transformed score gradients (the gradients in the direction of the transformed score corresponding original theta scores)
             rescale_gradients_diag = torch.einsum("...ii->...i", rescale_gradients)
             gradients = (gradients.permute(1, 2, 0, 3) / rescale_gradients_diag).permute(2, 0, 1, 3)

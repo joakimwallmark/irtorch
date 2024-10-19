@@ -106,7 +106,7 @@ class RankCDF(Scale):
 
         return transformed_data
 
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:

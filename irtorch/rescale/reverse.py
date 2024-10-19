@@ -60,7 +60,7 @@ class Reverse(Scale):
         """
         return transformed_theta * self._reverse
 
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:

@@ -64,7 +64,7 @@ def test_bit_gradients():
     model = TwoParameterLogistic(latent_variables=1, items=3)
     bit_scale = Bit(model)
     theta = torch.tensor([[0.0], [1.0], [-1.0]]).repeat(1, 1)
-    gradients = bit_scale.gradients(theta)
+    gradients = bit_scale.jacobian(theta)
     assert gradients.shape == (3, 1, 1)
     assert torch.all(gradients >= 0)
 

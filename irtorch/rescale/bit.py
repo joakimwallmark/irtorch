@@ -231,7 +231,7 @@ class Bit(Scale):
         return bit_scores
 
     @torch.inference_mode(False)
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor,
         items: list[int] = None,

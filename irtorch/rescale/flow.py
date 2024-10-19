@@ -194,7 +194,7 @@ class Flow(Scale):
         # destandardize
         return theta * self.theta_stds + self.theta_means
 
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:

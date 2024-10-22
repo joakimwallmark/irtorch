@@ -57,16 +57,16 @@ class Flow(Scale):
         theta:torch.Tensor,
         transformation: RationalQuadraticSpline = None,
         distribution: Distribution = None,
-        batch_size: int = 512,
-        learning_rate: float = 0.05,
+        batch_size: int = None,
+        learning_rate: float = 0.01,
         learning_rate_updates_before_stopping: int = 2,
-        evaluation_interval_size: int = 30,
-        max_epochs: int = 200,
+        evaluation_interval_size: int = 50,
+        max_epochs: int = 1500,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         **kwargs
     ):
         """
-        Fits the normalizing flow to the data. Typically used from within an IRT model instance.
+        Fits the normalizing flow to the data. Typically used from within an IRT model instance. Use batch_size if the data is too large to fit in memory.
         
         Parameters
         ----------
@@ -77,22 +77,33 @@ class Flow(Scale):
         distribution : Distribution, optional
             The distribution to apply to the latent variables. If None, a standard normal distribution is used.
         batch_size : int, optional
-            The batch size for the data loader. Default is 256.
+            The batch size for the data loader. Default is None and uses no batches.
         learning_rate : float, optional
             The learning rate for the optimizer. Default is 0.01.
         learning_rate_updates_before_stopping: int = 5,
             The number of learning rate updates before stopping the training. Default is 2.
         evaluation_interval_size: int, optional
-            The number of iterations between each model evaluation during training. (default is 60)
+            The number of iterations between each model evaluation during training. (default is 50)
         max_epochs : int, optional
-            The maximum number of epochs to train the flow. Default is 20.
+            The maximum number of epochs to train the flow. Default is 1500.
         device : str, optional
             The device to use for the computation. Default is "cuda" if available, otherwise "cpu".
         **kwargs
             Additional keyword arguments for :class:`irtorch.torch_modules.RationalQuadraticSpline` constructor.
         """
         if transformation is None:
-            transformation = RationalQuadraticSpline(self.latent_variables, **kwargs)
+            spline_params = {
+                'lower_input_bound': -5.5,
+                'upper_input_bound': 5.5,
+                'lower_output_bound': -3.0,
+                'upper_output_bound': 3.0,
+                'num_bins': 300,
+            }
+            spline_params.update(kwargs)
+            transformation = RationalQuadraticSpline(
+                self.latent_variables,
+                **spline_params
+            )
 
         if distribution is None:
             distribution = Normal(
@@ -101,6 +112,9 @@ class Flow(Scale):
             )
         if len(distribution.batch_shape) > 0 and distribution.batch_shape[0] not in [1, self.latent_variables]:
             raise ValueError("The distribution batch shape should match the number of latent variables or be 0.")
+
+        if batch_size is None:
+            batch_size = theta.shape[0]
 
         # standardize the data and store the mean and std for later use
         self.theta_means = theta.mean(dim=0)

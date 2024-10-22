@@ -132,8 +132,12 @@ class RationalQuadraticSpline(nn.Module):
             The logarithm of the absolute value of the determinant of the Jacobian.
         """
         # Create masks for input intervals
-        below_lower_bound_mask = inputs < self.lower_input_bound
-        above_upper_bound_mask = inputs > self.upper_input_bound
+        if inverse:
+            below_lower_bound_mask = inputs < self.lower_output_bound
+            above_upper_bound_mask = inputs > self.upper_output_bound
+        else:
+            below_lower_bound_mask = inputs < self.lower_input_bound
+            above_upper_bound_mask = inputs > self.upper_input_bound
         inside_interval_mask = ~below_lower_bound_mask & ~above_upper_bound_mask
         outside_interval_mask = ~inside_interval_mask
 
@@ -145,16 +149,28 @@ class RationalQuadraticSpline(nn.Module):
         unnormalized_derivatives[..., 0] = constant
         unnormalized_derivatives[..., -1] = constant
 
-        outputs = torch.where(
-            below_lower_bound_mask,
-            self.lower_output_bound + (inputs - self.lower_input_bound) * self.derivative_outside_lower_input_bound,
-            outputs
-        )
-        outputs = torch.where(
-            above_upper_bound_mask,
-            self.upper_output_bound + (inputs - self.upper_input_bound) * self.derivative_outside_upper_input_bound,
-            outputs
-        )
+        if inverse:
+            outputs = torch.where(
+                below_lower_bound_mask,
+                self.lower_input_bound + (inputs - self.lower_output_bound) / self.derivative_outside_lower_input_bound,
+                outputs
+            )
+            outputs = torch.where(
+                above_upper_bound_mask,
+                self.upper_input_bound + (inputs - self.upper_output_bound) / self.derivative_outside_upper_input_bound,
+                outputs
+            )
+        else:
+            outputs = torch.where(
+                below_lower_bound_mask,
+                self.lower_output_bound + (inputs - self.lower_input_bound) * self.derivative_outside_lower_input_bound,
+                outputs
+            )
+            outputs = torch.where(
+                above_upper_bound_mask,
+                self.upper_output_bound + (inputs - self.upper_input_bound) * self.derivative_outside_upper_input_bound,
+                outputs
+            )
         logabsdet = torch.where(
             outside_interval_mask,
             torch.zeros_like(logabsdet),

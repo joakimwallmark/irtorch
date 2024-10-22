@@ -55,7 +55,7 @@ class AE(BaseIRTAlgorithm):
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
-        Train an IRT model using the autoencoder. If the algorithm fails to converge, try lowering the learning rate or increasing the batch size.
+        Train an IRT model using the autoencoder. If the algorithm fails to converge, try lowering the learning rate. Use batch_size if the data is too large to fit in memory.
 
         Parameters
         ----------

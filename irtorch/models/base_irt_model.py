@@ -386,8 +386,8 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            I(\mathbf{\theta}) = E\left[ \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right) \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right)^T \right] =
-            -E\left[\left(\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X) \right)\right]
+            I(\mathbf{\theta}) = \mathbb{E}_{X|\mathbf{\theta}}\left[ \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right) \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right)^T \right] =
+            -\mathbb{E}_{X|\mathbf{\theta}}\left[\left(\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X) \right)\right]
 
         Where:
 

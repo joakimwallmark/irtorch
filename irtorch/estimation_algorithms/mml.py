@@ -52,7 +52,7 @@ class MML(BaseIRTAlgorithm):
         integration_method: str = "quasi_mc",
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
-        learning_rate: float = 0.2,
+        learning_rate: float = 0.15,
         learning_rate_update_patience: int = 4,
         learning_rate_updates_before_stopping: int = 1,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -76,7 +76,7 @@ class MML(BaseIRTAlgorithm):
         covariance_matrix : torch.Tensor, optional
             The covariance matrix for the multivariate normal distribution for the latent variables. (default is None and uses uncorrelated variables)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.2)
+            The initial learning rate for the optimizer. (default is 0.15)
         learning_rate_update_patience : int, optional
             The number of epochs to wait before reducing the learning rate. (default is 4)
         learning_rate_updates_before_stopping : int, optional

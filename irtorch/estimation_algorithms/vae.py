@@ -42,7 +42,7 @@ class VAE(AE):
         iw_samples: int = 5,
     ):
         """
-        Train an IRT model using the variational autoencoder.
+        Train an IRT model using the variational autoencoder. If the algorithm fails to converge, try lowering the learning rate. Use batch_size if the data is too large to fit in memory.
 
         Parameters
         ----------

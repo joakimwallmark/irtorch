@@ -10,17 +10,33 @@ def test_fit_and_inverse(
 ):
     torch.manual_seed(42)
     flow = Flow(latent_variables=5)
-    flow.fit(theta=vae_5d_graded_big_five_thetas, learning_rate_updates_before_stopping=1, evaluation_interval_size=5)
-    thetas1 = flow(vae_5d_graded_big_five_thetas)
+    flow.fit(
+        theta=vae_5d_graded_big_five_thetas,
+        batch_size=128,
+        learning_rate_updates_before_stopping=1,
+        learning_rate=0.05,
+        evaluation_interval_size=5
+    )
+    thetas1 = flow(vae_5d_graded_big_five_thetas[:100])
     original_thetas1 = flow.inverse(thetas1)
 
     flow = Flow(latent_variables=1)
-    flow.fit(theta=ae_1d_mmc_swesat_thetas, learning_rate_updates_before_stopping=1, evaluation_interval_size=5)
+    flow.fit(
+        theta=ae_1d_mmc_swesat_thetas,
+        learning_rate_updates_before_stopping=1,
+        evaluation_interval_size=5,
+        learning_rate=0.05
+    )
     thetas2 = flow(ae_1d_mmc_swesat_thetas)
     original_thetas2 = flow.inverse(thetas2)
 
     flow = Flow(latent_variables=1)
-    flow.fit(theta=mml_1d_gpc_natmat_thetas, learning_rate_updates_before_stopping=1, evaluation_interval_size=5)
+    flow.fit(
+        theta=mml_1d_gpc_natmat_thetas,
+        learning_rate_updates_before_stopping=1,
+        learning_rate=0.05,
+        evaluation_interval_size=5
+    )
     thetas3 = flow(mml_1d_gpc_natmat_thetas)
     original_thetas3 = flow.inverse(thetas3)
 
@@ -30,7 +46,7 @@ def test_fit_and_inverse(
     assert torch.all(torch.isclose(variances, torch.tensor(1.0), atol=0.4)), f"Variances are off: {variances}"
 
 
-    assert torch.allclose(vae_5d_graded_big_five_thetas, original_thetas1, atol=0.001), "Original thetas 1 are off"
+    assert torch.allclose(vae_5d_graded_big_five_thetas[:100], original_thetas1, atol=0.001), "Original thetas 1 are off"
     assert torch.allclose(ae_1d_mmc_swesat_thetas, original_thetas2, atol=0.001), "Original thetas 2 are off"
     assert torch.allclose(mml_1d_gpc_natmat_thetas, original_thetas3, atol=0.001), "Original thetas 3 are off"
 

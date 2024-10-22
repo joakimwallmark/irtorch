@@ -220,8 +220,6 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -249,8 +247,8 @@ class Plotter:
         mean_output = self.model(theta_grid)
         item_entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)[:, latent_indices]
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
@@ -337,8 +335,6 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -370,8 +366,8 @@ class Plotter:
             level="respondent"
         )
 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)[:, latent_indices]
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
@@ -526,8 +522,6 @@ class Plotter:
             Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -579,8 +573,8 @@ class Plotter:
             theta_grid[:, mask] = fixed_thetas
             
 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
         else:
             scores_to_plot = theta_grid
         
@@ -687,8 +681,6 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -713,8 +705,8 @@ class Plotter:
         if theta_grid.shape[0] > 2000:
             logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
@@ -808,8 +800,6 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -829,8 +819,8 @@ class Plotter:
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
         
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
             scores_to_plot = scores_to_plot[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
@@ -925,8 +915,6 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -959,8 +947,8 @@ class Plotter:
             sum_scores = self.model.expected_scores(theta_grid, return_item_scores=False)
 
                 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid,**kwargs)[:, latent_indices]
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:

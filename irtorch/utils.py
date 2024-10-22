@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from irtorch.models import BaseIRTModel
 
-__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed"]
+__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imw"]
 
 logger = logging.getLogger("irtorch")
 
@@ -295,6 +295,82 @@ def impute_missing(
         )
 
     return imputed_data
+
+@torch.no_grad()
+def imw(
+    model1: BaseIRTModel,
+    model2: BaseIRTModel,
+    data: torch.Tensor,
+    model1_theta: torch.Tensor = None,
+    model2_theta: torch.Tensor = None,
+    max_iterations = 100,
+    **kwargs
+):
+    r"""
+    Quantifies the improvement in model predictions from model 2 over model 1 by computing the InterModel Vigorish (IMW) metric by :cite:t:`Domingue2024`.
+    The IMW is the expected gain if one were to place fair bets on model 1 making correct predictions on the observed data,
+    but the actual predictions are made by model 2.
+    
+    Parameters
+    ----------
+    model1 : BaseIRTModel
+        The first model to compare.
+    model2 : BaseIRTModel
+        The second model to compare.
+    data : torch.Tensor, optional
+        The data to use for evaluating the models. Typically not the same as the model training data to avoid overfitting.
+
+    Returns
+    -------
+    torch.Tensor
+        The IMW value. A positive value indicates that model 2 predicts better than model 1.
+
+    Examples
+    --------
+    >>> import irtorch
+    >>> from irtorch.estimation_algorithms import MML
+    >>> from irtorch.models import OneParameterLogistic, TwoParameterLogistic, ThreeParameterLogistic
+    >>> data = irtorch.load_dataset.swedish_sat_binary()[:, :80]
+    >>> train_data, test_data = irtorch.split_data(data, 0.8)
+    >>> model1 = OneParameterLogistic(train_data)
+    >>> model2 = TwoParameterLogistic(train_data)
+    >>> model3 = ThreeParameterLogistic(train_data)
+    >>> model1.fit(train_data, MML())
+    >>> model2.fit(train_data, MML())
+    >>> model3.fit(train_data, MML())
+    >>> imw12 = irtorch.utils.imw(model1, model2, test_data)
+    >>> imw23 = irtorch.utils.imw(model2, model3, test_data)
+    >>> imw13 = irtorch.utils.imw(model1, model3, test_data)
+    >>> print(f"IMW 1-2: {imw12:.4f}")
+    >>> print(f"IMW 2-3: {imw23:.4f}")
+    >>> print(f"IMW 1-3: {imw13:.4f}")
+    """
+    # Same as the log of the geometric mean of the likelihoods
+    log_geometric_mean1 = model1.evaluate.log_likelihood(data, model1_theta, reduction="mean", **kwargs)
+    log_geometric_mean2 = model2.evaluate.log_likelihood(data, model2_theta, reduction="mean", **kwargs)
+    # Probability of the entropy that leads to the geometric mean
+    log_geometric_means = torch.stack((log_geometric_mean1, log_geometric_mean2))
+    w = _imw_newton_raphson(log_geometric_means, max_iter=max_iterations)
+    imw = (w[1]-w[0])/w[0]
+    return imw
+
+def _imw_newton_raphson(negative_entropy, max_iter=100, tol=1e-6):
+    negative_entropy = negative_entropy.clone().detach()
+    w = torch.full_like(negative_entropy, 0.75)
+    for _ in range(max_iter):
+        fx = w * torch.log(w) + (1 - w) * torch.log(1 - w) - negative_entropy
+        fpx = torch.log(w) - torch.log(1 - w)
+        
+        # Avoid division by zero
+        fpx = torch.where(fpx == 0, torch.tensor(1e-6), fpx)
+        
+        delta_x = -fx / fpx
+        w = w + delta_x
+        w = torch.clamp(w, 0.5 + 1e-6, 1 - 1e-6)
+        if torch.max(torch.abs(delta_x)) < tol:
+            break
+    return w
+
 
 def fit_multiple_models_cpu(
     models: list[BaseIRTModel],

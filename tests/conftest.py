@@ -34,7 +34,7 @@ def mml_1d_gpc_natmat_thetas(mml_1d_gpc_natmat_model: BaseIRTModel):
     data = irtorch.load_dataset.swedish_national_mathematics_1()
     file_path = f"tests/fitted_models/mml_1d_gpc_natmat_thetas.pt"
     if os.path.isfile(file_path):
-        return torch.load(file_path)
+        return torch.load(file_path, weights_only=True)
     else:
         thetas = mml_1d_gpc_natmat_model.latent_scores(data=data)
         torch.save(thetas, file_path)

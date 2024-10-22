@@ -30,7 +30,7 @@ class VAE(AE):
         imputation_method: str = None,
         learning_rate: float = 0.002,
         learning_rate_updates_before_stopping: int = 2,
-        evaluation_interval_size: int = 80,
+        evaluation_interval_size: int = 60,
         max_epochs: int = 10000,
         batch_size: int = None,
         batch_normalization_encoder: bool = False,
@@ -106,6 +106,8 @@ class VAE(AE):
         self.anneal = anneal
         self.one_hot_encoded = one_hot_encoded
 
+        if batch_size is None:
+            batch_size = train_data.shape[0]
         if one_hot_encoded:
             input_dim = sum(model.item_categories)
         else:

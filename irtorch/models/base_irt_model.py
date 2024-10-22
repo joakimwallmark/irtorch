@@ -43,7 +43,7 @@ class BaseIRTModel(ABC, nn.Module):
         self.items = len(item_categories)
         self.mc_correct = mc_correct
         self.algorithm = None
-        self.scale : Scale = None
+        self.scale : list[Scale] = []
 
         self._evaluate = None
         self._plot = None
@@ -115,11 +115,72 @@ class BaseIRTModel(ABC, nn.Module):
         algorithm.fit(self, train_data=train_data, **kwargs)
         self.algorithm = algorithm
 
-    def rescale(self, scale: Scale) -> None:
+    def add_scale_tranformation(self, scale: Scale) -> None:
         """
         Add a scale transformation to the model. The rescaling instance should inherit from :class:`irtorch.rescale.Scale`.
         """
-        self.scale = scale
+        self.scale.append(scale)
+
+    def detach_scale_transformations(self) -> None:
+        """
+        Remove a scale transformation from the model.
+        """
+        self.scale = []
+
+    def transform_theta(self, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Transform the latent variables using the scale transformation(s).
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+        """
+        for scale in self.scale:
+            theta = scale(theta)
+        return theta
+
+    def inverse_transform_theta(self, transformed_theta: torch.Tensor) -> torch.Tensor:
+        """
+        Reverse transformed latent variables to their original theta scale.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing original theta scores. Each column represents one latent variable.
+        """
+        for scale in self.scale:
+            transformed_theta = scale.inverse(transformed_theta)
+        return transformed_theta
+    
+    def theta_transform_jacobian(self, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the Jacobian matrix of the scale transformations for each row in the input theta scores.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+        """
+        jacobian = torch.eye(self.latent_variables).repeat(theta.shape[0], 1, 1)
+        for scale in self.scale:
+            jacobian = torch.matmul(jacobian, scale.jacobian(theta))
+        return jacobian
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
@@ -236,7 +297,6 @@ class BaseIRTModel(ABC, nn.Module):
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
         rescale: bool = True,
-        **kwargs
     ) -> torch.Tensor:
         r"""
         Computes expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
@@ -249,8 +309,6 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -272,11 +330,12 @@ class BaseIRTModel(ABC, nn.Module):
             for item in range(expected_item_sum_scores.shape[1]):
                 if theta_scores.grad is not None:
                     theta_scores.grad.zero_()
+                dynamic_print(f"Computing gradients for item {item+1} with respect to latent variable {latent_variable+1}...")
                 expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
                 gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
 
-        if rescale and self.scale is not None:
-            rescale_gradients = self.scale.jacobian(theta, **kwargs)
+        if rescale and self.scale:
+            rescale_gradients = self.theta_transform_jacobian(theta)
             # divide by the derivative of the transformed scores with respect to the theta scores
             # to get the expected item score slopes with respect to the transformed scores (chain rule)
             gradients = gradients / rescale_gradients
@@ -415,8 +474,6 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -433,8 +490,8 @@ class BaseIRTModel(ABC, nn.Module):
         # vectorized version of jacobian
         gradients = torch.vmap(compute_jacobian)(theta)
 
-        if rescale and self.scale is not None:
-            rescale_gradients = self.scale.jacobian(theta, **kwargs)
+        if rescale and self.scale:
+            rescale_gradients = self.theta_transform_jacobian(theta)
             # we divide by diagonal of the transformed score gradients (the gradients in the direction of the transformed score corresponding original theta scores)
             rescale_gradients_diag = torch.einsum("...ii->...i", rescale_gradients)
             gradients = (gradients.permute(1, 2, 0, 3) / rescale_gradients_diag).permute(2, 0, 1, 3)
@@ -451,7 +508,6 @@ class BaseIRTModel(ABC, nn.Module):
         lbfgs_learning_rate: float = 0.2,
         eap_theta_integration_points: int = None,
         rescale: bool = True,
-        **kwargs
     ):
         r"""
         Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
@@ -474,9 +530,7 @@ class BaseIRTModel(ABC, nn.Module):
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         rescale : bool, optional
             Whether to compute the latent scores on the rescaled scale if it exists. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the transformation method for the rescale transformation method.
-            
+
         Returns
         -------
         torch.Tensor or tuple[torch.Tensor, torch.Tensor]
@@ -527,14 +581,14 @@ class BaseIRTModel(ABC, nn.Module):
             if theta_estimation == "ML" or theta_estimation == "NN":
                 fisher_info = self.information(theta, item=False, degrees=None)
                 se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-                if rescale and self.scale is not None:
+                if rescale and self.scale:
                     logger.info("Latent scores and standard errors computed on the original scale. Transformed standard errors are not yet implemented.")
                 return theta, se
             else:
                 logger.warning("Standard errors are only available for theta scores with ML or NN estimation.")
         
-        if rescale and self.scale is not None:
-            theta = self.scale(theta, **kwargs)
+        if rescale and self.scale:
+            theta = self.transform_theta(theta)
         return theta
     
     def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:

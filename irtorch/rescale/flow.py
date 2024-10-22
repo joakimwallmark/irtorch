@@ -32,20 +32,21 @@ class Flow(Scale):
     >>> # Initalize and fit the flow scale transformation. Supply it to the model.
     >>> flow = Flow(1)
     >>> flow.fit(thetas)
-    >>> model.rescale(flow)
+    >>> model.add_scale_tranformation(flow)
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones
-    >>> rescaled_thetas = model.scale(thetas)
+    >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
     >>> model.plot.plot_latent_score_distribution(thetas).show()
     >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
     >>> # Put the thetas back to the original scale
-    >>> original_thetas = model.scale.inverse(rescaled_thetas)
+    >>> original_thetas = model.inverse_transform_theta(rescaled_thetas)
     >>> # Plot an item on the flow transformed scale
     >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, latent_variables: int):
+        super().__init__(invertible=True)
         self.latent_variables = latent_variables
         self.theta_means = torch.zeros(latent_variables)
         self.theta_stds = torch.ones(latent_variables)

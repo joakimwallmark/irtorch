@@ -26,10 +26,11 @@ class Reverse(Scale):
     >>> model.plot.plot_item_probabilities(1).show()
     >>> # reverse the first (and only) latent variable
     >>> reverse = Reverse([True])
-    >>> model.rescale(reverse)
+    >>> model.add_scale_tranformation(reverse)
     >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, reversed_latent_variables: list[bool]):
+        super().__init__(invertible=True)
         self._reverse = -torch.tensor(reversed_latent_variables, dtype=int).reshape(1, -1)
 
     def transform(self, theta: torch.Tensor) -> torch.Tensor:

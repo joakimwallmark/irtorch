@@ -9,6 +9,8 @@ class OneParameterLogistic(BaseIRTModel):
 
     Parameters
     ----------
+    data: torch.Tensor, optional
+        A 2D torch tensor with test data. Used to automatically compute the number of items. Columns are items and rows are respondents. (default is None)
     items : int
         Number of items.
     
@@ -41,8 +43,13 @@ class OneParameterLogistic(BaseIRTModel):
     """
     def __init__(
         self,
-        items: int,
+        data: torch.Tensor = None,
+        items: int = None,
     ):
+        if items is None and data is None:
+            raise ValueError("Either items or data must be provided to initialize the model.")
+        if data is not None:
+            items = data.size(1)
         super().__init__(latent_variables=1, item_categories = [2] * items)
 
         self.output_size = self.items * 2

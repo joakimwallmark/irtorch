@@ -42,9 +42,7 @@ class Evaluator:
             self,
             data: torch.Tensor = None,
             theta: torch.Tensor = None,
-            theta_estimation: str = "ML",
-            ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-            lbfgs_learning_rate: float = 0.25,
+            **kwargs
         ):
         """"
         Helper function for evaluating the data and theta inputs for various performance measure methods.
@@ -54,13 +52,9 @@ class Evaluator:
         data : torch.Tensor
             The input data.
         theta: torch.Tensor, optional
-            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
-        ml_map_device: str, optional
-            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
-        lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. (default is 0.3)
+            The latent variable theta scores for the provided data. If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
         """
         if data is None:
             data = self.model.algorithm.train_data
@@ -68,7 +62,8 @@ class Evaluator:
             data = data.contiguous()
 
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
+            theta = self.model.latent_scores(
+                data=data, rescale=False, **kwargs)
 
         missing_mask = get_missing_mask(data)
 
@@ -148,8 +143,8 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         average_over: str = "none",
+        **kwargs
     ) -> torch.Tensor:
         """
         Compute model residuals using the supplied data. 
@@ -162,18 +157,19 @@ class Evaluator:
         data : torch.Tensor
             The input data.
         theta: torch.Tensor, optional
-            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         average_over: str = "none", optional
             Whether to average the residuals and over which level. Can be 'everything', 'items', 'respondents' or 'none'. Use 'none' for no average. For example, with 'respondent' the residuals are averaged over all respondents and is thus an average per item. (default is 'none')
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
             
         Returns
         -------
         torch.Tensor
             The residuals.
         """
-        data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, _ = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         missing_mask = get_missing_mask(data)
         data[torch.isnan(data)] = -1
@@ -274,8 +270,8 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         level: str = "all",
+        **kwargs
     ):
         """
         Calculate the prediction accuracy of the model for the supplied data.
@@ -285,18 +281,19 @@ class Evaluator:
         data : torch.Tensor
             The input data.
         theta: torch.Tensor, optional
-            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         level: str = "all", optional
             Specifies the level at which the accuracy is calculated. Can be 'all', 'item' or 'respondent'. For example, for 'item' the accuracy is calculated for each item. (default is 'all')
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
         Returns
         -------
         torch.Tensor
             The accuracy.
         """
-        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         probabilities = self.model.item_probabilities(theta)
         accuracy = (torch.argmax(probabilities, dim=2) == data).float()
@@ -316,8 +313,8 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         level: str = "item",
+        **kwargs
     ):
         """
         Calculate person or item infit and outfit statistics. These statistics help identifying items that do not behave as expected according to the model
@@ -329,11 +326,12 @@ class Evaluator:
         data : torch.Tensor
             The input data.
         theta: torch.Tensor, optional
-            The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         level: str = "item", optional
             Specifies whether to compute item or respondent statistics. Can be 'item' or 'respondent'. (default is 'item')
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
         Returns
         -------
@@ -364,7 +362,7 @@ class Evaluator:
         if level not in ["item", "respondent"]:
             raise ValueError("Invalid level. Choose either 'item' or 'respondent'.")
 
-        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         expected_scores = self.model.expected_scores(theta, return_item_scores=True)
         probabilities = self.model.item_probabilities(theta)
@@ -391,7 +389,7 @@ class Evaluator:
         if level == "item":
             infit = mse.nansum(dim=0) / variance.nansum(dim=0)
             outfit = wmse.nanmean(dim=0)
-        elif level == "respondent":
+        else:
             infit = mse.nansum(dim=1) / variance.nansum(dim=1)
             outfit = wmse.nanmean(dim=1)
         
@@ -402,9 +400,9 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         reduction: str = "sum",
         level: str = "all",
+        **kwargs
     ):
         """
         Calculate the log-likelihood for the provided data.
@@ -415,21 +413,22 @@ class Evaluator:
         ----------
         data : torch.Tensor, optional
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None and uses the model's training data)
-        theta : torch.Tensor, optional
-            A 2D tensor containing latent variable theta scores. Each row corresponds to one respondent and each column represents a latent variable. If not provided, will be computed using theta_estimation. (default is None)
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         reduction : str, optional
             Specifies the reduction method for the log-likelihood. Can be 'sum', 'none' or 'mean'. (default is 'sum')
         level : str, optional
-            For reductions other than 'none', specifies the level at which the log-likelihood is summed/averaged. Can be 'all', 'item' or 'respondent'. For example, for 'item' the log-likelihood is summed/averaged for each item. (default is 'all')
+            For reductions other than 'none', specifies the level at which the log-likelihood is summed/averaged. Can be 'all', 'item' or 'respondent'. For example, for 'item' the log-likelihood is summed/averaged for each item over the respondents. (default is 'all')
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
             
         Returns
         -------
         torch.Tensor
             The log-likelihood for the provided data.
         """
-        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         if reduction != "none":
             if level == "item":
@@ -446,6 +445,8 @@ class Evaluator:
             loss_reduction="none"
         )
 
+        # On unseen data, we may end up with 0 probabilities which will result in -inf likelihoods
+        likelihoods[likelihoods==-torch.inf] = -30.0
         likelihoods = likelihoods.view(theta.shape[0], -1)
         if reduction in "mean":
             return likelihoods.nanmean(dim=dim)
@@ -459,9 +460,9 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         groups: int = 10,
         latent_variable: int = 1,
+        **kwargs
     ):
         """
         Group the respondents based on their ordered latent variable scores.
@@ -473,21 +474,22 @@ class Evaluator:
         ----------
         data : torch.Tensor, optional
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        theta : torch.Tensor, optional
-            A 2D tensor containing the pre-estimated theta scores for each respondent in the data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         groups: int
             The number of groups. (default is 10)
         latent_variable: int, optional
             Specifies the latent variable along which ordering and grouping should be performed. (default is 1)
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
         Returns
         -------
         torch.Tensor
             The average log-likelihood for each group.
         """
-        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         indicies = torch.sort(theta[:, latent_variable - 1], dim=0)[1]
         theta = theta[indicies]
@@ -519,7 +521,6 @@ class Evaluator:
         groups: int = 10,
         theta_estimation: str = "ML",
         rescale: bool = True,
-        **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Group the respondents based on their ordered latent variable scores.
@@ -541,8 +542,6 @@ class Evaluator:
             A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         rescale : bool, optional
             Whether to group the latent scores on the theta transformation scale if it exists. Note: for uni-dimensional models, all monotone scale transformations are equivalent in this case. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
         
         Returns
         -------
@@ -553,10 +552,10 @@ class Evaluator:
 
             The third tensor contains the average latent variable values within each group along the specified latent_variable.
         """
-        data, theta, _ = self._evaluate_data_theta_input(data, theta, theta_estimation)
+        data, theta, _ = self._evaluate_data_theta_input(data=data, theta=theta, theta_estimation=theta_estimation)
 
-        if rescale and self.model.scale is not None:
-            transformed_scores = self.model.scale(theta, **kwargs)
+        if rescale and self.model.scale:
+            transformed_scores = self.model.transform_theta(theta)
             # Sort based on correct column and get the sorted indices
             _, indices = torch.sort(
                 transformed_scores[:, latent_variable - 1], dim=0
@@ -594,10 +593,10 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         sample_hypothesis_test: bool = False,
         samples: int = 1000,
         log_base: float = 2.0,
+        **kwargs
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         r"""
         Compute the mutual information difference (MID) and the absolute value of mutual information difference (AMID) statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence). 
@@ -607,15 +606,16 @@ class Evaluator:
         data : torch.Tensor
             The data used to compute the AMID statistic. Uses the model's training data if not provided.
         theta: torch.Tensor, optional
-            The theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         sample_hypothesis_test : bool, optional
             Whether to sample from the null hypothesis distribution for the AMID statistic and perform a statistical test for each item pair. (default is False)
         samples : int, optional
             The number of samples to draw from the null hypothesis distribution. (default is 1000)
         log_base : float, optional
             The base of the logarithm used to compute the entropy. (default is 2.0)
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
         Returns
         -------
@@ -637,7 +637,7 @@ class Evaluator:
         else:
             data = data.contiguous()
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, rescale=False)
+            theta = self.model.latent_scores(data=data, rescale=False, **kwargs)
 
         data_joint_entropies = joint_entropy_matrix(data, log_base=log_base)
         data_entropies = data_joint_entropies.diag()
@@ -760,9 +760,9 @@ class Evaluator:
         self,
         data: torch.Tensor = None,
         theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
         sample_hypothesis_test: bool = False,
         samples: int = 1000,
+        **kwargs
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         r"""
         Compute the Q3 statistic :cite:p:`Kim2011` for the provided data to test for conditional independence among items given :math:`\theta` (local independence).
@@ -772,13 +772,14 @@ class Evaluator:
         data : torch.Tensor
             The data used to compute the Q3 statistic. Uses the model's training data if not provided.
         theta: torch.Tensor, optional
-            The theta scores for the provided data. If not provided, they will be computed using theta_estimation.
-        theta_estimation : str, optional
-            Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively.
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
         sample_hypothesis_test : bool, optional
             Whether to sample from the null hypothesis distribution for the Q3 statistic and perform a statistical test for each item pair. (default is False)
         samples : int, optional
             The number of samples to draw from the null hypothesis distribution. (default is 1000)
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
         Returns
         -------
@@ -800,9 +801,9 @@ class Evaluator:
         else:
             data = data.contiguous()
         if theta is None:
-            theta = self.model.latent_scores(data=data, theta_estimation=theta_estimation, rescale=False)
+            theta = self.model.latent_scores(data=data, rescale=False, **kwargs)
 
-        residuals = self.residuals(data, theta, theta_estimation, average_over="none")
+        residuals = self.residuals(data=data, theta=theta, average_over="none", **kwargs)
         corr_matrix = correlation_matrix(residuals)
         corr_matrix.fill_diagonal_(torch.nan)
         corr_matrix_df = pd.DataFrame(corr_matrix.detach().numpy())
@@ -823,8 +824,8 @@ class Evaluator:
                 sample_residuals = self.residuals(
                     sample_data,
                     theta = theta,
-                    theta_estimation = theta_estimation,
                     average_over="none"
+                    **kwargs
                 )
                 sample_corr_matrices[sample, :, :] = correlation_matrix(sample_residuals)
 

@@ -504,9 +504,9 @@ class BaseIRTModel(ABC, nn.Module):
         data: torch.Tensor,
         standard_errors: bool = False,
         theta_estimation: str = "ML",
-        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.2,
         eap_theta_integration_points: int = None,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
         rescale: bool = True,
     ):
         r"""
@@ -522,10 +522,10 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to return standard errors for the latent scores. (default is False)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        ml_map_device: str, optional
-            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        device: str, optional
+            The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.2)
         eap_theta_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         rescale : bool, optional
@@ -570,10 +570,14 @@ class BaseIRTModel(ABC, nn.Module):
                 else:
                     theta = self.algorithm.theta_scores(encoder_data).clone()
             else:
-                theta = torch.zeros(data.shape[0], self.latent_variables).float()
+                if hasattr(self.algorithm, "training_theta_scores") and self.algorithm.training_theta_scores is not None:
+                    logger.info("Finding training data theta scores to use as initial theta estimates...")
+                    theta = self._initial_theta_from_training_data(data, device=device)
+                else:
+                    theta = torch.zeros(data.shape[0], self.latent_variables).float()
 
             if theta_estimation in ["ML", "MAP"]:
-                theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=ml_map_device)
+                theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=device)
             elif theta_estimation == "EAP":
                 theta = self._eap_theta_scores(data, eap_theta_integration_points)
 
@@ -590,6 +594,42 @@ class BaseIRTModel(ABC, nn.Module):
         if rescale and self.scale:
             theta = self.transform_theta(theta)
         return theta
+
+    def _initial_theta_from_training_data(self, data, device):
+        try:
+            self.to(device)
+            data = data.to(device)
+            training_thetas = self.algorithm.training_theta_scores.to(device)
+            if data.shape[0] * training_thetas.shape[0] > 2e6:
+                if data.shape[0] > 2e6:
+                    logger.info("Large dataset. Setting initial theta estimates to the median training data theta scores.")
+                    return training_thetas.median(dim=0).values.repeat(data.shape[0], 1)
+                logger.info("Sampling training data theta scores to avoid running out of memory...")
+                sample_size = int(2e6/data.shape[0])
+                # sample 1000 random indices
+                sampled_indices = torch.randperm(training_thetas.shape[0])[:sample_size]
+                training_thetas = training_thetas[sampled_indices]
+            
+            logits = self(training_thetas)
+            missing_mask = get_missing_mask(data)
+            theta = training_thetas.repeat(data.shape[0], 1)
+            init_data = data.repeat_interleave(training_thetas.shape[0], dim=0)
+            missing_mask = missing_mask.repeat_interleave(training_thetas.shape[0], dim=0)
+            
+            logits = logits.repeat(data.shape[0], 1)
+            lls = self.log_likelihood(init_data, logits, missing_mask, loss_reduction="none")
+            lls = lls.view(logits.shape[0], -1).nansum(dim=1)
+            lls = lls.view(data.shape[0], -1)
+            best_theta_ind = lls.argmax(dim=1)
+            best_theta_ind = torch.arange(0, data.shape[0], device=device) * training_thetas.shape[0] + best_theta_ind
+            theta = theta[best_theta_ind, :]
+        except Exception as e:
+            logger.error("Error in initial theta estimation. Using all zeros. Error message: %s", e)
+            self.to("cpu")
+            return torch.zeros(data.shape[0], self.latent_variables).to("cpu")
+        finally:
+            self.to("cpu")
+        return theta.to("cpu")
     
     def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
         r"""
@@ -717,9 +757,9 @@ class BaseIRTModel(ABC, nn.Module):
                 self.to(device)
                 initial_theta_scores = initial_theta_scores.to(device)
                 data = data.to(device)
-                max_iter = 30
+                max_iter = 50
             else:
-                max_iter = 20
+                max_iter = 40
 
             # Initial guess for the theta_scores are the outputs from the encoder
             optimized_theta_scores = initial_theta_scores.clone().detach().requires_grad_(True)
@@ -728,6 +768,7 @@ class BaseIRTModel(ABC, nn.Module):
             loss_history = []
             tolerance = 1e-8
 
+            logger.info("Optimizing theta scores...")
             missing_mask = get_missing_mask(data)
             def closure():
                 optimizer.zero_grad()
@@ -797,7 +838,7 @@ class BaseIRTModel(ABC, nn.Module):
         if hasattr(self.algorithm, "training_theta_scores"):
             if self.algorithm.training_theta_scores is None:
                 raise ValueError("Please fit the model before computing latent scores.")
-            train_theta_scores = self.algorithm.training_theta_scores
+            train_theta_scores = self.algorithm.training_theta_scores.to("cpu")
             theta_grid = self._theta_grid(train_theta_scores, grid_size=grid_points)
             # Center the data and compute the covariance matrix.
             mean_centered_theta_scores = train_theta_scores - train_theta_scores.mean(dim=0)

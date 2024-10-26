@@ -360,7 +360,7 @@ class Bit(Scale):
         )
 
         logger.info("Approximating theta from random guessing data to get minimum bit score.")
-        guessing_theta = self.model.latent_scores(random_data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
+        guessing_theta = self.model.latent_scores(random_data, theta_estimation=theta_estimation, device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
 
         starting_theta = guessing_theta.detach().median(dim=0).values.reshape(1, self.model.latent_variables)
 

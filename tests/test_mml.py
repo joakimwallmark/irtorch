@@ -26,7 +26,7 @@ class TestMML:
         algorithm = MML()
         algorithm.imputation = "zero"
         # Set DataLoaders from the fixture
-        algorithm.data_loader, algorithm.validation_data_loader = data_loaders
+        algorithm.data_loader = data_loaders
         return algorithm
 
     def test__train_step(self, algorithm: MML, irt_model: MonotoneNN, test_data: torch.Tensor):

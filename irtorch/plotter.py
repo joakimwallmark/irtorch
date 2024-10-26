@@ -1001,7 +1001,7 @@ class Plotter:
         if fixed_thetas is None:
             if isinstance(self.model.algorithm, (AE, VAE)):
                 fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 fixed_thetas = torch.zeros(self.model.latent_variables)[mask]
         
         if theta_range is None:
@@ -1010,7 +1010,7 @@ class Plotter:
                     self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].min().item(),
                     self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].max().item()
                 )
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 theta_range = (-3, 3)
         if second_theta_range is None and len(latent_indices) > 1:
             if isinstance(self.model.algorithm, (AE, VAE)):
@@ -1018,7 +1018,7 @@ class Plotter:
                     self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].min().item(),
                     self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].max().item()
                 )
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 second_theta_range = (-3, 3)
 
         latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)

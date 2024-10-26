@@ -25,7 +25,6 @@ class VAE(AE):
         self,
         model: BaseIRTModel,
         train_data: torch.Tensor,
-        validation_data: torch.Tensor = None,
         one_hot_encoded: bool = True,
         imputation_method: str = None,
         learning_rate: float = 0.002,
@@ -50,8 +49,6 @@ class VAE(AE):
             The model to fit. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
-        validation_data : torch.Tensor, optional
-            The validation data. (default is None)
         one_hot_encoded : bool, optional
             Whether the model uses one-hot encoded data. (default is False)
         imputation_method : str, optional
@@ -92,7 +89,6 @@ class VAE(AE):
         # Re-initialize the training history
         self.training_history = {
             "train_loss": [],
-            "validation_loss": [],
         }
         self.best_model_state = None
         self.batch_mean_losses = []
@@ -139,19 +135,6 @@ class VAE(AE):
             shuffle=True,
             pin_memory=False,
         )
-        if validation_data is not None:
-            validation_data_irt = PytorchIRTDataset(
-                data=validation_data.to(device),
-                one_hot_encoded=self.one_hot_encoded,
-                item_categories=model.item_categories,
-                imputation_method=imputation_method,
-                mc_correct=model.mc_correct
-            )
-            self.validation_data_loader = torch.utils.data.DataLoader(
-                validation_data_irt,
-                batch_size=batch_size,
-                shuffle=False,
-            )
 
         self.optimizer = torch.optim.Adam(
             list(self.encoder.parameters()) + list(model.parameters()), lr=learning_rate, amsgrad=True
@@ -166,7 +149,7 @@ class VAE(AE):
 
         self.encoder.to(device)
         model.to(device)
-        self._training_loop(model, max_epochs, validation_data, learning_rate_updates_before_stopping)
+        self._training_loop(model, max_epochs, learning_rate_updates_before_stopping)
         self.encoder.to("cpu")
         model.to("cpu")
         self.encoder.eval()

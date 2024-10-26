@@ -66,4 +66,4 @@ class PytorchIRTDataset(torch.utils.data.Dataset):
         torch.Tensor
             Only relevant for autoencoder models. The autoencoder input data for the sample.
         """
-        return self.data[index], self.mask[index], self.input_data[index]
+        return self.data[index], self.mask[index], self.input_data[index], index

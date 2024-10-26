@@ -166,16 +166,7 @@ def data_loaders(test_data):
         generator=g,
     )
 
-    validation_data_loader = torch.utils.data.DataLoader(
-        PytorchIRTDataset(data=test_data[100:120]),
-        batch_size=32,
-        shuffle=True,
-        pin_memory=False,
-        worker_init_fn=seed_worker,
-        generator=g,
-    )
-
-    return data_loader, validation_data_loader
+    return data_loader
 
 @pytest.fixture(scope="module")
 def data_loaders_small(test_data):
@@ -197,13 +188,4 @@ def data_loaders_small(test_data):
         generator=g,
     )
 
-    validation_data_loader = torch.utils.data.DataLoader(
-        PytorchIRTDataset(data=test_data[2:4]),
-        batch_size=32,
-        shuffle=True,
-        pin_memory=False,
-        worker_init_fn=seed_worker,
-        generator=g,
-    )
-
-    return data_loader, validation_data_loader
+    return data_loader

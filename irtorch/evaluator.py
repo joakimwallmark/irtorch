@@ -1007,7 +1007,7 @@ class Evaluator:
                 mvn = MultivariateNormal(torch.zeros(self.model.latent_variables), self.model.algorithm.covariance_matrix)
                 theta_scores = mvn.sample((4000,)).to(dtype=torch.float32)
         else:
-            theta_scores = self.model.latent_scores(population_data, theta_estimation="NN", ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
+            theta_scores = self.model.latent_scores(population_data, theta_estimation="NN", device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
 
         if latent_density_method in ["data", "encoder sampling"]:
             weights = (

@@ -25,7 +25,7 @@ class TestVAE:
         algorithm.imputation_method = "zero"
         algorithm.one_hot_encoded = False
         # Set DataLoaders from the fixture
-        algorithm.data_loader, algorithm.validation_data_loader = data_loaders
+        algorithm.data_loader = data_loaders
 
         algorithm.encoder = VariationalEncoder(
             input_dim=len(item_categories),
@@ -49,7 +49,7 @@ class TestVAE:
         algorithm.imputation_method = "zero"
         algorithm.one_hot_encoded = False
         # Set DataLoaders from the fixture
-        algorithm.data_loader, algorithm.validation_data_loader = data_loaders_small
+        algorithm.data_loader = data_loaders_small
 
         algorithm.encoder = VariationalEncoder(
             input_dim=len(item_categories_small),
@@ -99,7 +99,6 @@ class TestVAE:
             algorithm.fit(
                 model=irt_model,
                 train_data=test_data[0:100],
-                validation_data=test_data[100:120],
                 max_epochs=5
             )
 

@@ -71,9 +71,14 @@ class JML(BaseIRTAlgorithm):
         if start_thetas is None:
             start_thetas = sum_score(train_data, model.mc_correct)
             start_thetas = (start_thetas - start_thetas.mean()) / start_thetas.std()
-            start_thetas = start_thetas.detach().unsqueeze(1)
+            start_thetas = start_thetas.detach().unsqueeze(1).repeat(1, model.latent_variables)
+            if model.latent_variables > 1:
+                # add small noise to avoid all latent variables updating the same way
+                start_thetas = start_thetas + torch.randn(start_thetas.shape) * 0.1
         elif start_thetas.shape[0] != train_data.shape[0]:
             raise ValueError("The number of starting thetas must be the same as the number of respondents.")
+        elif start_thetas.shape[1] != model.latent_variables:
+            raise ValueError("start_thetas must contain the same number of latent variables as the model.")
 
         self.training_theta_scores = torch.nn.Parameter(
             start_thetas.to(device)
@@ -109,6 +114,7 @@ class JML(BaseIRTAlgorithm):
             learning_rate_updates_before_stopping
         )
         model.to("cpu")
+        self.training_theta_scores = self.training_theta_scores.to("cpu")
         model.eval()
 
     def _training_loop(

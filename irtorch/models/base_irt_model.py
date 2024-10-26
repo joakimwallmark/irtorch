@@ -350,7 +350,6 @@ class BaseIRTModel(ABC, nn.Module):
         item: bool = True,
         degrees: list[int] = None,
         rescale: bool = True,
-        **kwargs
     ) -> torch.Tensor:
         r"""
         Calculate the Fisher information matrix (FIM) for the theta scores (or the information in the direction supplied by degrees).
@@ -365,8 +364,6 @@ class BaseIRTModel(ABC, nn.Module):
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
         rescale : bool, optional
             Whether to compute information on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -402,7 +399,7 @@ class BaseIRTModel(ABC, nn.Module):
             raise ValueError("There must be one degree for each latent variable.")
 
         probabilities = self.item_probabilities(theta.clone())
-        gradients = self.probability_gradients(theta, rescale=rescale, **kwargs).detach()
+        gradients = self.probability_gradients(theta, rescale=rescale).detach()
 
         # squared gradient matrices for each latent variable
         # Uses einstein summation with batch permutation ...
@@ -464,7 +461,7 @@ class BaseIRTModel(ABC, nn.Module):
         return dist.sample().float()
     
     @torch.inference_mode(False)
-    def probability_gradients(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
+    def probability_gradients(self, theta: torch.Tensor, rescale: bool = True) -> torch.Tensor:
         """
         Calculate the gradients of the item response probabilities with respect to the theta scores.
 

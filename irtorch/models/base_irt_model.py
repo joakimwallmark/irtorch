@@ -319,20 +319,19 @@ class BaseIRTModel(ABC, nn.Module):
             theta.requires_grad_(False)
 
         gradients = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
-        for latent_variable in range(theta.shape[1]):
-            theta_scores = theta.clone()
-            theta_scores.requires_grad_(True)
-            expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
-            if not self.mc_correct and rescale_by_item_score:
-                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
+        theta_scores = theta.clone()
+        theta_scores.requires_grad_(True)
+        expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
+        if not self.mc_correct and rescale_by_item_score:
+            expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
 
-            # item score slopes for each item
-            for item in range(expected_item_sum_scores.shape[1]):
-                if theta_scores.grad is not None:
-                    theta_scores.grad.zero_()
-                dynamic_print(f"Computing gradients for item {item+1} with respect to latent variable {latent_variable+1}...")
-                expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
-                gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
+        # item score slopes for each item
+        for item in range(expected_item_sum_scores.shape[1]):
+            if theta_scores.grad is not None:
+                theta_scores.grad.zero_()
+            dynamic_print(f"Computing gradients for item {item+1}...")
+            expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
+            gradients[:, item, :] = theta_scores.grad[:, :]
 
         if rescale and self.scale:
             rescale_gradients = self.theta_transform_jacobian(theta)

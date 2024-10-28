@@ -109,4 +109,5 @@ class Rotate(Scale):
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        raise ValueError("Jacobians of rotation transformations is not yet implemented.")
+        jacobians = self.rotation_matrix.T.unsqueeze(0).repeat(theta.shape[0], 1, 1)
+        return jacobians

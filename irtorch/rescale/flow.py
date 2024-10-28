@@ -228,7 +228,7 @@ class Flow(Scale):
         """
         self._flow_exists()
         theta_scores = theta.clone()
-        theta_scores.requires_grad_(True)
+        theta_scores.detach_().requires_grad_(True)
         standardized_theta_scores = (theta_scores - self.theta_means) / self.theta_stds
         transformed_thetas = self.flow(standardized_theta_scores)
         transformed_thetas.sum().backward()

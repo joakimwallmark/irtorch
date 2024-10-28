@@ -261,3 +261,28 @@ def test_initial_theta_from_training_data(base_irt_model: BaseIRTModel, device):
     
     # Optionally print the result
     print("Theta:", theta)
+
+def test__rescale_gradients(base_irt_model: BaseIRTModel):
+    if base_irt_model.latent_variables == 2:
+        def theta_transform_jacobian(theta):
+            # Jacobian of ~45 degrees rotation matrix
+            return torch.tensor([
+                [0.7071, -0.7071], [0.7071, 0.7071],
+            ]).T.unsqueeze(0).repeat(theta.shape[0], 1, 1)
+        
+        base_irt_model.theta_transform_jacobian = MagicMock(
+            side_effect=theta_transform_jacobian
+        )
+
+        input_theta = torch.arange(-3, 3.01, 0.6).view(-1, 1).expand(-1, base_irt_model.latent_variables)
+        input_grads = torch.arange(-3, 3.01, 0.6).view(-1, 1, 1, 1).expand(-1, 10, 5, base_irt_model.latent_variables)
+        gradients = base_irt_model._rescale_gradients(input_grads.contiguous(), input_theta.contiguous())
+
+        non_transformed_gradients = input_grads[1, 1, 1].unsqueeze(1)
+        transform_jacobian = torch.tensor([
+            [0.7071, -0.7071], [0.7071, 0.7071],
+        ])
+        true_grad = torch.linalg.solve(transform_jacobian, non_transformed_gradients)
+
+        assert torch.allclose(gradients[1, 1, 1], true_grad.flatten())
+        assert gradients.shape == input_grads.shape

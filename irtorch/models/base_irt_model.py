@@ -252,7 +252,7 @@ class BaseIRTModel(ABC, nn.Module):
             reshaped_output = reshaped_output[~missing_mask]
             respondents = data.size(0)
             data = data[~missing_mask]
-
+        
         ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
         # For MML, we need the output to include missing values for missing item responses
         if loss_reduction == "none" and missing_mask is not None:
@@ -314,6 +314,25 @@ class BaseIRTModel(ABC, nn.Module):
         -------
         torch.Tensor
             A 3D tensor with the expected item score gradients. Dimensions are (theta rows, items, latent_variables).
+
+        Notes
+        -----
+        When rescale is True, the gradients are computed on the transformed scale using the Jacobian of the transformation.
+        Let :math:`\mathbf{\theta} = f(\mathbf{\theta}^*)` be the transformed theta scores (original scores being :math:`\mathbf{\theta}^*`) with Jacobian :math:`\mathbf{J}_f`
+        and Jacobian inverse :math:`\mathbf{J}^{-1}_f`.
+        We know that :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f` by the chain rule.
+        Thus we can rewrite as follows:
+
+        .. math::
+
+            \begin{align}
+                \nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f\mathbf{J}_f \\
+                \left(\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f\right)^{T} &=\left(\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{I}\right)^{T}\\
+                \mathbf{J}_f^{T}\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})^T &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*)^{T}.
+            \end{align}
+
+        The last line gives us a linear equation that is solved using `torch.linalg.solve` to get :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})`.
+        This is more efficient as computing :math:`\mathbf{J}^{-1}_f` is not needed.
         """
         if theta.requires_grad:
             theta.requires_grad_(False)
@@ -334,13 +353,40 @@ class BaseIRTModel(ABC, nn.Module):
             gradients[:, item, :] = theta_scores.grad[:, :]
 
         if rescale and self.scale:
-            rescale_gradients = self.theta_transform_jacobian(theta)
-            # divide by the derivative of the transformed scores with respect to the theta scores
-            # to get the expected item score slopes with respect to the transformed scores (chain rule)
-            gradients = gradients / rescale_gradients
-            gradients[gradients.isnan()] = 0. # set nans to 0. Sometimes 0/0 can be nan
-            gradients[gradients == torch.inf] = 0. # Remove dx_dtheta/0
+            gradients = self._rescale_gradients(gradients, theta)
 
+        return gradients
+
+    def _rescale_gradients(self, gradients: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Rescale the gradients to the original theta scale using the Jacobian of the transformation.
+
+        Parameters
+        ----------
+        gradients : torch.Tensor
+            A tensor with gradients with respect to the original thetas. The last dimension holds the partial derivatives.
+        theta : torch.Tensor
+            A 2D tensor with theta scores for which the gradients tensor were computed.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with gradients with respect to the transformed thetas.
+        """
+        original_shape = gradients.shape
+        non_transform_gradients = gradients.unsqueeze(-1)
+        non_transform_gradients = non_transform_gradients.view(-1, self.latent_variables, 1)
+        transform_jacobian = self.theta_transform_jacobian(theta)
+        transform_jacobian_T = transform_jacobian.transpose(1, 2)
+        transform_jacobian_T = transform_jacobian_T.repeat_interleave(
+            int(non_transform_gradients.shape[0]/transform_jacobian_T.shape[0]),
+            dim=0
+        )
+        gradients = torch.linalg.solve(transform_jacobian_T, non_transform_gradients)
+        gradients[gradients.isnan()] = 0.
+        gradients[gradients == torch.inf] = 0.
+        # transpose back to original shape
+        gradients = gradients.view(original_shape)
         return gradients
 
     def information(
@@ -461,7 +507,7 @@ class BaseIRTModel(ABC, nn.Module):
     
     @torch.inference_mode(False)
     def probability_gradients(self, theta: torch.Tensor, rescale: bool = True) -> torch.Tensor:
-        """
+        r"""
         Calculate the gradients of the item response probabilities with respect to the theta scores.
 
         Parameters
@@ -475,6 +521,12 @@ class BaseIRTModel(ABC, nn.Module):
         -------
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, items, item categories, latent variables).
+        
+        
+        Notes
+        -----
+        When rescale is True, the gradients are computed on the transformed scale using the Jacobian of the transformation.
+        See notes for :meth:`expected_item_score_gradients` for more details as the method is the same.
         """
         theta = theta.clone().requires_grad_(True)
 
@@ -487,10 +539,7 @@ class BaseIRTModel(ABC, nn.Module):
         gradients = torch.vmap(compute_jacobian)(theta)
 
         if rescale and self.scale:
-            rescale_gradients = self.theta_transform_jacobian(theta)
-            # we divide by diagonal of the transformed score gradients (the gradients in the direction of the transformed score corresponding original theta scores)
-            rescale_gradients_diag = torch.einsum("...ii->...i", rescale_gradients)
-            gradients = (gradients.permute(1, 2, 0, 3) / rescale_gradients_diag).permute(2, 0, 1, 3)
+            gradients = self._rescale_gradients(gradients, theta)
 
         return gradients
 

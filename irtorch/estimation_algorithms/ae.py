@@ -68,9 +68,9 @@ class AE(BaseIRTAlgorithm):
             Note that missing values are removed from the loss calculation even after imputation.
             If you do not want this, do the imputation to your dataset before fitting. (default is None and only works for one-hot encoded inputs)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.005)
+            The initial learning rate for the optimizer. (default is 0.02)
         learning_rate_updates_before_stopping : int, optional
-            The number of times the learning rate can be reduced before stopping training. (default is 2)
+            The number of times the learning rate can be reduced before stopping training. (default is 3)
         evaluation_interval_size: int, optional
             The number of iterations between each model evaluation during training. (default is 80)
         max_epochs : int, optional

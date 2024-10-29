@@ -138,7 +138,7 @@ class TwoParameterLogistic(BaseIRTModel):
         weights_df = pd.DataFrame(weights.detach().numpy())
         weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
         if irt_format:
-            biases_df = pd.DataFrame(-(weights*biases).detach().numpy())
+            biases_df = pd.DataFrame(-(biases/weights).detach().numpy())
             biases_df.columns = ["b"]
         else:
             biases_df = pd.DataFrame(biases.detach().numpy())

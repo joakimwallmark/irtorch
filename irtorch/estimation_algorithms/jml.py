@@ -11,7 +11,12 @@ logger = logging.getLogger("irtorch")
 
 class JML(BaseIRTAlgorithm):
     r"""
-    Joint Maximum Likelihood (JML) for fitting IRT models.
+    Joint Maximum Likelihood (JML) for fitting IRT models :cite:p:`Birnbaum1968`.
+    JML optimizes the log-likelihood directly without any latent variable integration or distrbutional assumptions.
+    Instead of rotating between optimizing the latent variables and the model parameters as with the typical JML implementation, 
+    all parameters are updated at the same time using the Adam optimizer.
+
+    This algorithm is not recommended for large datasets.
     """
     def __init__(
         self,
@@ -28,9 +33,9 @@ class JML(BaseIRTAlgorithm):
         self,
         model: BaseIRTModel,
         train_data: torch.Tensor,
-        learning_rate: float = 0.15,
-        learning_rate_update_patience: int = 4,
-        learning_rate_updates_before_stopping: int = 1,
+        learning_rate: float = 0.1,
+        learning_rate_update_patience: int = 40,
+        learning_rate_updates_before_stopping: int = 3,
         max_epochs: int = 10000,
         batch_size: int = None,
         start_thetas: torch.Tensor = None,
@@ -46,11 +51,11 @@ class JML(BaseIRTAlgorithm):
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.15)
+            The initial learning rate for the optimizer. (default is 0.1)
         learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 4)
+            The number of epochs to wait before reducing the learning rate. (default is 40)
         learning_rate_updates_before_stopping : int, optional
-            The number of times the learning rate can be reduced before stopping training. (default is 2)
+            The number of times the learning rate can be reduced before stopping training. (default is 3)
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 1000)
         batch_size : int, optional
@@ -89,7 +94,7 @@ class JML(BaseIRTAlgorithm):
         )
 
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
+            self.optimizer, mode="min", factor=0.5, patience=learning_rate_update_patience
         )
 
         train_data_irt = PytorchIRTDataset(
@@ -100,7 +105,6 @@ class JML(BaseIRTAlgorithm):
         data_loader = torch.utils.data.DataLoader(
             train_data_irt,
             batch_size=batch_size,
-            # shuffle=True,
             shuffle=False,
             pin_memory=False,
         )
@@ -176,11 +180,10 @@ class JML(BaseIRTAlgorithm):
                 current_lr = [group["lr"] for group in self.optimizer.param_groups]
                 if current_lr != prev_lr:
                     lr_update_count += 1
+                    if lr_update_count >= learning_rate_updates_before_stopping:
+                        break
                     prev_lr = current_lr
-                    logger.info("Current learning rate: %s", current_lr)
-
-                if lr_update_count >= learning_rate_updates_before_stopping:
-                    break
+                    logger.info("Decreased learning rate to: %s", current_lr[0])
 
 
             if lr_update_count >= learning_rate_updates_before_stopping:

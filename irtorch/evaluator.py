@@ -824,7 +824,7 @@ class Evaluator:
                 sample_residuals = self.residuals(
                     sample_data,
                     theta = theta,
-                    average_over="none"
+                    average_over="none",
                     **kwargs
                 )
                 sample_corr_matrices[sample, :, :] = correlation_matrix(sample_residuals)

@@ -53,8 +53,8 @@ class MML(BaseIRTAlgorithm):
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
         learning_rate: float = 0.15,
-        learning_rate_update_patience: int = 4,
-        learning_rate_updates_before_stopping: int = 1,
+        learning_rate_update_patience: int = 7,
+        learning_rate_updates_before_stopping: int = 2,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
@@ -78,7 +78,7 @@ class MML(BaseIRTAlgorithm):
         learning_rate : float, optional
             The initial learning rate for the optimizer. (default is 0.15)
         learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 4)
+            The number of epochs to wait before reducing the learning rate. (default is 7)
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         device : str, optional

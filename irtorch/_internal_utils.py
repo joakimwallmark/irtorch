@@ -465,4 +465,4 @@ def sum_score(data: torch.Tensor, mc_correct: list[int] = None):
     if mc_correct is None:
         return data.sum(dim=1)
     else:
-        return (data == torch.tensor(mc_correct, dtype=data.dtype)).int().sum(dim=1)
+        return (data == torch.tensor(mc_correct, dtype=data.dtype)).int().sum(dim=1).float()

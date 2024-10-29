@@ -319,6 +319,14 @@ def imw(
         The second model to compare.
     data : torch.Tensor, optional
         The data to use for evaluating the models. Typically not the same as the model training data to avoid overfitting.
+    model1_theta : torch.Tensor, optional
+        The latent scores for the first model. If None, the latent scores are calculated using the first model. (default is None)
+    model2_theta : torch.Tensor, optional
+        The latent scores for the second model. If None, the latent scores are calculated using the second model. (default is None)
+    max_iterations : int, optional
+        The maximum number of iterations for the Newton-Raphson method. (default is 100)
+    **kwargs
+        Additional keyword arguments to pass to the model evaluate method.
 
     Returns
     -------

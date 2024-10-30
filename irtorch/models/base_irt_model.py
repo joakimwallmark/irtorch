@@ -628,13 +628,13 @@ class BaseIRTModel(ABC, nn.Module):
 
         if standard_errors:
             if theta_estimation == "ML" or theta_estimation == "NN":
-                fisher_info = self.information(theta, item=False, degrees=None)
+                fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
                 se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
                 if rescale and self.scale:
                     logger.info("Latent scores and standard errors computed on the original scale. Transformed standard errors are not yet implemented.")
                 return theta, se
             else:
-                logger.warning("Standard errors are only available for theta scores with ML or NN estimation.")
+                logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
         
         if rescale and self.scale:
             theta = self.transform_theta(theta)

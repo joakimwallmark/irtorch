@@ -421,7 +421,7 @@ class Plotter:
         colorscale: str = DEFAULT_COLORSCALE,
     ) -> go.Figure:
         """
-        Create a heatmap of item-latent variable relationships.
+        Create a heatmap of item-latent variable relationships. Uses :meth:`irtorch.models.BaseIRTModel.expected_item_score_gradients` to compute the relationships if not provided.
 
         Parameters
         ----------

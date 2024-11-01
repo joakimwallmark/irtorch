@@ -115,7 +115,7 @@ class BaseIRTModel(ABC, nn.Module):
         algorithm.fit(self, train_data=train_data, **kwargs)
         self.algorithm = algorithm
 
-    def add_scale_tranformation(self, scale: Scale) -> None:
+    def add_scale_transformation(self, scale: Scale) -> None:
         """
         Add a scale transformation to the model. The rescaling instance should inherit from :class:`irtorch.rescale.Scale`.
         """

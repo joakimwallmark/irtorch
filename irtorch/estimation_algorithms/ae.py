@@ -20,7 +20,6 @@ class AE(BaseIRTAlgorithm):
         self.batch_normalization = False
         self.encoder = None
         self.imputation_method = None
-        self.training_theta_scores = None
         self.data_loader = None
         self.optimizer = None
         self.item_categories = None

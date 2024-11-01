@@ -179,7 +179,8 @@ class BaseIRTModel(ABC, nn.Module):
         """
         jacobian = torch.eye(self.latent_variables).repeat(theta.shape[0], 1, 1)
         for scale in self.scale:
-            jacobian = torch.matmul(jacobian, scale.jacobian(theta))
+            jacobian = torch.matmul(scale.jacobian(theta), jacobian)
+            theta = scale(theta)
         return jacobian
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
@@ -645,16 +646,17 @@ class BaseIRTModel(ABC, nn.Module):
             self.to(device)
             data = data.to(device)
             training_thetas = self.algorithm.training_theta_scores.to(device)
-            if data.shape[0] * training_thetas.shape[0] > 2e6:
-                if data.shape[0] > 2e6:
-                    logger.info("Large dataset. Setting initial theta estimates to the median training data theta scores.")
+            max_size = 1e6
+            if data.shape[0] * training_thetas.shape[0] > max_size:
+                if data.shape[0] > 5e5:
+                    logger.info("Large dataset of more than half a million respondents. Setting initial theta estimates to the median training data theta scores.")
                     return training_thetas.median(dim=0).values.repeat(data.shape[0], 1)
                 logger.info("Sampling training data theta scores to avoid running out of memory...")
-                sample_size = int(2e6/data.shape[0])
+                sample_size = int(max_size/data.shape[0])
                 # sample 1000 random indices
                 sampled_indices = torch.randperm(training_thetas.shape[0])[:sample_size]
                 training_thetas = training_thetas[sampled_indices]
-            
+
             logits = self(training_thetas)
             missing_mask = get_missing_mask(data)
             theta = training_thetas.repeat(data.shape[0], 1)

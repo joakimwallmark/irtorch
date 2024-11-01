@@ -32,6 +32,7 @@ class Reverse(Scale):
     def __init__(self, reversed_latent_variables: list[bool]):
         super().__init__(invertible=True)
         self._reverse = -torch.tensor(reversed_latent_variables, dtype=int).reshape(1, -1)
+        self._reverse[self._reverse == 0] = 1
 
     def transform(self, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -78,9 +79,4 @@ class Reverse(Scale):
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        theta_scores = theta.clone()
-        theta_scores.requires_grad_(True)
-        theta_scores = self.transform(theta_scores)
-        theta_scores.sum().backward()
-        jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score
-        return jacobians
+        return torch.diag_embed(self._reverse.flatten().float()).unsqueeze(0).expand(theta.shape[0], -1, -1)

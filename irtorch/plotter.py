@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 pio.templates.default = "plotly_white"
 logger = logging.getLogger("irtorch")
+DEFAULT_COLORSCALE = "Greens"
 
 class Plotter:
     """
@@ -33,7 +34,6 @@ class Plotter:
         self.model = model
         self.linewidth = 2.5
         self.markersize = 9
-        self.color_map = "tab10"
 
 
     def plot_training_history(self) -> go.Figure:
@@ -99,7 +99,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        contour_colorscale: str = "Plasma",
+        contour_colorscale: str = DEFAULT_COLORSCALE,
         contour_plot_bins: int = None,
         rescale: bool = True,
         **kwargs
@@ -125,7 +125,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
-            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         rescale : bool, optional
@@ -183,7 +183,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
@@ -208,7 +208,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
             The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
@@ -298,7 +298,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
@@ -325,7 +325,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
             The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
@@ -418,7 +418,7 @@ class Plotter:
         title: str = "Relationships: Items vs. latent variables",
         x_label: str = "Latent variable",
         y_label: str = "Items",
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
     ) -> go.Figure:
         """
         Create a heatmap of item-latent variable relationships.
@@ -438,7 +438,7 @@ class Plotter:
         y_label : str, optional
             The label for the Y-axis. (default is "Items")
         colorscale : str, optional
-            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
 
         Returns
         -------
@@ -447,7 +447,7 @@ class Plotter:
         """
         if relationships is None:
             if theta is None:
-                if hasattr(self.model.algorithm, "training_theta_scores"):
+                if self.model.algorithm.training_theta_scores is not None:
                     theta = self.model.algorithm.training_theta_scores
                 else:
                     raise ValueError("relationships or theta need to be provided if there are no training theta scores.")
@@ -561,7 +561,7 @@ class Plotter:
         mask = torch.ones(model_dim, dtype=bool)
         mask[latent_indices] = 0
         if fixed_thetas is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
+            if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
                 fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
             else:
                 fixed_thetas = torch.zeros(model_dim)[mask]
@@ -636,7 +636,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
@@ -666,7 +666,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
             The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
@@ -756,7 +756,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
@@ -782,7 +782,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
             The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
@@ -877,44 +877,44 @@ class Plotter:
         mask = torch.ones(self.model.latent_variables, dtype=bool)
         mask[latent_indices] = False
         invertible = bool(len(self.model.scale)) and all(scale.invertible for scale in self.model.scale)
-        if invertible and rescale and self.model is not None and hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-            transformed_train_theta = self.model.transform_theta(self.model.algorithm.training_theta_scores)
-        if fixed_thetas is None:
-            if self.model is not None and hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-                if invertible and rescale:
-                    fixed_thetas = transformed_train_theta[:, mask].median(dim=0).values
-                else:
-                    fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
+        has_training_theta_scores = (
+            self.model is not None
+            and hasattr(self.model.algorithm, "training_theta_scores")
+            and self.model.algorithm.training_theta_scores is not None
+        )
+        use_transformed_train_theta = invertible and rescale and has_training_theta_scores
+
+        if has_training_theta_scores:
+            if use_transformed_train_theta:
+                theta_source = self.model.transform_theta(
+                    self.model.algorithm.training_theta_scores
+                )
+            else:
+                theta_source = self.model.algorithm.training_theta_scores
+        else:
+            theta_source = None
+
+        if fixed_thetas is None:    
+            if theta_source is not None:
+                fixed_thetas = theta_source[:, mask].median(dim=0).values
             else:
                 fixed_thetas = torch.zeros(self.model.latent_variables)[mask]
-        
+
         if theta_range is None:
-            if self.model is not None and hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-                if invertible and rescale:
-                    theta_range = (
-                        transformed_train_theta[:, latent_variables[0] - 1].min().item(),
-                        transformed_train_theta[:, latent_variables[0] - 1].max().item()
-                    )
-                else:
-                    theta_range = (
-                        self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].min().item(),
-                        self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].max().item()
-                    )
+            if theta_source is not None:
+                theta_range = (
+                    theta_source[:, latent_variables[0] - 1].min().item(),
+                    theta_source[:, latent_variables[0] - 1].max().item(),
+                )
             else:
                 theta_range = (-3, 3)
 
         if second_theta_range is None and len(latent_indices) > 1:
-            if self.model is not None and hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-                if invertible and rescale:
-                    second_theta_range = (
-                        transformed_train_theta[:, latent_variables[1] - 1].min().item(),
-                        transformed_train_theta[:, latent_variables[1] - 1].max().item()
-                    )
-                else:
-                    second_theta_range = (
-                        self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].min().item(),
-                        self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].max().item()
-                    )
+            if theta_source is not None:
+                second_theta_range = (
+                    theta_source[:, latent_variables[1] - 1].min().item(),
+                    theta_source[:, latent_variables[1] - 1].max().item(),
+                )
             else:
                 second_theta_range = (-3, 3)
 
@@ -923,14 +923,18 @@ class Plotter:
             theta_grid = latent_theta_1.unsqueeze(1).repeat(1, self.model.latent_variables)
             theta_grid[:, mask] = fixed_thetas
         else:
-            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
-            latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
+            latent_theta_2 = torch.linspace(
+                second_theta_range[0], second_theta_range[1], steps=steps
+            )
+            latent_theta_1, latent_theta_2 = torch.meshgrid(
+                latent_theta_1, latent_theta_2, indexing="ij"
+            )
             theta_grid = torch.zeros(latent_theta_1.numel(), self.model.latent_variables)
             theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
             theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
             theta_grid[:, mask] = fixed_thetas
-        
-        if invertible and rescale:
+
+        if use_transformed_train_theta:
             theta_grid = self.model.inverse_transform_theta(theta_grid)
         return theta_grid
 
@@ -1188,7 +1192,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        contour_colorscale: str = "Plasma",
+        contour_colorscale: str = DEFAULT_COLORSCALE,
         contour_plot_bins = None,
     ) -> go.Figure:
         """
@@ -1207,7 +1211,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
-            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         Returns

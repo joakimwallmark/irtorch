@@ -915,7 +915,7 @@ class Evaluator:
             A tuple with 1D tensors, containing the min and max integration theta scores of each latent variable.
         """
         if theta is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
+            if self.model.algorithm.training_theta_scores is not None:
                 theta = self.model.algorithm.training_theta_scores
                 theta_min = theta.min(dim=0)[0]
                 theta_max = theta.max(dim=0)[0]
@@ -1000,7 +1000,7 @@ class Evaluator:
         lbfgs_learning_rate: float = 0.25,
     ):
         if population_data is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
+            if self.model.algorithm.training_theta_scores is not None:
                 theta_scores = self.model.algorithm.training_theta_scores
             elif isinstance(self.model.algorithm, MML):
                 logger.info("Sampling from multivariate normal as population theta scores.")

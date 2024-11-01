@@ -22,7 +22,6 @@ class JML(BaseIRTAlgorithm):
         self,
     ):
         super().__init__()
-        self.training_theta_scores = None
         self.covariance_matrix = None
         self.optimizer = None
         self.training_history = {

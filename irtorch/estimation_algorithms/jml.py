@@ -33,7 +33,7 @@ class JML(BaseIRTAlgorithm):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         learning_rate: float = 0.1,
-        learning_rate_update_patience: int = 40,
+        learning_rate_update_patience: int = 80,
         learning_rate_updates_before_stopping: int = 3,
         max_epochs: int = 10000,
         batch_size: int = None,
@@ -165,7 +165,7 @@ class JML(BaseIRTAlgorithm):
                 
                 current_loss = train_loss
                 scheduler.step(train_loss)
-                dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
+                dynamic_print(f"Epoch: {epoch}. Loss: {train_loss:.4f}")
 
                 if current_loss < best_loss:
                     best_loss = current_loss

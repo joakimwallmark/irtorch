@@ -190,7 +190,7 @@ class MML(BaseIRTAlgorithm):
 
             current_loss = train_loss
             scheduler.step(train_loss)
-            dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
+            dynamic_print(f"Epoch: {epoch}. Loss: {train_loss:.4f}")
 
             if current_loss < best_loss:
                 best_loss = current_loss

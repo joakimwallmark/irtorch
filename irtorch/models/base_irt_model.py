@@ -43,7 +43,7 @@ class BaseIRTModel(ABC, nn.Module):
         self.items = len(item_categories)
         self.mc_correct = mc_correct
         self.algorithm = None
-        self.scale : Scale = None
+        self.scale : list[Scale] = []
 
         self._evaluate = None
         self._plot = None
@@ -115,11 +115,73 @@ class BaseIRTModel(ABC, nn.Module):
         algorithm.fit(self, train_data=train_data, **kwargs)
         self.algorithm = algorithm
 
-    def rescale(self, scale: Scale) -> None:
+    def add_scale_transformation(self, scale: Scale) -> None:
         """
         Add a scale transformation to the model. The rescaling instance should inherit from :class:`irtorch.rescale.Scale`.
         """
-        self.scale = scale
+        self.scale.append(scale)
+
+    def detach_scale_transformations(self) -> None:
+        """
+        Remove a scale transformation from the model.
+        """
+        self.scale = []
+
+    def transform_theta(self, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Transform the latent variables using the scale transformation(s).
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+        """
+        for scale in self.scale:
+            theta = scale(theta)
+        return theta
+
+    def inverse_transform_theta(self, transformed_theta: torch.Tensor) -> torch.Tensor:
+        """
+        Reverse transformed latent variables to their original theta scale.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing original theta scores. Each column represents one latent variable.
+        """
+        for scale in self.scale:
+            transformed_theta = scale.inverse(transformed_theta)
+        return transformed_theta
+    
+    def theta_transform_jacobian(self, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the Jacobian matrix of the scale transformations for each row in the input theta scores.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+        """
+        jacobian = torch.eye(self.latent_variables).repeat(theta.shape[0], 1, 1)
+        for scale in self.scale:
+            jacobian = torch.matmul(scale.jacobian(theta), jacobian)
+            theta = scale(theta)
+        return jacobian
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
@@ -191,7 +253,7 @@ class BaseIRTModel(ABC, nn.Module):
             reshaped_output = reshaped_output[~missing_mask]
             respondents = data.size(0)
             data = data[~missing_mask]
-
+        
         ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
         # For MML, we need the output to include missing values for missing item responses
         if loss_reduction == "none" and missing_mask is not None:
@@ -236,7 +298,6 @@ class BaseIRTModel(ABC, nn.Module):
         theta: torch.Tensor,
         rescale_by_item_score: bool = True,
         rescale: bool = True,
-        **kwargs
     ) -> torch.Tensor:
         r"""
         Computes expected item score gradients for each item :math:`j` with respect to the latent variable(s) :math:`\mathbf{\theta}`.
@@ -249,40 +310,84 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
         torch.Tensor
             A 3D tensor with the expected item score gradients. Dimensions are (theta rows, items, latent_variables).
+
+        Notes
+        -----
+        When rescale is True, the gradients are computed on the transformed scale using the Jacobian of the transformation.
+        Let :math:`\mathbf{\theta} = f(\mathbf{\theta}^*)` be the transformed theta scores (original scores being :math:`\mathbf{\theta}^*`) with Jacobian :math:`\mathbf{J}_f`
+        and Jacobian inverse :math:`\mathbf{J}^{-1}_f`.
+        We know that :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f` by the chain rule.
+        Thus we can rewrite as follows:
+
+        .. math::
+
+            \begin{align}
+                \nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f\mathbf{J}_f \\
+                \left(\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f\right)^{T} &=\left(\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{I}\right)^{T}\\
+                \mathbf{J}_f^{T}\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})^T &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*)^{T}.
+            \end{align}
+
+        The last line gives us a linear equation that is solved using `torch.linalg.solve` to get :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})`.
+        This is more efficient as computing :math:`\mathbf{J}^{-1}_f` is not needed.
         """
         if theta.requires_grad:
             theta.requires_grad_(False)
 
         gradients = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
-        for latent_variable in range(theta.shape[1]):
-            theta_scores = theta.clone()
-            theta_scores.requires_grad_(True)
-            expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
-            if not self.mc_correct and rescale_by_item_score:
-                expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
+        theta_scores = theta.clone()
+        theta_scores.requires_grad_(True)
+        expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
+        if not self.mc_correct and rescale_by_item_score:
+            expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
 
-            # item score slopes for each item
-            for item in range(expected_item_sum_scores.shape[1]):
-                if theta_scores.grad is not None:
-                    theta_scores.grad.zero_()
-                expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
-                gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
+        # item score slopes for each item
+        for item in range(expected_item_sum_scores.shape[1]):
+            if theta_scores.grad is not None:
+                theta_scores.grad.zero_()
+            dynamic_print(f"Computing gradients for item {item+1}...")
+            expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
+            gradients[:, item, :] = theta_scores.grad[:, :]
 
-        if rescale and self.scale is not None:
-            rescale_gradients = self.scale.gradients(theta, **kwargs)
-            # divide by the derivative of the transformed scores with respect to the theta scores
-            # to get the expected item score slopes with respect to the transformed scores (chain rule)
-            gradients = gradients / rescale_gradients
-            gradients[gradients.isnan()] = 0. # set nans to 0. Sometimes 0/0 can be nan
-            gradients[gradients == torch.inf] = 0. # Remove dx_dtheta/0
+        if rescale and self.scale:
+            gradients = self._rescale_gradients(gradients, theta)
 
+        return gradients
+
+    def _rescale_gradients(self, gradients: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Rescale the gradients to the original theta scale using the Jacobian of the transformation.
+
+        Parameters
+        ----------
+        gradients : torch.Tensor
+            A tensor with gradients with respect to the original thetas. The last dimension holds the partial derivatives.
+        theta : torch.Tensor
+            A 2D tensor with theta scores for which the gradients tensor were computed.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with gradients with respect to the transformed thetas.
+        """
+        original_shape = gradients.shape
+        non_transform_gradients = gradients.unsqueeze(-1)
+        non_transform_gradients = non_transform_gradients.view(-1, self.latent_variables, 1)
+        transform_jacobian = self.theta_transform_jacobian(theta)
+        transform_jacobian_T = transform_jacobian.transpose(1, 2)
+        transform_jacobian_T = transform_jacobian_T.repeat_interleave(
+            int(non_transform_gradients.shape[0]/transform_jacobian_T.shape[0]),
+            dim=0
+        )
+        gradients = torch.linalg.solve(transform_jacobian_T, non_transform_gradients)
+        gradients[gradients.isnan()] = 0.
+        gradients[gradients == torch.inf] = 0.
+        # transpose back to original shape
+        gradients = gradients.view(original_shape)
         return gradients
 
     def information(
@@ -291,7 +396,6 @@ class BaseIRTModel(ABC, nn.Module):
         item: bool = True,
         degrees: list[int] = None,
         rescale: bool = True,
-        **kwargs
     ) -> torch.Tensor:
         r"""
         Calculate the Fisher information matrix (FIM) for the theta scores (or the information in the direction supplied by degrees).
@@ -306,8 +410,6 @@ class BaseIRTModel(ABC, nn.Module):
             For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable. Specifies the direction in which to compute the information. (default is None and returns the full FIM)
         rescale : bool, optional
             Whether to compute information on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
@@ -327,8 +429,8 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            I(\mathbf{\theta}) = E\left[ \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right) \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right)^T \right] =
-            -E\left[\left(\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X) \right)\right]
+            I(\mathbf{\theta}) = \mathbb{E}_{X|\mathbf{\theta}}\left[ \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right) \left(\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X) \right)^T \right] =
+            -\mathbb{E}_{X|\mathbf{\theta}}\left[\left(\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X) \right)\right]
 
         Where:
 
@@ -343,7 +445,7 @@ class BaseIRTModel(ABC, nn.Module):
             raise ValueError("There must be one degree for each latent variable.")
 
         probabilities = self.item_probabilities(theta.clone())
-        gradients = self.probability_gradients(theta, rescale=rescale, **kwargs).detach()
+        gradients = self.probability_gradients(theta, rescale=rescale).detach()
 
         # squared gradient matrices for each latent variable
         # Uses einstein summation with batch permutation ...
@@ -405,8 +507,8 @@ class BaseIRTModel(ABC, nn.Module):
         return dist.sample().float()
     
     @torch.inference_mode(False)
-    def probability_gradients(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
-        """
+    def probability_gradients(self, theta: torch.Tensor, rescale: bool = True) -> torch.Tensor:
+        r"""
         Calculate the gradients of the item response probabilities with respect to the theta scores.
 
         Parameters
@@ -415,13 +517,17 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the gradient method for the rescale transformation method.
 
         Returns
         -------
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, items, item categories, latent variables).
+        
+        
+        Notes
+        -----
+        When rescale is True, the gradients are computed on the transformed scale using the Jacobian of the transformation.
+        See notes for :meth:`expected_item_score_gradients` for more details as the method is the same.
         """
         theta = theta.clone().requires_grad_(True)
 
@@ -433,11 +539,8 @@ class BaseIRTModel(ABC, nn.Module):
         # vectorized version of jacobian
         gradients = torch.vmap(compute_jacobian)(theta)
 
-        if rescale and self.scale is not None:
-            rescale_gradients = self.scale.gradients(theta, **kwargs)
-            # we divide by diagonal of the transformed score gradients (the gradients in the direction of the transformed score corresponding original theta scores)
-            rescale_gradients_diag = torch.einsum("...ii->...i", rescale_gradients)
-            gradients = (gradients.permute(1, 2, 0, 3) / rescale_gradients_diag).permute(2, 0, 1, 3)
+        if rescale and self.scale:
+            gradients = self._rescale_gradients(gradients, theta)
 
         return gradients
 
@@ -447,11 +550,10 @@ class BaseIRTModel(ABC, nn.Module):
         data: torch.Tensor,
         standard_errors: bool = False,
         theta_estimation: str = "ML",
-        ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        lbfgs_learning_rate: float = 0.25,
+        lbfgs_learning_rate: float = 0.2,
         eap_theta_integration_points: int = None,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
         rescale: bool = True,
-        **kwargs
     ):
         r"""
         Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
@@ -466,17 +568,15 @@ class BaseIRTModel(ABC, nn.Module):
             Whether to return standard errors for the latent scores. (default is False)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        ml_map_device: str, optional
-            For ML and MAP. The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
+        device: str, optional
+            The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
         lbfgs_learning_rate: float, optional
-            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.3)
+            For ML and MAP. The learning rate to use for the LBFGS optimizer. Try lowering this if your loss runs rampant. (default is 0.2)
         eap_theta_integration_points: int, optional
             For EAP. The number of integration points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
         rescale : bool, optional
             Whether to compute the latent scores on the rescaled scale if it exists. (default is True)
-        **kwargs
-            Additional keyword arguments to pass to the transformation method for the rescale transformation method.
-            
+
         Returns
         -------
         torch.Tensor or tuple[torch.Tensor, torch.Tensor]
@@ -516,26 +616,67 @@ class BaseIRTModel(ABC, nn.Module):
                 else:
                     theta = self.algorithm.theta_scores(encoder_data).clone()
             else:
-                theta = torch.zeros(data.shape[0], self.latent_variables).float()
+                if hasattr(self.algorithm, "training_theta_scores") and self.algorithm.training_theta_scores is not None:
+                    logger.info("Finding training data theta scores to use as initial theta estimates...")
+                    theta = self._initial_theta_from_training_data(data, device=device)
+                else:
+                    theta = torch.zeros(data.shape[0], self.latent_variables).float()
 
             if theta_estimation in ["ML", "MAP"]:
-                theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=ml_map_device)
+                theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=device)
             elif theta_estimation == "EAP":
                 theta = self._eap_theta_scores(data, eap_theta_integration_points)
 
         if standard_errors:
             if theta_estimation == "ML" or theta_estimation == "NN":
-                fisher_info = self.information(theta, item=False, degrees=None)
+                fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
                 se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-                if rescale and self.scale is not None:
+                if rescale and self.scale:
                     logger.info("Latent scores and standard errors computed on the original scale. Transformed standard errors are not yet implemented.")
                 return theta, se
             else:
-                logger.warning("Standard errors are only available for theta scores with ML or NN estimation.")
+                logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
         
-        if rescale and self.scale is not None:
-            theta = self.scale(theta, **kwargs)
+        if rescale and self.scale:
+            theta = self.transform_theta(theta)
         return theta
+
+    def _initial_theta_from_training_data(self, data, device):
+        try:
+            self.to(device)
+            data = data.to(device)
+            training_thetas = self.algorithm.training_theta_scores.to(device)
+            max_size = 1e6
+            if data.shape[0] * training_thetas.shape[0] > max_size:
+                if data.shape[0] > 5e5:
+                    logger.info("Large dataset of more than half a million respondents. Setting initial theta estimates to the median training data theta scores.")
+                    return training_thetas.median(dim=0).values.repeat(data.shape[0], 1)
+                logger.info("Sampling training data theta scores to avoid running out of memory...")
+                sample_size = int(max_size/data.shape[0])
+                # sample 1000 random indices
+                sampled_indices = torch.randperm(training_thetas.shape[0])[:sample_size]
+                training_thetas = training_thetas[sampled_indices]
+
+            logits = self(training_thetas)
+            missing_mask = get_missing_mask(data)
+            theta = training_thetas.repeat(data.shape[0], 1)
+            init_data = data.repeat_interleave(training_thetas.shape[0], dim=0)
+            missing_mask = missing_mask.repeat_interleave(training_thetas.shape[0], dim=0)
+            
+            logits = logits.repeat(data.shape[0], 1)
+            lls = self.log_likelihood(init_data, logits, missing_mask, loss_reduction="none")
+            lls = lls.view(logits.shape[0], -1).nansum(dim=1)
+            lls = lls.view(data.shape[0], -1)
+            best_theta_ind = lls.argmax(dim=1)
+            best_theta_ind = torch.arange(0, data.shape[0], device=device) * training_thetas.shape[0] + best_theta_ind
+            theta = theta[best_theta_ind, :]
+        except Exception as e:
+            logger.error("Error in initial theta estimation. Using all zeros. Error message: %s", e)
+            self.to("cpu")
+            return torch.zeros(data.shape[0], self.latent_variables).to("cpu")
+        finally:
+            self.to("cpu")
+        return theta.to("cpu")
     
     def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
         r"""
@@ -663,9 +804,9 @@ class BaseIRTModel(ABC, nn.Module):
                 self.to(device)
                 initial_theta_scores = initial_theta_scores.to(device)
                 data = data.to(device)
-                max_iter = 30
+                max_iter = 50
             else:
-                max_iter = 20
+                max_iter = 40
 
             # Initial guess for the theta_scores are the outputs from the encoder
             optimized_theta_scores = initial_theta_scores.clone().detach().requires_grad_(True)
@@ -674,6 +815,7 @@ class BaseIRTModel(ABC, nn.Module):
             loss_history = []
             tolerance = 1e-8
 
+            logger.info("Optimizing theta scores...")
             missing_mask = get_missing_mask(data)
             def closure():
                 optimizer.zero_grad()
@@ -743,7 +885,7 @@ class BaseIRTModel(ABC, nn.Module):
         if hasattr(self.algorithm, "training_theta_scores"):
             if self.algorithm.training_theta_scores is None:
                 raise ValueError("Please fit the model before computing latent scores.")
-            train_theta_scores = self.algorithm.training_theta_scores
+            train_theta_scores = self.algorithm.training_theta_scores.to("cpu")
             theta_grid = self._theta_grid(train_theta_scores, grid_size=grid_points)
             # Center the data and compute the covariance matrix.
             mean_centered_theta_scores = train_theta_scores - train_theta_scores.mean(dim=0)

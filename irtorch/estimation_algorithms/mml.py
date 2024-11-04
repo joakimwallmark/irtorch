@@ -52,9 +52,9 @@ class MML(BaseIRTAlgorithm):
         integration_method: str = "quasi_mc",
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
-        learning_rate: float = 0.2,
-        learning_rate_update_patience: int = 4,
-        learning_rate_updates_before_stopping: int = 1,
+        learning_rate: float = 0.15,
+        learning_rate_update_patience: int = 7,
+        learning_rate_updates_before_stopping: int = 2,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
@@ -76,9 +76,9 @@ class MML(BaseIRTAlgorithm):
         covariance_matrix : torch.Tensor, optional
             The covariance matrix for the multivariate normal distribution for the latent variables. (default is None and uses uncorrelated variables)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.2)
+            The initial learning rate for the optimizer. (default is 0.15)
         learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 4)
+            The number of epochs to wait before reducing the learning rate. (default is 7)
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         device : str, optional
@@ -190,7 +190,7 @@ class MML(BaseIRTAlgorithm):
 
             current_loss = train_loss
             scheduler.step(train_loss)
-            dynamic_print(f"Epoch: {epoch}. Average training batch loss function: {train_loss:.4f}")
+            dynamic_print(f"Epoch: {epoch}. Loss: {train_loss:.4f}")
 
             if current_loss < best_loss:
                 best_loss = current_loss

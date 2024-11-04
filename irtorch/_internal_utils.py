@@ -445,3 +445,24 @@ def impute_missing_internal(
         
 
     return imputed_data
+
+def sum_score(data: torch.Tensor, mc_correct: list[int] = None):
+    """
+    Calculate the sum score for each respondent.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        A 2D tensor where each row is a response vector and each column is an item.
+    mc_correct : list[int], optional
+        Only for multiple choice data. A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice and the rows are summed. (default is None)
+
+    Returns
+    -------
+    torch.Tensor
+        A tensor of sum scores for each respondent.
+    """
+    if mc_correct is None:
+        return data.sum(dim=1)
+    else:
+        return (data == torch.tensor(mc_correct, dtype=data.dtype)).int().sum(dim=1).float()

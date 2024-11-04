@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.io as pio
-from irtorch.estimation_algorithms import AE, VAE, MML
+from irtorch.estimation_algorithms import AE, VAE
 from irtorch._internal_utils import entropy
 
 if TYPE_CHECKING:
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 pio.templates.default = "plotly_white"
 logger = logging.getLogger("irtorch")
+DEFAULT_COLORSCALE = "Greens"
 
 class Plotter:
     """
@@ -33,7 +34,6 @@ class Plotter:
         self.model = model
         self.linewidth = 2.5
         self.markersize = 9
-        self.color_map = "tab10"
 
 
     def plot_training_history(self) -> go.Figure:
@@ -99,7 +99,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        contour_colorscale: str = "Plasma",
+        contour_colorscale: str = DEFAULT_COLORSCALE,
         contour_plot_bins: int = None,
         rescale: bool = True,
         **kwargs
@@ -125,7 +125,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
-            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         rescale : bool, optional
@@ -157,9 +157,7 @@ class Plotter:
             else:
                 population_data = population_data.contiguous()
 
-            scores = self.model.latent_scores(data=population_data, **kwargs)
-            if rescale and self.model.scale is not None:
-                scores = self.model.scale(theta=scores, **kwargs)
+            scores = self.model.latent_scores(data=population_data, rescale=rescale, **kwargs)
         else:
             scores = scores_to_plot
 
@@ -185,13 +183,12 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
         fixed_thetas: torch.Tensor = None,
         rescale: bool = True,
-        **kwargs
     ) -> go.Figure:
         """
         Plot the entropy of an item against the latent variable(s).
@@ -211,19 +208,17 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         steps : int, optional
             The number of steps along each theta axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -246,13 +241,13 @@ class Plotter:
 
         latent_indices = [theta - 1 for theta in latent_variables]
 
-        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
         
         mean_output = self.model(theta_grid)
         item_entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)[:, latent_indices]
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
@@ -293,355 +288,8 @@ class Plotter:
                 z_label = "Entropy",
                 colorscale = colorscale
             )
-        
-    @torch.no_grad()
-    def plot_item_latent_variable_relationships(
-        self,
-        relationships: torch.Tensor,
-        title: str = "Relationships: Items vs. latent variables",
-        x_label: str = "Latent variable",
-        y_label: str = "Items",
-        colorscale: str = "Plasma",
-    ) -> go.Figure:
-        """
-        Create a heatmap of item-latent variable relationships.
 
-        Parameters
-        ----------
-        relationships : torch.Tensor
-            A tensor of item-latent variable relationships. Each row represents an item and each column represents a latent variable.
-        title : str, optional
-            The title for the plot. (default is "Relationships: Items vs. latent variables")
-        x_label : str, optional
-            The label for the X-axis. (default is "Latent variable")
-        y_label : str, optional
-            The label for the Y-axis. (default is "Items")
-        colorscale : str, optional
-            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
-
-        Returns
-        -------
-        go.Figure
-            The Plotly Figure object for the plot.
-        """
-        relationships = relationships.numpy()
-        
-        df = pd.DataFrame(relationships)
-        df.columns = [f"{i+1}" for i in range(df.shape[1])]
-        df.index = [f"Item {i+1}" for i in range(df.shape[0])]
-        
-        fig = px.imshow(
-            df,
-            labels=dict(x=x_label, y=y_label, color="Relationship"),
-            x=df.columns,
-            y=df.index,
-            aspect="auto",
-            title=title,
-            color_continuous_scale=colorscale
-        )
-
-        base_height = 200 # high based on the number of items
-        per_item_height = 20
-        total_height = base_height + (per_item_height * 80)
-        fig.update_layout(height=total_height, width=800)
-        
-        return fig
-
-    @torch.no_grad()
-    def plot_item_probabilities(
-        self,
-        item: int,
-        latent_variables: tuple = (1, ),
-        title: str = None,
-        x_label: str = None,
-        y_label: str = None,
-        theta_range: tuple[float, float] = None,
-        second_theta_range: tuple[float, float] = None,
-        steps: int = 300,
-        fixed_thetas: torch.Tensor = None,
-        plot_group_fit: bool = False,
-        group_fit_groups: int = 10,
-        group_fit_data: int = None,
-        group_fit_population_theta: torch.Tensor = None,
-        theta_estimation: str = "ML",
-        grayscale: bool = False,
-        plot_derivative: bool = False,
-        rescale: bool = True,
-        **kwargs
-    ) -> go.Figure:
-        """
-        Plots the item probability curves for a given item. Supports 2D and 3D plots.
-
-        Parameters
-        ----------
-        item : int
-            The item to plot (starts from 1).
-        latent_variables : tuple, optional
-            The latent variables to plot. (default is (1,))
-        title : str, optional
-            The title for the plot. (default is None and uses "IRF - Item {item}")
-        x_label : str, optional
-            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
-        y_label : str, optional
-            The label for the Y-axis. (default is None and uses "Probability")
-        theta_range : tuple, optional
-            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
-        second_theta_range : tuple, optional
-            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
-        steps : int, optional
-            The number of steps along each theta axis used for probability evaluation. (default is 300)
-        fixed_thetas: torch.Tensor, optional
-            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
-        plot_group_fit : bool, optional
-            Plot group average probabilities to assess fit. (default is False)
-        group_fit_groups : int, optional
-            Only for plot_group_fit = True. The number of groups. (default is 10)
-        group_fit_data: torch.tensor, optional
-            Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
-        group_fit_population_theta : torch.tensor, optional
-            Only for plot_group_fit = True. The theta scores corresponding to group_fit_data. Will be estimated using group_theta_estimation if not provided. (default is None)
-        theta_estimation : str, optional
-            Only for plot_group_fit = True. The estimation method for theta. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
-        grayscale : bool, optional
-            Plot the item probability curves in grey scale. (default is False)
-        plot_derivative : bool, optional
-            Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
-        rescale : bool, optional
-            Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
-
-        Returns
-        -------
-        go.Figure
-            The Plotly Figure object for the plot.
-        """
-        model_dim = self.model.latent_variables
-        if len(latent_variables) > 2:
-            raise TypeError("Cannot plot more than two latent variables in one plot.")
-        if len(latent_variables) > model_dim:
-            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
-        if not all(num <= model_dim for num in latent_variables):
-            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if theta_range is not None and len(theta_range) != 2:
-            raise TypeError("theta_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
-            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
-
-        latent_indices = [theta - 1 for theta in latent_variables]
-
-        mask = torch.ones(model_dim, dtype=bool)
-        mask[latent_indices] = 0
-        if fixed_thetas is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
-                fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
-            else:
-                fixed_thetas = torch.zeros(model_dim)
-
-        elif len(fixed_thetas) is not model_dim - len(latent_variables):
-            raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")
-
-        min_theta, max_theta = self.model.evaluate._min_max_theta_for_integration()
-        if theta_range is None:
-            theta_range = min_theta[latent_indices[0]].item(), max_theta[latent_indices[0]].item()
-        if second_theta_range is None and len(latent_indices) > 1:
-            second_theta_range = min_theta[latent_indices[1]].item(), max_theta[latent_indices[1]].item()
-
-        latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
-        if len(latent_indices) == 1:
-            theta_grid = latent_theta_1.unsqueeze(1).repeat(1, model_dim)
-            theta_grid[:, mask] = fixed_thetas
-        else:
-            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
-            latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
-            theta_grid = torch.zeros(latent_theta_1.numel(), model_dim)
-            theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
-            theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
-            theta_grid[:, mask] = fixed_thetas
-            
-
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
-        else:
-            scores_to_plot = theta_grid
-        
-        if plot_derivative and len(latent_variables) == 1:
-            prob_matrix = self.model.probability_gradients(theta_grid, rescale, **kwargs)[:, item - 1, :self.model.item_categories[item - 1], latent_variables[0] - 1]
-        else:
-            prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.item_categories[item - 1]]
-
-        if len(latent_variables) == 1:
-            if plot_group_fit:
-                (
-                    group_probs_data,
-                    group_probs_model,
-                    latent_group_means,
-                ) = self.model.evaluate.latent_group_probabilities(
-                    data=group_fit_data,
-                    theta=group_fit_population_theta,
-                    rescale=rescale,
-                    latent_variable=latent_variables[0],
-                    groups=group_fit_groups,
-                    theta_estimation=theta_estimation,
-                    **kwargs
-                )
-
-                group_probs_data = group_probs_data[:, item - 1, 0:self.model.item_categories[item - 1]]
-                group_probs_model = group_probs_model[:, item - 1, 0:self.model.item_categories[item - 1]]
-                
-            else:
-                group_probs_data = group_probs_model = latent_group_means = None
-
-            return self._item_probabilities_plot(
-                scores_to_plot[:, latent_indices[0]],
-                prob_matrix,
-                latent_group_means,
-                group_probs_data,
-                group_probs_model,
-                title=title or f"IRF - Item {item}",
-                x_label=x_label or f"Latent variable {latent_variables[0]}",
-                y_label=y_label or "Probability",
-                grayscale=grayscale
-            )
-        
-        if len(latent_variables) == 2:
-            return self._item_probabilities_3dplot(
-                scores_to_plot[:, latent_indices[0]],
-                scores_to_plot[:, latent_indices[1]],
-                prob_matrix,
-                title=title or f"IRF - Item {item}",
-                x_label=x_label or f"Latent variable {latent_variables[0]}",
-                y_label=y_label or f"Latent variable {latent_variables[1]}",
-                z_label="Probability",
-                grayscale=grayscale
-            )
-
-    @torch.no_grad()
-    def plot_information(
-        self,
-        items: list[int] = None,
-        latent_variables: tuple[int] = (1,),
-        degrees: list[int] = None,
-        title: str = None,
-        x_label: str = None,
-        y_label: str = None,
-        color: str = None,
-        colorscale: str = "Plasma",
-        theta_range: tuple[float, float] = None,
-        second_theta_range: tuple[float, float] = None,
-        steps: int = None,
-        fixed_thetas: torch.Tensor = None,
-        rescale: bool = True,
-        **kwargs
-    ) -> go.Figure:
-        """
-        Plots the Fisher information function against the latent variable(s).
-        Supports both item and test information.
-
-        Parameters
-        ----------
-        items : list[int], optional
-            The items to plot. If None, the full test information is plotted. (default is None)
-        latent_variables : tuple[int], optional
-            The latent variables to plot. (default is (1,))
-        degrees : list[int], optional
-            A list of angles in degrees between 0 and 90. One degree for each latent variable.
-            Only applicable when the model is multidimensional.
-            Information will be computed in the direction of the angles. (default is None)
-        title : str, optional
-            The title for the plot. (default is None)
-        x_label : str, optional
-            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
-        y_label : str, optional
-            The label for the Y-axis. (default is None and uses "Information" for one latent variable and "Latent variable 2" for two latent variables)
-        color : str, optional
-            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
-        colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
-        theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
-        second_theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
-        steps : int, optional
-            The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
-        fixed_thetas: torch.Tensor, optional
-            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
-        rescale : bool, optional
-            Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
-        """
-        model_dim = self.model.latent_variables
-        if len(latent_variables) > 2:
-            raise TypeError("Cannot plot more than two latent variables in one plot.")
-        if len(latent_variables) > model_dim:
-            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
-        if not all(num <= model_dim for num in latent_variables):
-            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
-        if theta_range is not None and len(theta_range) != 2:
-            raise TypeError("theta_range needs to have a length of 2.")
-        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
-            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
-        if degrees is None and model_dim > 1:
-            raise ValueError("Degrees must be provided for multidimensional models.")
-        if steps is None:
-            steps = 100 if len(latent_variables) == 1 else 18
-
-        latent_indices = [theta - 1 for theta in latent_variables]
-
-        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
-        
-        if theta_grid.shape[0] > 2000:
-            logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
-
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
-        else:
-            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
-            if scores_to_plot.dim() == 1:
-                scores_to_plot = scores_to_plot.unsqueeze(1)
-
-        if items is not None:
-            item_mask = torch.zeros(self.model.items, dtype=bool)
-            item_mask[[item - 1 for item in items]] = 1
-            information = self.model.information(theta_grid, item=True, degrees=degrees, rescale=rescale, **kwargs)[:, item_mask].sum(dim=1)
-        else:
-            information = self.model.information(theta_grid, item=False, degrees=degrees, rescale=rescale, **kwargs)
-
-        if len(latent_variables) == 1:
-            scores_to_plot.squeeze_()
-            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
-            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
-                start_idx = min_indices[0].item()  # get the first index
-                scores_to_plot = scores_to_plot[:start_idx]
-                information = information.detach_().squeeze_()[:start_idx]
-            else:
-                start_idx = min_indices[-1].item()  # get the last index
-                scores_to_plot = scores_to_plot[start_idx:]
-                information = information.detach_().squeeze_()[start_idx:]
-                
-            return self._2d_line_plot(
-                x = scores_to_plot,
-                y = information,
-                title = title or "Information",
-                x_label = x_label or "Latent variable",
-                y_label = y_label or "Information",
-                color = color or None
-            )
-        if len(latent_variables) == 2:
-            grid_size = int(np.sqrt(information.size()))
-            return self._3d_surface_plot(
-                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
-                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
-                z = information.reshape((grid_size, grid_size)),
-                title = title or "Information",
-                x_label = x_label or "Latent variable 1",
-                y_label = y_label or "Latent variable 2",
-                z_label = "Information",
-                colorscale = colorscale
-            )
-
-    def plot_response_pattern_likelihood(
+    def plot_log_likelihood(
         self,
         data: torch.Tensor,
         latent_variables: tuple[int] = (1,),
@@ -650,13 +298,12 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
         fixed_thetas: torch.Tensor = None,
         rescale: str = "theta",
-        **kwargs
     ) -> go.Figure:
         """
         Plots the log-likelihood function against the latent variable(s) for the supplied response pattern.
@@ -678,19 +325,22 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         steps : int, optional
             The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
+        
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:
@@ -708,10 +358,10 @@ class Plotter:
 
         latent_indices = [theta - 1 for theta in latent_variables]
 
-        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
         
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid, **kwargs)
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
             scores_to_plot = scores_to_plot[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
@@ -759,6 +409,344 @@ class Plotter:
                 z_label = "Log-likelihood",
                 colorscale = colorscale
             )
+        
+    @torch.no_grad()
+    def plot_item_latent_variable_relationships(
+        self,
+        relationships: torch.Tensor = None,
+        theta: torch.Tensor = None,
+        title: str = "Relationships: Items vs. latent variables",
+        x_label: str = "Latent variable",
+        y_label: str = "Items",
+        colorscale: str = DEFAULT_COLORSCALE,
+    ) -> go.Figure:
+        """
+        Create a heatmap of item-latent variable relationships. Uses :meth:`irtorch.models.BaseIRTModel.expected_item_score_gradients` to compute the relationships if not provided.
+
+        Parameters
+        ----------
+        relationships : torch.Tensor
+            A tensor of item-latent variable relationships. Each row represents an item and each column represents a latent variable.
+            If not provided, the relationships are computed using :meth:`irtorch.models.BaseIRTModel.expected_item_score_gradients`.
+        theta : torch.Tensor, optional
+            The theta scores to use for computing the relationships. Need to be on the original theta scale.
+            If not provided, the training theta scores are used. (default is None)	
+        title : str, optional
+            The title for the plot. (default is "Relationships: Items vs. latent variables")
+        x_label : str, optional
+            The label for the X-axis. (default is "Latent variable")
+        y_label : str, optional
+            The label for the Y-axis. (default is "Items")
+        colorscale : str, optional
+            Sets the colorscale figure. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
+
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
+        """
+        if relationships is None:
+            if theta is None:
+                if self.model.algorithm.training_theta_scores is not None:
+                    theta = self.model.algorithm.training_theta_scores
+                else:
+                    raise ValueError("relationships or theta need to be provided if there are no training theta scores.")
+            relationships = self.model.expected_item_score_gradients(theta).mean(dim=0)
+
+        relationships = relationships.numpy()
+        
+        df = pd.DataFrame(relationships)
+        df.columns = [f"{i+1}" for i in range(df.shape[1])]
+        df.index = [f"Item {i+1}" for i in range(df.shape[0])]
+        
+        fig = px.imshow(
+            df,
+            labels=dict(x=x_label, y=y_label, color="Relationship"),
+            x=df.columns,
+            y=df.index,
+            aspect="auto",
+            title=title,
+            color_continuous_scale=colorscale
+        )
+
+        base_height = 200 # high based on the number of items
+        per_item_height = 20
+        total_height = base_height + (per_item_height * 80)
+        fig.update_layout(height=total_height, width=800)
+        
+        return fig
+
+    @torch.no_grad()
+    def plot_item_probabilities(
+        self,
+        item: int,
+        latent_variables: tuple = (1, ),
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_thetas: torch.Tensor = None,
+        plot_group_fit: bool = False,
+        group_fit_groups: int = 10,
+        group_fit_data: int = None,
+        group_fit_population_theta: torch.Tensor = None,
+        theta_estimation: str = "ML",
+        grayscale: bool = False,
+        plot_derivative: bool = False,
+        rescale: bool = True,
+    ) -> go.Figure:
+        """
+        Plots the item probability curves for a given item. Supports 2D and 3D plots.
+
+        Parameters
+        ----------
+        item : int
+            The item to plot (starts from 1).
+        latent_variables : tuple, optional
+            The latent variables to plot. (default is (1,))
+        title : str, optional
+            The title for the plot. (default is None and uses "IRF - Item {item}")
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Probability")
+        theta_range : tuple, optional
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        second_theta_range : tuple, optional
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each theta axis used for probability evaluation. (default is None and uses 200 for one latent variable and 25 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        plot_group_fit : bool, optional
+            Plot group average probabilities to assess fit. (default is False)
+        group_fit_groups : int, optional
+            Only for plot_group_fit = True. The number of groups. (default is 10)
+        group_fit_data: torch.tensor, optional
+            Only for plot_group_fit = True. The data used for group fit plots. Uses training data if not provided. (default is None)
+        group_fit_population_theta : torch.tensor, optional
+            Only for plot_group_fit = True. The theta scores corresponding to group_fit_data. Will be estimated using group_theta_estimation if not provided. (default is None)
+        theta_estimation : str, optional
+            Only for plot_group_fit = True. The estimation method for theta. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
+        grayscale : bool, optional
+            Plot the item probability curves in grey scale. (default is False)
+        plot_derivative : bool, optional
+            Plot the first derivative of the item probability curves. Only for plots with one latent variable. (default is False)
+        rescale : bool, optional
+            Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
+
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
+        """
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
+        if steps is None:
+            steps = 200 if len(latent_variables) == 1 else 25
+
+        latent_indices = [theta - 1 for theta in latent_variables]
+
+        mask = torch.ones(model_dim, dtype=bool)
+        mask[latent_indices] = 0
+        if fixed_thetas is None:
+            if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
+                fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
+            else:
+                fixed_thetas = torch.zeros(model_dim)[mask]
+
+        elif len(fixed_thetas) is not model_dim - len(latent_variables):
+            raise TypeError("If specified, the number of fixed latent variables needs to be the same as the number of variables in the model not used for plotting.")
+
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
+
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
+        else:
+            scores_to_plot = theta_grid
+        
+        if plot_derivative and len(latent_variables) == 1:
+            prob_matrix = self.model.probability_gradients(theta_grid, rescale)[:, item - 1, :self.model.item_categories[item - 1], latent_variables[0] - 1]
+        else:
+            prob_matrix = self.model.item_probabilities(theta_grid)[:, item - 1, :self.model.item_categories[item - 1]]
+
+        if len(latent_variables) == 1:
+            if plot_group_fit:
+                (
+                    group_probs_data,
+                    group_probs_model,
+                    latent_group_means,
+                ) = self.model.evaluate.latent_group_probabilities(
+                    data=group_fit_data,
+                    theta=group_fit_population_theta,
+                    rescale=rescale,
+                    latent_variable=latent_variables[0],
+                    groups=group_fit_groups,
+                    theta_estimation=theta_estimation,
+                )
+
+                group_probs_data = group_probs_data[:, item - 1, 0:self.model.item_categories[item - 1]]
+                group_probs_model = group_probs_model[:, item - 1, 0:self.model.item_categories[item - 1]]
+                
+            else:
+                group_probs_data = group_probs_model = latent_group_means = None
+
+            return self._item_probabilities_plot(
+                scores_to_plot[:, latent_indices[0]],
+                prob_matrix,
+                latent_group_means,
+                group_probs_data,
+                group_probs_model,
+                title=title or f"IRF - Item {item}",
+                x_label=x_label or f"Latent variable {latent_variables[0]}",
+                y_label=y_label or "Probability",
+                grayscale=grayscale
+            )
+        
+        if len(latent_variables) == 2:
+            return self._item_probabilities_3dplot(
+                scores_to_plot[:, latent_indices[0]],
+                scores_to_plot[:, latent_indices[1]],
+                prob_matrix,
+                title=title or f"IRF - Item {item}",
+                x_label=x_label or f"Latent variable {latent_variables[0]}",
+                y_label=y_label or f"Latent variable {latent_variables[1]}",
+                z_label="Probability",
+                grayscale=grayscale
+            )
+
+    @torch.no_grad()
+    def plot_information(
+        self,
+        items: list[int] = None,
+        latent_variables: tuple[int] = (1,),
+        degrees: list[int] = None,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = DEFAULT_COLORSCALE,
+        theta_range: tuple[float, float] = None,
+        second_theta_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_thetas: torch.Tensor = None,
+        rescale: bool = True,
+    ) -> go.Figure:
+        """
+        Plots the Fisher information function against the latent variable(s).
+        Supports both item and test information.
+
+        Parameters
+        ----------
+        items : list[int], optional
+            The items to plot. If None, the full test information is plotted. (default is None)
+        latent_variables : tuple[int], optional
+            The latent variables to plot. (default is (1,))
+        degrees : list[int], optional
+            A list of angles in degrees between 0 and 90. One degree for each latent variable.
+            Only applicable when the model is multidimensional.
+            Information will be computed in the direction of the angles. (default is None)
+        title : str, optional
+            The title for the plot. (default is None)
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Latent variable" for one latent variable and "Latent variable 1" for two latent variables)
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Information" for one latent variable and "Latent variable 2" for two latent variables)
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
+        theta_range : tuple[float, float], optional
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        second_theta_range : tuple[float, float], optional
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+        rescale : bool, optional
+            Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
+        """
+        model_dim = self.model.latent_variables
+        if len(latent_variables) > 2:
+            raise TypeError("Cannot plot more than two latent variables in one plot.")
+        if len(latent_variables) > model_dim:
+            raise TypeError(f"Cannot plot {len(latent_variables)} latent variables with a {model_dim}-dimensional model.")
+        if not all(num <= model_dim for num in latent_variables):
+            raise TypeError(f"The latent variables to plot need to be smaller than or equal to {model_dim} (the number of variabels in the model).")
+        if theta_range is not None and len(theta_range) != 2:
+            raise TypeError("theta_range needs to have a length of 2.")
+        if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
+            raise TypeError("second_theta_range needs to have a length of 2 if specified.")
+        if degrees is None and model_dim > 1:
+            raise ValueError("Degrees must be provided for multidimensional models.")
+        if steps is None:
+            steps = 100 if len(latent_variables) == 1 else 18
+
+        latent_indices = [theta - 1 for theta in latent_variables]
+
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
+        
+        if theta_grid.shape[0] > 2000:
+            logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
+
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)
+        else:
+            scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
+            if scores_to_plot.dim() == 1:
+                scores_to_plot = scores_to_plot.unsqueeze(1)
+
+        if items is not None:
+            item_mask = torch.zeros(self.model.items, dtype=bool)
+            item_mask[[item - 1 for item in items]] = 1
+            information = self.model.information(theta_grid, item=True, degrees=degrees, rescale=rescale)[:, item_mask].sum(dim=1)
+        else:
+            information = self.model.information(theta_grid, item=False, degrees=degrees, rescale=rescale)
+
+        if len(latent_variables) == 1:
+            scores_to_plot.squeeze_()
+            min_indices = (scores_to_plot == scores_to_plot.min()).nonzero().flatten()
+            if min_indices[-1] == len(scores_to_plot) - 1:  # if we have reversed theta scale
+                start_idx = min_indices[0].item()  # get the first index
+                scores_to_plot = scores_to_plot[:start_idx]
+                information = information.detach_().squeeze_()[:start_idx]
+            else:
+                start_idx = min_indices[-1].item()  # get the last index
+                scores_to_plot = scores_to_plot[start_idx:]
+                information = information.detach_().squeeze_()[start_idx:]
+                
+            return self._2d_line_plot(
+                x = scores_to_plot,
+                y = information,
+                title = title or "Information",
+                x_label = x_label or "Latent variable",
+                y_label = y_label or "Information",
+                color = color or None
+            )
+        if len(latent_variables) == 2:
+            grid_size = int(np.sqrt(information.size()))
+            return self._3d_surface_plot(
+                x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
+                y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
+                z = information.reshape((grid_size, grid_size)),
+                title = title or "Information",
+                x_label = x_label or "Latent variable 1",
+                y_label = y_label or "Latent variable 2",
+                z_label = "Information",
+                colorscale = colorscale
+            )
 
     def plot_expected_sum_score(
         self,
@@ -768,13 +756,12 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        colorscale: str = "Plasma",
+        colorscale: str = DEFAULT_COLORSCALE,
         theta_range: tuple[float, float] = None,
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
         fixed_thetas: torch.Tensor = None,
         rescale: str = True,
-        **kwargs
     ) -> go.Figure:
         """
         Plots the expected sum score from the model against the latent variable(s).
@@ -795,19 +782,17 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         colorscale : str, optional
-            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The theta range for plotting. (default is None and uses limits based on training data)
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         second_theta_range : tuple[float, float], optional
-            Only for scale = 'theta'. The range for plotting for the second latent variable. (default is None and uses limits based on training data)
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         steps : int, optional
             The number of steps along each theta axis to construct the latent variable grid for which the sum score is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
         fixed_thetas: torch.Tensor, optional
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        **kwargs : dict, optional
-            Additional keyword arguments used for scale computation. Refer to documentation for the chosen scale in the :doc:`scales` documentation section for additional details.
 
         Returns
         -------
@@ -830,7 +815,7 @@ class Plotter:
 
         latent_indices = [theta - 1 for theta in latent_variables]
 
-        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices)
+        theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
         
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
@@ -840,8 +825,8 @@ class Plotter:
             sum_scores = self.model.expected_scores(theta_grid, return_item_scores=False)
 
                 
-        if rescale and self.model.scale is not None:
-            scores_to_plot = self.model.scale(theta=theta_grid,**kwargs)[:, latent_indices]
+        if rescale and self.model.scale:
+            scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
             scores_to_plot = theta_grid[:, [var - 1 for var in latent_variables]]
             if scores_to_plot.dim() == 1:
@@ -888,30 +873,49 @@ class Plotter:
                 colorscale = colorscale
             )
 
-    def _get_theta_grid_for_plotting(self, latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices):
+    def _get_theta_grid_for_plotting(self, latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale):
         mask = torch.ones(self.model.latent_variables, dtype=bool)
         mask[latent_indices] = False
-        if fixed_thetas is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
-                fixed_thetas = self.model.algorithm.training_theta_scores[:, mask].median(dim=0).values
-            elif isinstance(self.model.algorithm, MML):
+        invertible = bool(len(self.model.scale)) and all(scale.invertible for scale in self.model.scale)
+        has_training_theta_scores = (
+            self.model is not None
+            and hasattr(self.model.algorithm, "training_theta_scores")
+            and self.model.algorithm.training_theta_scores is not None
+        )
+        use_transformed_train_theta = invertible and rescale and has_training_theta_scores
+
+        if has_training_theta_scores:
+            if use_transformed_train_theta:
+                theta_source = self.model.transform_theta(
+                    self.model.algorithm.training_theta_scores
+                )
+            else:
+                theta_source = self.model.algorithm.training_theta_scores
+        else:
+            theta_source = None
+
+        if fixed_thetas is None:    
+            if theta_source is not None:
+                fixed_thetas = theta_source[:, mask].median(dim=0).values
+            else:
                 fixed_thetas = torch.zeros(self.model.latent_variables)[mask]
-        
+
         if theta_range is None:
-            if isinstance(self.model.algorithm, (AE, VAE)):
+            if theta_source is not None:
                 theta_range = (
-                    self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].min().item(),
-                    self.model.algorithm.training_theta_scores[:, latent_variables[0] - 1].max().item()
+                    theta_source[:, latent_variables[0] - 1].min().item(),
+                    theta_source[:, latent_variables[0] - 1].max().item(),
                 )
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 theta_range = (-3, 3)
+
         if second_theta_range is None and len(latent_indices) > 1:
-            if isinstance(self.model.algorithm, (AE, VAE)):
+            if theta_source is not None:
                 second_theta_range = (
-                    self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].min().item(),
-                    self.model.algorithm.training_theta_scores[:, latent_variables[1] - 1].max().item()
+                    theta_source[:, latent_variables[1] - 1].min().item(),
+                    theta_source[:, latent_variables[1] - 1].max().item(),
                 )
-            elif isinstance(self.model.algorithm, MML):
+            else:
                 second_theta_range = (-3, 3)
 
         latent_theta_1 = torch.linspace(theta_range[0], theta_range[1], steps=steps)
@@ -919,13 +923,19 @@ class Plotter:
             theta_grid = latent_theta_1.unsqueeze(1).repeat(1, self.model.latent_variables)
             theta_grid[:, mask] = fixed_thetas
         else:
-            latent_theta_2 = torch.linspace(second_theta_range[0], second_theta_range[1], steps=steps)
-            latent_theta_1, latent_theta_2 = torch.meshgrid(latent_theta_1, latent_theta_2, indexing="ij")
+            latent_theta_2 = torch.linspace(
+                second_theta_range[0], second_theta_range[1], steps=steps
+            )
+            latent_theta_1, latent_theta_2 = torch.meshgrid(
+                latent_theta_1, latent_theta_2, indexing="ij"
+            )
             theta_grid = torch.zeros(latent_theta_1.numel(), self.model.latent_variables)
             theta_grid[:, latent_indices[0]] = latent_theta_1.flatten()
             theta_grid[:, latent_indices[1]] = latent_theta_2.flatten()
             theta_grid[:, mask] = fixed_thetas
-        
+
+        if use_transformed_train_theta:
+            theta_grid = self.model.inverse_transform_theta(theta_grid)
         return theta_grid
 
     def _2d_line_plot(
@@ -941,7 +951,10 @@ class Plotter:
             "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
             "y": y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
         })
-        fig = px.line(df, x="x", y="y", title=title, color_discrete_sequence=[color])
+        fig = px.line(
+            df, x="x", y="y", title=title, color_discrete_sequence=[color],
+            line_shape='spline'
+        )
         fig.update_layout(xaxis_title=x_label, yaxis_title=y_label)
         return fig
 
@@ -1179,7 +1192,7 @@ class Plotter:
         x_label: str = None,
         y_label: str = None,
         color: str = None,
-        contour_colorscale: str = "Plasma",
+        contour_colorscale: str = DEFAULT_COLORSCALE,
         contour_plot_bins = None,
     ) -> go.Figure:
         """
@@ -1198,7 +1211,7 @@ class Plotter:
         color : str, optional
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
-            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Plasma")
+            Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         countor_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         Returns
@@ -1242,7 +1255,7 @@ class Plotter:
         return fig
 
     def _two_latent_variables_distribution_plot(
-        self, 
+        self,
         scores: np.ndarray,
         title: str,
         x_label: str,
@@ -1257,7 +1270,7 @@ class Plotter:
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         fig = go.Figure(data =
             go.Contour(
-                z=histogram2d,
+                z=histogram2d.T,
                 x=x_centers, # Centers of bins (x-axis)
                 y=y_centers, # Centers of bins (y-axis)
                 colorscale=contour_colorscale

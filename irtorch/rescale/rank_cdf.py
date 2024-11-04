@@ -30,11 +30,11 @@ class RankCDF(Scale):
     >>> model.fit(train_data=data, algorithm=AE())
     >>> thetas = model.latent_scores(data)
     >>> # Create and RankCDF instancce and supply it to the model.
-    >>> model.rescale(RankCDF(thetas))
+    >>> model.add_scale_tranformation(RankCDF(thetas))
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones
-    >>> rescaled_thetas = model.scale(thetas)
+    >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
     >>> model.plot.plot_latent_score_distribution(thetas).show()
     >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
@@ -42,6 +42,7 @@ class RankCDF(Scale):
     >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] = None):
+        super().__init__(invertible=False)
         self.n_samples, latent_variables = theta.shape
         if distributions is None:
             self.distributions = []
@@ -106,7 +107,10 @@ class RankCDF(Scale):
 
         return transformed_data
 
-    def gradients(
+    def inverse(self, transformed_theta):
+        raise NotImplementedError("RankCDF is not invertible.")
+
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:

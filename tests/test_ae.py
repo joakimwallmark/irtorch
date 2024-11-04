@@ -25,7 +25,7 @@ class TestAE:
         algorithm.imputation_method = "zero"
         algorithm.one_hot_encoded = False
         # Set DataLoaders from the fixture
-        algorithm.data_loader, algorithm.validation_data_loader = data_loaders
+        algorithm.data_loader = data_loaders
 
         algorithm.encoder = StandardEncoder(
             input_dim=len(item_categories),
@@ -51,14 +51,6 @@ class TestAE:
         
         assert loss <= first_loss, "Loss should decrease"
 
-    def test__validation_step(self, algorithm: AE, irt_model: BaseIRTModel):
-        algorithm.optimizer = torch.optim.Adam(
-            list(algorithm.encoder.parameters()) + list(irt_model.parameters()), lr=0.01, amsgrad=True
-        )
-        log_likelihood = algorithm._validation_step(irt_model)
-        assert isinstance(log_likelihood, float)
-        assert log_likelihood > 0
-
     def test_fit(self, algorithm: AE, irt_model: BaseIRTModel, test_data):
         # Mock the inner functions that would be called during training
         with patch.object(
@@ -67,7 +59,6 @@ class TestAE:
             algorithm.fit(
                 model=irt_model,
                 train_data=test_data[0:100],
-                validation_data=test_data[100:120],
                 max_epochs=5
             )
 

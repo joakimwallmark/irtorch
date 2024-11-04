@@ -22,10 +22,14 @@ class Bit(Scale):
         The IRT model to use for bit scale computation.
     population_theta : torch.Tensor, optional
         Theta scores from the population. Usually the training data.
-        Used to find good starting values for the grid of theta scores used for the bit transformation.
+        Used to find good starting values for the grid of theta scores, which are then used for the bit transformation.
         Recommended to use for models with theta distributions for which values far from 0 are common. (default is None)
     start_theta : torch.Tensor, optional
         The starting theta scores for the bit scale computation. If None, the minimum theta scores are used. (default is None)
+    items : list[int], optional
+        The item indices for the items to use to compute the bit scores. (default is None and uses all items)
+    grid_points : int, optional
+        The number of points to use for computing bit score. More steps lead to more accurate results. (default is 400)
     mc_start_theta_approx : bool, optional
         For multiple choice models. Whether to approximate the starting theta scores using simulated random guesses.
         If True, runs :meth:`bit_score_starting_theta_mc`. (default is False)
@@ -75,11 +79,11 @@ class Bit(Scale):
     >>> # mc_start_theta_approx sets the starting theta to the approximate score of a randomly guessing respondent
     >>> bit = Bit(model, population_theta=thetas, mc_start_theta_approx=True)
     >>> # Supply the new scale to the model
-    >>> model.rescale(bit)
+    >>> model.add_scale_tranformation(bit)
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones
-    >>> rescaled_thetas = model.scale(thetas)
+    >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
     >>> model.plot.plot_latent_score_distribution(thetas).show()
     >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
@@ -91,9 +95,21 @@ class Bit(Scale):
         model: BaseIRTModel,
         population_theta: torch.Tensor = None,
         start_theta: torch.Tensor = None,
+        items: list[int] = None,
+        grid_points: int = 400,
         mc_start_theta_approx: bool = False,
         **kwargs
     ):
+        super().__init__(invertible=False)
+        if grid_points <= 0:
+            raise ValueError("steps must be a positive integer")
+        if items is None:
+            items = list(range(len(model.item_categories)))
+        elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
+            raise ValueError("items must be a list of integers.")
+        
+        self.grid_points = grid_points
+        self.items = items
         self.model = model
         self._invert_scale_multiplier = self._get_inverted_scale_multiplier()
         self._population_theta = population_theta
@@ -126,8 +142,6 @@ class Bit(Scale):
     def transform(
         self,
         theta: torch.Tensor,
-        grid_points: int = 300,
-        items: list[int] = None,
     ) -> torch.Tensor:
         r"""
         Transforms :math:`\mathbf{\theta}` scores into bit scores :math:`B(\mathbf{\theta})`.
@@ -136,24 +150,13 @@ class Bit(Scale):
         ----------
         theta : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
-        grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
         
         Returns
         -------
         torch.Tensor
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_theta.
         """
-        if grid_points <= 0:
-            raise ValueError("steps must be a positive integer")
-        if items is None:
-            items = list(range(len(self.model.item_categories)))
-        elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
-            raise ValueError("items must be a list of integers.")
-
-        start_theta_adjusted = self._start_theta * self._invert_scale_multiplier 
+        start_theta_adjusted = self._start_theta * self._invert_scale_multiplier
         theta_adjusted = torch.max(theta * self._invert_scale_multiplier, start_theta_adjusted)
         if self._population_theta is None:
             grid_start = torch.full((1, self.model.latent_variables), -7)
@@ -171,7 +174,7 @@ class Bit(Scale):
             grid_start,
             grid_end,
             self._invert_scale_multiplier,
-            grid_points
+            self.grid_points
         )
         
         return bit_scores
@@ -180,8 +183,6 @@ class Bit(Scale):
     def transform_to_1D(
         self,
         theta: torch.Tensor,
-        grid_points: int = 300,
-        items: list[int] = None,
     ) -> torch.Tensor:
         r"""
         Transforms :math:`\mathbf{\theta}` scores of a multi-dimensional model into one-dimensional bit scores :math:`B(\mathbf{\theta})`.
@@ -191,24 +192,14 @@ class Bit(Scale):
         ----------
         theta : torch.Tensor
             A 2D tensor. Columns are latent variables and rows are respondents.
-        grid_points : int, optional
-            The number of points to use for computing bit score. More steps lead to more accurate results. (default is 300)
-        items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
         
         Returns
         -------
         torch.Tensor
             A 2D tensor with bit score scale scores for each respondent across the rows together with another tensor with start_theta.
         """
-        if grid_points <= 0:
-            raise ValueError("steps must be a positive integer")
-        if items is None:
-            items = list(range(len(self.model.item_categories)))
-        elif not isinstance(items, list) or not all(isinstance(item, int) for item in items):
-            raise ValueError("items must be a list of integers.")
         if self.model.latent_variables == 1:
-            return self.transform(theta=theta, grid_points=grid_points, items=items)
+            return self.transform(theta=theta)
 
         start_theta_adjusted = self._start_theta * self._invert_scale_multiplier 
         theta_adjusted = torch.max(theta * self._invert_scale_multiplier, start_theta_adjusted)
@@ -225,16 +216,18 @@ class Bit(Scale):
             grid_start,
             grid_end,
             self._invert_scale_multiplier,
-            grid_points
+            self.grid_points
         )
         
         return bit_scores
 
+    def inverse(self, transformed_theta):
+        raise NotImplementedError("Bit scale inverse is not implemented.")
+
     @torch.inference_mode(False)
-    def gradients(
+    def jacobian(
         self,
         theta: torch.Tensor,
-        items: list[int] = None,
     ) -> torch.Tensor:
         r"""
         Computes the gradients of the bit scores with respect to the input theta scores.
@@ -243,8 +236,6 @@ class Bit(Scale):
         ----------
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
-        items: list[int], optional
-            The item indices for the items to use to compute the bit scores. (default is None and uses all items)
 
         Returns
         -------
@@ -269,8 +260,8 @@ class Bit(Scale):
                     gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
 
             gradients[gradients.isnan()] = 0.
-            if items is not None:
-                gradients = gradients[:, items, :]
+            if self.items is not None:
+                gradients = gradients[:, self.items, :]
 
             # sum over items and add dimension for jacobian
             # multiply by -1 if we are inversely related to the theta scores
@@ -369,7 +360,7 @@ class Bit(Scale):
         )
 
         logger.info("Approximating theta from random guessing data to get minimum bit score.")
-        guessing_theta = self.model.latent_scores(random_data, theta_estimation=theta_estimation, ml_map_device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
+        guessing_theta = self.model.latent_scores(random_data, theta_estimation=theta_estimation, device=ml_map_device, lbfgs_learning_rate=lbfgs_learning_rate, rescale=False)
 
         starting_theta = guessing_theta.detach().median(dim=0).values.reshape(1, self.model.latent_variables)
 
@@ -421,7 +412,7 @@ class Bit(Scale):
         # convert back to non-inverted theta scale and compute grid entropies
         grid = grid.view(-1, grid.shape[2]) * invert_scale_multiplier
         output = self.model(grid)
-        entropies = entropy(self.model.probabilities_from_output(output))
+        entropies = entropy(self.model.probabilities_from_output(output))[:, self.items]
 
         # the goal is to get the entropies to the dimensions required for bit_score_distance
         # we need to transpose for view to order them correctly
@@ -488,7 +479,7 @@ class Bit(Scale):
 
             # Convert back to non-inverted theta scale and compute grid entropies
             output = self.model(latent_variable_grid * invert_scale_multiplier)
-            entropies = entropy(self.model.probabilities_from_output(output))
+            entropies = entropy(self.model.probabilities_from_output(output))[:, self.items]
 
             # Compute the absolute difference between each grid point entropy and the previous one
             diff = torch.zeros_like(entropies)

@@ -10,6 +10,9 @@ class Scale(ABC):
     A class instance can then be supplied to :meth:`irtorch.models.BaseIRTModel.rescale` to apply the transformation to the latent variables of the model.
     The gradients method is not needed for 
     """
+    def __init__(self, invertible: bool = False):
+        self.invertible = invertible
+
     def __call__(self, *args, **kwargs):
         return self.transform(*args, **kwargs)
     
@@ -25,12 +28,28 @@ class Scale(ABC):
         """
 
     @abstractmethod
-    def gradients(
+    def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
+        """
+        Puts the scores back to the original theta scale.
+
+        Parameters
+        ----------
+        transformed_theta : torch.Tensor
+            A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing theta scores on the the original scale.
+        """
+
+    @abstractmethod
+    def jacobian(
         self,
         theta: torch.Tensor
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of scale scores with respect to the input theta scores.
+        Computes the Jacobian matrix of the scale transformations for each row in the input theta scores.
 
         Parameters
         ----------
@@ -40,5 +59,5 @@ class Scale(ABC):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+            A torch tensor with the Jacobians for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians for each row.
         """

@@ -99,4 +99,4 @@ def test_transform_with_ties():
 def test_gradients_not_implemented(sample_theta):
     rank_cdf = RankCDF(theta=sample_theta)
     with pytest.raises(NotImplementedError, match="Gradients are not available for RankCDF scale transformations."):
-        rank_cdf.gradients(sample_theta)
+        rank_cdf.jacobian(sample_theta)

@@ -12,3 +12,7 @@ Rescaling
 .. autoclass:: irtorch.rescale.Flow
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.rescale.RankCDF
+    :show-inheritance:
+    :members:

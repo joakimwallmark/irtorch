@@ -35,19 +35,6 @@ def test_bit_transform(latent_variables):
     assert bit_scores.shape == (3, latent_variables)
     assert torch.all(bit_scores >= 0)
 
-    # Test with invalid grid_points
-    with pytest.raises(ValueError):
-        bit_scale.transform(theta, grid_points=0)
-
-    # Test with items parameter
-    bit_scores = bit_scale.transform(theta, items=[0])
-    assert bit_scores.shape == (3, latent_variables)
-
-    # Test with invalid items parameter
-    with pytest.raises(ValueError):
-        bit_scale.transform(theta, items='invalid')
-
-
 def test_bit_transform_to_1D(latent_variables):
     model = TwoParameterLogistic(latent_variables=latent_variables, items=3)
     bit_scale = Bit(model)
@@ -55,16 +42,11 @@ def test_bit_transform_to_1D(latent_variables):
     bit_scores = bit_scale.transform_to_1D(theta)
     assert bit_scores.shape == (3, 1)
 
-    # Test with invalid grid_points
-    with pytest.raises(ValueError):
-        bit_scale.transform_to_1D(theta, grid_points=0)
-
-
 def test_bit_gradients():
     model = TwoParameterLogistic(latent_variables=1, items=3)
     bit_scale = Bit(model)
     theta = torch.tensor([[0.0], [1.0], [-1.0]]).repeat(1, 1)
-    gradients = bit_scale.gradients(theta)
+    gradients = bit_scale.jacobian(theta)
     assert gradients.shape == (3, 1, 1)
     assert torch.all(gradients >= 0)
 

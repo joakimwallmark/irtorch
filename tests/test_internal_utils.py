@@ -13,6 +13,7 @@ from irtorch._internal_utils import (
     impute_missing_internal,
     correlation_matrix,
     joint_entropy_matrix,
+    sum_score
 )
 
 @pytest.fixture(scope="module")
@@ -279,3 +280,11 @@ def test_joint_entropy_matrix():
     x = torch.tensor([1.0, 2.0, 3.0])
     with pytest.raises(ValueError):
         joint_entropy_matrix(x)
+
+def test_sum_score():
+    data = torch.tensor([[0, 1, 0, 1], [1, 2, 4, 2], [4, 2, 3, 4]], dtype=torch.float32)
+
+    sum_scores = sum_score(data, mc_correct=None)
+    sum_scores_mc = sum_score(data, mc_correct=[1, 2, 0, 4])
+    assert torch.all(sum_scores == torch.tensor([2, 9, 13]))
+    assert torch.all(sum_scores_mc == torch.tensor([1, 2, 2]))

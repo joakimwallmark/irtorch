@@ -235,7 +235,7 @@ class GradedResponse(BaseIRTModel):
         weights_df = pd.DataFrame(weights.detach().numpy())
         weights_df.columns = [f"a{i+1}" for i in range(weights.shape[1])]
         if irt_format and self.latent_variables == 1:
-            biases_df = pd.DataFrame(-(weights*biases).detach()[:, 1:].numpy())
+            biases_df = pd.DataFrame(-(biases/weights).detach()[:, 1:].numpy())
             biases_df.columns = [f"b{i+1}" for i in range(biases_df.shape[1])]
         else:
             biases_df = pd.DataFrame(biases.detach()[:, 1:].numpy())

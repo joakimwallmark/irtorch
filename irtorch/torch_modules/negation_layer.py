@@ -25,7 +25,8 @@ class NegationLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.zeros_(self.weight_param)
+        # nn.init.zeros_(self.weight_param)
+        nn.init.constant_(self.weight_param, .01)
 
     def forward(self, x: torch.Tensor):
         # break the gradients for weights for non-used categories

@@ -11,11 +11,12 @@ logger = logging.getLogger("irtorch")
 class VAE(AE):
     """
     Variational autoencoder neural network with importance weighted sampling for fitting IRT models :cite:p:`Urban2021`.
+    This method is effective when fitting high-dimensional IRT models with large datasets.
 
     """
     def __init__(self):
         super().__init__()
-        self.iw_samples = 1
+        self.iw_samples = 5
         self.annealing_iterations = 5
         self.anneal = True
         self.annealing_factor = 1.0
@@ -24,24 +25,23 @@ class VAE(AE):
         self,
         model: BaseIRTModel,
         train_data: torch.Tensor,
-        validation_data: torch.Tensor = None,
         one_hot_encoded: bool = True,
         imputation_method: str = None,
-        hidden_layers_encoder: list[int] = None,
-        nonlinear_encoder = torch.nn.ELU(),
-        batch_normalization_encoder: bool = False,
-        batch_size: int = 256,
-        max_epochs: int = 1000,
         learning_rate: float = 0.002,
         learning_rate_updates_before_stopping: int = 2,
         evaluation_interval_size: int = 60,
+        max_epochs: int = 10000,
+        batch_size: int = None,
+        batch_normalization_encoder: bool = False,
+        nonlinear_encoder = torch.nn.ELU(),
+        hidden_layers_encoder: list[int] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         anneal: int = True,
         annealing_iterations: int = 5,
         iw_samples: int = 5,
     ):
         """
-        Train an IRT model using the variational autoencoder.
+        Train an IRT model using the variational autoencoder. If the algorithm fails to converge, try lowering the learning rate. Use batch_size if the data is too large to fit in memory.
 
         Parameters
         ----------
@@ -49,8 +49,6 @@ class VAE(AE):
             The model to fit. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
-        validation_data : torch.Tensor, optional
-            The validation data. (default is None)
         one_hot_encoded : bool, optional
             Whether the model uses one-hot encoded data. (default is False)
         imputation_method : str, optional
@@ -58,22 +56,22 @@ class VAE(AE):
             Only methods not relying on a fitted model can be used. 
             Note that missing values are removed from the loss calculation even after imputation.
             If you do not want this, do the imputation to your dataset before fitting. (default is None and only works for one-hot encoded inputs)
-        hidden_layers_encoder : list[int], optional
-            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
-        nonlinear_encoder : torch.nn.Module, optional
-            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
-        batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
-        batch_size : int, optional
-            The batch size for training. (default is 64)
-        max_epochs : int, optional
-            The maximum number of epochs to train for. (default is 1000)
         learning_rate : float, optional
             The initial learning rate for the optimizer. (default is 0.002)
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         evaluation_interval_size: int, optional
-            The number of iterations between each model evaluation during training. (default is 60)
+            The number of iterations between each model evaluation during training. (default is 80)
+        max_epochs : int, optional
+            The maximum number of epochs to train for. (default is 1000)
+        batch_size : int, optional
+            The batch size for training. (default is 64)
+        batch_normalization_encoder : bool, optional
+            Whether to use batch normalization for the encoder. (default is True)
+        nonlinear_encoder : torch.nn.Module, optional
+            The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
+        hidden_layers_encoder : list[int], optional
+            List of hidden layers for the encoder. Each element is a layer with the number of neurons represented as integers. If not provided, uses one hidden layer with 2 * sum(item_categories) neurons.
         device : str, optional
             The device to run the model on. (default is "cuda" if available else "cpu".)
         anneal : bool, optional
@@ -91,7 +89,6 @@ class VAE(AE):
         # Re-initialize the training history
         self.training_history = {
             "train_loss": [],
-            "validation_loss": [],
         }
         self.best_model_state = None
         self.batch_mean_losses = []
@@ -105,6 +102,8 @@ class VAE(AE):
         self.anneal = anneal
         self.one_hot_encoded = one_hot_encoded
 
+        if batch_size is None:
+            batch_size = train_data.shape[0]
         if one_hot_encoded:
             input_dim = sum(model.item_categories)
         else:
@@ -136,19 +135,6 @@ class VAE(AE):
             shuffle=True,
             pin_memory=False,
         )
-        if validation_data is not None:
-            validation_data_irt = PytorchIRTDataset(
-                data=validation_data.to(device),
-                one_hot_encoded=self.one_hot_encoded,
-                item_categories=model.item_categories,
-                imputation_method=imputation_method,
-                mc_correct=model.mc_correct
-            )
-            self.validation_data_loader = torch.utils.data.DataLoader(
-                validation_data_irt,
-                batch_size=batch_size,
-                shuffle=False,
-            )
 
         self.optimizer = torch.optim.Adam(
             list(self.encoder.parameters()) + list(model.parameters()), lr=learning_rate, amsgrad=True
@@ -163,7 +149,7 @@ class VAE(AE):
 
         self.encoder.to(device)
         model.to(device)
-        self._training_loop(model, max_epochs, validation_data, learning_rate_updates_before_stopping)
+        self._training_loop(model, max_epochs, learning_rate_updates_before_stopping)
         self.encoder.to("cpu")
         model.to("cpu")
         self.encoder.eval()

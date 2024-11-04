@@ -13,6 +13,7 @@ class BaseIRTAlgorithm(ABC):
     def __init__(self):
         super().__init__()
         self.train_data = None
+        self.training_theta_scores = None
 
     @abstractmethod
     def fit(self, model: BaseIRTModel, train_data: torch.Tensor, **kwargs):

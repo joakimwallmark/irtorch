@@ -1,6 +1,7 @@
 import pytest
+from unittest.mock import MagicMock
 import torch
-from irtorch.utils import gauss_hermite, get_item_categories, split_data, impute_missing
+from irtorch.utils import gauss_hermite, get_item_categories, split_data, impute_missing, _imw_newton_raphson, imw
 
 def test_gauss_hermite():
     n_points = 4
@@ -48,6 +49,31 @@ def test_impute_missing():
     assert imputed_data[1, 1] != 2
     assert imputed_data[2, 0] != 1
     assert imputed_data[2, 1] != 2
+
+
+def test__imw_newton_raphson():
+    # Negative entropy values
+    negative_entropy = torch.tensor([-0.4, -0.6], requires_grad=False)
+    w = _imw_newton_raphson(negative_entropy)
+    negative_entropy_result = w * torch.log(w) + (1 - w) * torch.log(1 - w)
+    assert torch.allclose(negative_entropy_result, negative_entropy, atol=1e-6), "The computed w does not satisfy the equation."
+
+def test_imw():
+    # Mock models
+    model1 = MagicMock()
+    model2 = MagicMock()
+    model1.evaluate.log_likelihood = MagicMock(return_value=torch.tensor(-0.5))
+    model2.evaluate.log_likelihood = MagicMock(return_value=torch.tensor(-0.2))
+    # Data (can be empty since we are mocking)
+    data = torch.tensor([])
+    # Call imw function
+    imw_value = imw(model1, model2, data)
+    # Compute expected imw
+    log_geometric_means = torch.tensor([-0.5, -0.2])
+    w = _imw_newton_raphson(log_geometric_means)
+    expected_imw = (w[1] - w[0]) / w[0]
+    # Check that imw_value matches expected_imw
+    assert torch.allclose(imw_value, expected_imw, atol=1e-6), "The computed IMW does not match the expected value."
 
 def test_split_data():
     torch.manual_seed(42)

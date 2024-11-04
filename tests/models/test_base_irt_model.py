@@ -238,3 +238,51 @@ def test__theta_grid(base_irt_model: BaseIRTModel, grid_size):
     # Ensure uniqueness of each row (i.e., no repeated combinations)
     unique_rows = torch.unique(grid_combinations, dim=0)
     assert unique_rows.shape[0] == grid_combinations.shape[0], "Detected repeated combinations in the grid"
+
+def test_initial_theta_from_training_data(base_irt_model: BaseIRTModel, device):
+    base_irt_model.algorithm = MagicMock(spec=BaseIRTAlgorithm)
+    data = torch.tensor([
+        [1.0, 0.0],
+        [0.0, 1.0],
+        [1.0, 3.0]
+    ])
+    
+    base_irt_model.algorithm.training_theta_scores = \
+        torch.tensor([-1.0, -0.5, 0, 0.5, 1.0]).unsqueeze(1).repeat(1, base_irt_model.latent_variables)
+
+    torch.tensor([-1.0, -0.5, 0, 0.5, 1.0])
+
+    # Call the method to test
+    theta = base_irt_model._initial_theta_from_training_data(data, device)
+    
+    # Assertions to verify correctness
+    assert theta.shape == (data.shape[0], base_irt_model.latent_variables)
+    assert theta.device.type == 'cpu'
+    
+    # Optionally print the result
+    print("Theta:", theta)
+
+def test__rescale_gradients(base_irt_model: BaseIRTModel):
+    if base_irt_model.latent_variables == 2:
+        def theta_transform_jacobian(theta):
+            # Jacobian of ~45 degrees rotation matrix
+            return torch.tensor([
+                [0.7071, -0.7071], [0.7071, 0.7071],
+            ]).T.unsqueeze(0).repeat(theta.shape[0], 1, 1)
+        
+        base_irt_model.theta_transform_jacobian = MagicMock(
+            side_effect=theta_transform_jacobian
+        )
+
+        input_theta = torch.arange(-3, 3.01, 0.6).view(-1, 1).expand(-1, base_irt_model.latent_variables)
+        input_grads = torch.arange(-3, 3.01, 0.6).view(-1, 1, 1, 1).expand(-1, 10, 5, base_irt_model.latent_variables)
+        gradients = base_irt_model._rescale_gradients(input_grads.contiguous(), input_theta.contiguous())
+
+        non_transformed_gradients = input_grads[1, 1, 1].unsqueeze(1)
+        transform_jacobian = torch.tensor([
+            [0.7071, -0.7071], [0.7071, 0.7071],
+        ])
+        true_grad = torch.linalg.solve(transform_jacobian, non_transformed_gradients)
+
+        assert torch.allclose(gradients[1, 1, 1], true_grad.flatten())
+        assert gradients.shape == input_grads.shape

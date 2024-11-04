@@ -130,7 +130,7 @@ def swedish_sat_binary() -> torch.Tensor:
 
 def big_five() -> torch.Tensor:
     """
-    Download and preprocess the Big Five personality dataset. Note that this method is a bit slow due to the size of the dataset and the fact that it is downloaded from https://openpsychometrics.org/_rawdata/IPIP-FFM-data-8Nov2018.zip.
+    Download and preprocess the Big Five personality dataset. Note that loading this dataset can be a bit slow due to the size of the dataset and the fact that it is downloaded from https://openpsychometrics.org/_rawdata/IPIP-FFM-data-8Nov2018.zip.
     The dataset is cached in the user's home directory to speed up subsequent calls.
     
     The Big Five personality traits, also known as the Five-Factor Model or the OCEAN model, are designed to assess personality traits. 

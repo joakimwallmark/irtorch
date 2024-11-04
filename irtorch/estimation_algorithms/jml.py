@@ -1,7 +1,6 @@
 import logging
 import copy
 import torch
-from torch.distributions import MultivariateNormal
 from irtorch.models import BaseIRTModel
 from irtorch._internal_utils import dynamic_print, sum_score
 from irtorch.irt_dataset import PytorchIRTDataset
@@ -56,7 +55,7 @@ class JML(BaseIRTAlgorithm):
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 3)
         max_epochs : int, optional
-            The maximum number of epochs to train for. (default is 1000)
+            The maximum number of epochs to train for. (default is 10000)
         batch_size : int, optional
             The batch size for training. (default is None and uses the full dataset)
         start_thetas : torch.Tensor, optional
@@ -194,83 +193,3 @@ class JML(BaseIRTAlgorithm):
             model.load_state_dict(best_model_state["state_dict"])
             self.optimizer.load_state_dict(best_model_state["optimizer"])
             logger.info("Best model found at iteration %s with loss %.4f.", best_epoch, best_loss)
-
-    def _train_step(
-        self,
-        model: BaseIRTModel,
-        train_data: PytorchIRTDataset,
-        latent_grid: torch.Tensor,
-        log_weights: torch.Tensor,
-        number_of_weights: int,
-    ):
-        """
-        Training step for an epoch.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            The model to train.
-        train_data : PytorchIRTDataset
-            The training data.
-        latent_grid : torch.Tensor
-            The grid of latent variables.
-        log_weights : torch.Tensor
-            The log weights for the latent variables.
-        number_of_weights : int
-            The number of quadrature points. The number of different weights before expanding.
-
-        Returns
-        -------
-        float
-            The loss after the training step.
-        """
-        model.train()
-
-        self.optimizer.zero_grad()
-        logits = model(latent_grid)
-        ll = model.log_likelihood(train_data.data, logits, missing_mask=train_data.mask, loss_reduction="none")
-        ll = ll.view(-1, model.items).nansum(dim=1) # sum over items
-        
-        log_sums = (log_weights + ll).view(number_of_weights, -1)
-        constant = log_sums.max(dim=0)[0] # for logexpsum trick (one constant per respondent)
-        exp_log_sums = (log_sums-constant).exp()
-        loss = -(exp_log_sums.sum(dim=0).log() + constant).sum()
-
-        loss.backward()
-        self.optimizer.step()
-        
-        self.training_history["train_loss"].append(loss.item())
-        return loss.item()
-
-    def _quasi_mc(self, n_points: int, latent_variables: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get the points and weights for Quasi-Monte Carlo integral approximation.
-
-        Parameters
-        ----------
-        n_points : int
-            The number of points of evaluation.
-        latent_variables : int
-            The number of latent variables.
-
-        Returns
-        -------
-        torch.Tensor
-            The points of integration.
-        torch.Tensor
-            The logarithm of the weights associated with the points.
-        """
-        latent_grid = torch.linspace(-3, 3, n_points).view(-1, 1)
-        latent_grid = latent_grid.expand(-1, latent_variables).contiguous()
-        if latent_variables > 1:
-            columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
-            latent_combos = torch.cartesian_prod(*columns)
-        else:
-            latent_combos = latent_grid
-
-        normal_dist = MultivariateNormal(
-            loc=torch.zeros(latent_variables),
-            covariance_matrix=self.covariance_matrix
-        )
-        weights = normal_dist.log_prob(latent_combos)
-        return latent_combos, weights

@@ -52,7 +52,6 @@ class TestMML:
         log_weights_rep = log_weights.repeat_interleave(test_data.size(0), dim=0)
         irt_data_rep = PytorchIRTDataset(train_data_rep)
 
-        algorithm
         for _ in range(2):
             loss = algorithm._train_step(
                 irt_model,

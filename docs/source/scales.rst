@@ -16,3 +16,11 @@ Rescaling
 .. autoclass:: irtorch.rescale.RankCDF
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.rescale.Reverse
+    :show-inheritance:
+    :members:
+
+.. autoclass:: irtorch.rescale.Rotate
+    :show-inheritance:
+    :members:

@@ -1,11 +1,7 @@
-import os
 import random
 import pytest
 import torch
 import numpy as np
-import irtorch
-from irtorch.models import MonotoneNN, GradedResponse, GeneralizedPartialCredit, BaseIRTModel
-from irtorch.estimation_algorithms import AE, VAE, MML
 from irtorch.irt_dataset import PytorchIRTDataset
 
 @pytest.fixture(

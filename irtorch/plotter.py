@@ -553,6 +553,8 @@ class Plotter:
             raise TypeError("theta_range needs to have a length of 2.")
         if len(latent_variables) == 1 and second_theta_range is not None and len(second_theta_range) != 2:
             raise TypeError("second_theta_range needs to have a length of 2 if specified.")
+        if plot_group_fit and model_dim > 1:
+            raise TypeError("Group fit plots are only supported for unidimensional models with one latent variable")
         if steps is None:
             steps = 200 if len(latent_variables) == 1 else 25
 

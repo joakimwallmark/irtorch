@@ -584,8 +584,8 @@ class BaseIRTModel(ABC, nn.Module):
         """
         if theta_estimation not in ["NN", "ML", "EAP", "MAP"]:
             raise ValueError("Invalid theta_estimation. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
-        if standard_errors and theta_estimation != "ML":
-            raise ValueError("Standard errors are only available for theta scores with ML estimation.")
+        if standard_errors and theta_estimation not in ["ML", "NN"]:
+            raise ValueError("Standard errors are only available for theta scores with ML or NN estimation.")
         if not hasattr(self.algorithm, "encoder") and theta_estimation == "NN":
             raise ValueError("NN estimation is only available for autoencoder models.")
 
@@ -611,8 +611,8 @@ class BaseIRTModel(ABC, nn.Module):
                     encoder_data = data
 
                 if self.algorithm.one_hot_encoded:
-                    one_hot_data = one_hot_encode_test_data(encoder_data, self.item_categories)
-                    theta = self.algorithm.theta_scores(one_hot_data).clone()
+                    encoder_data = one_hot_encode_test_data(encoder_data, self.item_categories)
+                    theta = self.algorithm.theta_scores(encoder_data).clone()
                 else:
                     theta = self.algorithm.theta_scores(encoder_data).clone()
             else:
@@ -624,21 +624,23 @@ class BaseIRTModel(ABC, nn.Module):
 
             if theta_estimation in ["ML", "MAP"]:
                 theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=device)
-            elif theta_estimation == "EAP":
-                theta = self._eap_theta_scores(data, eap_theta_integration_points)
+        
+        if rescale and self.scale:
+            theta = self.transform_theta(theta)
 
         if standard_errors:
             if theta_estimation == "ML" or theta_estimation == "NN":
-                fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
-                se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-                if rescale and self.scale:
-                    logger.info("Latent scores and standard errors computed on the original scale. Transformed standard errors are not yet implemented.")
+                if hasattr(self.algorithm, 'latent_mean_se') and theta_estimation == "NN":
+                    theta, se = self.algorithm.latent_mean_se(encoder_data)
+                    if rescale and self.scale:
+                        logger.info("Transformed standard errors for NN estimation are not implemented. Latent scores and standard errors computed on the original scale. ")
+                else:
+                    fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
+                    se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
                 return theta, se
             else:
                 logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
         
-        if rescale and self.scale:
-            theta = self.transform_theta(theta)
         return theta
 
     def _initial_theta_from_training_data(self, data, device):
@@ -819,22 +821,22 @@ class BaseIRTModel(ABC, nn.Module):
             missing_mask = get_missing_mask(data)
             def closure():
                 optimizer.zero_grad()
-                logits = self(optimized_theta_scores)
+                forward_output = self(optimized_theta_scores)
                 if theta_estimation == "MAP": # maximize -log likelihood - log prior
-                    loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
+                    loss = -self.log_likelihood(data, forward_output, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
                 else: # maximize -log likelihood for ML
-                    loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum")
+                    loss = -self.log_likelihood(data, forward_output, missing_mask, loss_reduction = "sum")
                 loss.backward()
                 return loss
 
             for i in range(max_iter):
                 optimizer.step(closure)
                 with torch.no_grad():
-                    logits = self(optimized_theta_scores)
+                    forward_output = self(optimized_theta_scores)
                     if theta_estimation == "MAP": # maximize -log likelihood - log prior
-                        loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
+                        loss = -self.log_likelihood(data, forward_output, missing_mask, loss_reduction = "sum") - prior_density.log_prob(optimized_theta_scores).sum()
                     else: # maximize -log likelihood for ML
-                        loss = -self.log_likelihood(data, logits, missing_mask, loss_reduction = "sum")
+                        loss = -self.log_likelihood(data, forward_output, missing_mask, loss_reduction = "sum")
                     loss = loss.item()
 
                 denominator = data.numel()
@@ -848,7 +850,7 @@ class BaseIRTModel(ABC, nn.Module):
             logger.error("Error in %s iteration %s: %s", theta_estimation, i+1, e)
             raise e
         finally:
-            # Reset requires_grad for decoder parameters if we want to train decoder later
+            # Reset requires_grad train model later
             self.to("cpu")
             optimized_theta_scores = optimized_theta_scores.detach().to("cpu")
             self.requires_grad_(True)

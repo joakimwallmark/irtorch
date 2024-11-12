@@ -388,3 +388,22 @@ class VAE(AE):
         )
 
         return lower, mean, upper
+
+    @torch.no_grad()
+    def latent_mean_se(self, input_data: torch.Tensor) -> torch.tensor:
+        """
+        Get the posterior mean and standard error of the latent variables.
+
+        Parameters
+        ----------
+        input_data : torch.Tensor
+            The input data.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            The posterior mean and standard error of the latent variables.
+        """
+        input_data = input_data.contiguous()
+        mean, logvar = self.encoder(input_data)
+        return mean, torch.exp(0.5 * logvar)

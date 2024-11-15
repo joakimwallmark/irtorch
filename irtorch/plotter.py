@@ -139,7 +139,7 @@ class Plotter:
             The Plotly Figure object for the plot.
         """
         if len(latent_variables) > 2:
-            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables_to_plot argument.")
+            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables argument.")
         if len(latent_variables) > self.model.latent_variables:
             raise ValueError(
                 f"Cannot plot {len(latent_variables)} dimensions. "

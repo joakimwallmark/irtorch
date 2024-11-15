@@ -5,7 +5,7 @@ Estimation algorithms
     :members:
     :show-inheritance:
 
-.. autoclass:: irtorch.estimation_algorithms.ae.JML
+.. autoclass:: irtorch.estimation_algorithms.jml.JML
     :members:
     :show-inheritance:
 

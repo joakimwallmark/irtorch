@@ -3,24 +3,6 @@ Installation
 
 This guide provides instructions for installing the IRTorch package either on your local machine or running it from a Jupyter notebook in a cloud environment.
 
-Run from a Cloud Environment
-----------------------------
-To use the package in a cloud-based Jupyter notebook environment such as Google Colab, follow these steps:
-
-1. Open a new Jupyter notebook on `Google Colab <https://colab.research.google.com/>`__.
-2. Install the package by running the following command in a new cell:
-
-.. code-block::
-
-    !pip install irtorch
-
-3. Verify the installation by importing the package in another cell:
-
-.. code-block:: python
-
-    import irtorch
-    print("IRTorch successfully installed")
-
 Install on your own machine
 ---------------------------
 **Prerequisites**
@@ -64,6 +46,25 @@ You can run Python code and **IRTorch** directly from the terminal with python i
     jupyter lab
 
 3. Create a new notebook and import the **IRTorch** package to start using it:
+
+.. code-block:: python
+
+    import irtorch
+    print("IRTorch successfully installed")
+
+Run from a Cloud Environment
+----------------------------
+To use the package in a cloud-based Jupyter notebook environment such as Google Colab, follow these steps:
+
+1. Open a new Jupyter notebook on `Google Colab <https://colab.research.google.com/>`__.
+2. Change to a GPU enabled runtime by selecting `Runtime` -> `Change runtime type` -> `Hardware accelerator` -> `GPU`. (Recommended but not required)
+3. Install the package by running the following command in a new cell:
+
+.. code-block::
+
+    !pip install irtorch
+
+4. Verify the installation by importing the package in another cell:
 
 .. code-block:: python
 

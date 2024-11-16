@@ -631,9 +631,12 @@ class BaseIRTModel(ABC, nn.Module):
         if standard_errors:
             if theta_estimation == "ML" or theta_estimation == "NN":
                 if hasattr(self.algorithm, 'latent_mean_se') and theta_estimation == "NN":
-                    theta, se = self.algorithm.latent_mean_se(encoder_data)
+                    theta_orig, se = self.algorithm.latent_mean_se(encoder_data)
                     if rescale and self.scale:
-                        logger.info("Transformed standard errors for NN estimation are not implemented. Latent scores and standard errors computed on the original scale. ")
+                        var = torch.diag_embed(se)**2
+                        # delta method for transformed standard errors by assuming uncorrelated original thetas
+                        jacobian = self.theta_transform_jacobian(theta_orig)
+                        se = torch.sqrt(torch.einsum("...ij,...jk,...ik->...i", jacobian, var, jacobian))
                 else:
                     fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
                     se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()

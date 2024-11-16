@@ -214,7 +214,7 @@ class Flow(Scale):
         theta: torch.Tensor
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of scale scores for each :math:`j` with respect to the input theta scores.
+        Computes the Jacobian of scale scores for each :math:`j` with respect to the input theta scores.
 
         Parameters
         ----------
@@ -224,7 +224,7 @@ class Flow(Scale):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+            A tensor with the Jacobian for each input row. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
         self._flow_exists()
         theta_scores = theta.clone()

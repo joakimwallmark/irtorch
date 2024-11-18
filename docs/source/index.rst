@@ -36,6 +36,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    config
    datasets
    utils
+   torch_modules
 
 .. toctree::
    :maxdepth: 2

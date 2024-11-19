@@ -17,7 +17,7 @@ class MonotonePolynomialModule(nn.Module):
     intercept: bool
         Whether to include an intercept term. (Default: False)
     relationship_matrix : torch.Tensor, optional
-        A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item cateogires and latent traits. (Default: None)
+        A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item categories and latent variables. (Default: None)
     negative_relationships : bool, optional
         Whether to allow for negative relationships. (Default: False)
     shared_directions : int, optional

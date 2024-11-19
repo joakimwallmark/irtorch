@@ -34,7 +34,7 @@ class SoftplusLinear(nn.Module):
         zero_inputs : torch.Tensor, optional
             A boolean tensor of shape (in_features,) that determines for which inputs weights should be trained. Mostly relevant when training polytomous IRT models for which each response category has a separate network. (Default: None)
         zero_outputs : torch.Tensor, optional
-            A boolean tensor of shape (out_features,) that determines which outputs should be zero. Typically used for IRT models to remove relationships between some items or item cateogires and latent traits. (Default: None)
+            A boolean tensor of shape (out_features,) that determines which outputs should be zero. Typically used for IRT models to remove relationships between some items or item cateogires and latent variables. (Default: None)
         softplus : bool, optional
             Whether to use the softplus function or not. If False, the raw weights are used like regular linear layer. (Default: True)
         """

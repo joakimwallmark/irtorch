@@ -48,7 +48,7 @@ def test_plot_latent_score_distribution_success(plotter_instance: Plotter):
 
 def test_plot_latent_score_distribution_invalid_dim(plotter_instance: Plotter):
     with pytest.raises(ValueError, match="Can only plot 1 or 2 latent variables."):
-        plotter_instance.plot_latent_score_distribution(latent_variables_to_plot=(1, 2, 3))
+        plotter_instance.plot_latent_score_distribution(latent_variables=(1, 2, 3))
 
 def test_plot_item_entropy_success(plotter_instance: Plotter):
     plotter_instance.model.latent_variables = 1

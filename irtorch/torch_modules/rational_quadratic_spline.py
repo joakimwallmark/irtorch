@@ -7,6 +7,35 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 class RationalQuadraticSpline(nn.Module):
+    """
+    This module implements a rational quadratic spline, as described in the paper
+    "Neural Spline Flows" by :cite:t:`Durkan2019`.
+
+    Parameters
+    ----------
+    variables : int
+        The number of variables (dimensions) to transform.
+    num_bins : int, optional
+        The number of bins to use for the spline (default is 14).
+    lower_input_bound : float, optional
+        The left boundary of the transformation interval (default is 0.0).
+    upper_input_bound : float, optional
+        The right boundary of the transformation interval (default is 1.0).
+    lower_output_bound : float, optional
+        The bottom boundary of the transformation interval (default is 0.0).
+    upper_output_bound : float, optional
+        The top boundary of the transformation interval (default is 1.0).
+    min_bin_width : float, optional
+        The minimum width of each bin (default is 1e-3).
+    min_bin_height : float, optional
+        The minimum height of each bin (default is 1e-3).
+    min_derivative : float, optional
+        The minimum derivative value at the knots (default is 1e-3).
+    derivative_outside_lower_input_bound : float, optional
+        The derivative value outside the lower input bound (default is None).
+    derivative_outside_upper_input_bound : float, optional
+        The derivative value outside the upper input bound (default is None).
+    """
     def __init__(
         self,
         variables: int,
@@ -21,35 +50,6 @@ class RationalQuadraticSpline(nn.Module):
         derivative_outside_lower_input_bound=None,
         derivative_outside_upper_input_bound=None,
     ):
-        """
-        This module implements a rational quadratic spline, as described in the paper
-        "Neural Spline Flows" by :cite:t:`Durkan2019`.
-
-        Parameters
-        ----------
-        variables : int
-            The number of variables (dimensions) to transform.
-        num_bins : int, optional
-            The number of bins to use for the spline (default is 14).
-        lower_input_bound : float, optional
-            The left boundary of the transformation interval (default is 0.0).
-        upper_input_bound : float, optional
-            The right boundary of the transformation interval (default is 1.0).
-        lower_output_bound : float, optional
-            The bottom boundary of the transformation interval (default is 0.0).
-        upper_output_bound : float, optional
-            The top boundary of the transformation interval (default is 1.0).
-        min_bin_width : float, optional
-            The minimum width of each bin (default is 1e-3).
-        min_bin_height : float, optional
-            The minimum height of each bin (default is 1e-3).
-        min_derivative : float, optional
-            The minimum derivative value at the knots (default is 1e-3).
-        derivative_outside_lower_input_bound : float, optional
-            The derivative value outside the lower input bound (default is None).
-        derivative_outside_upper_input_bound : float, optional
-            The derivative value outside the upper input bound (default is None).
-        """
         super(RationalQuadraticSpline, self).__init__()
         self.num_bins = num_bins
         self.lower_input_bound = lower_input_bound

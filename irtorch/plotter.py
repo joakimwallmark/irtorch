@@ -94,7 +94,7 @@ class Plotter:
         self,
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
-        latent_variables_to_plot: tuple[int] = (1,),
+        latent_variables: tuple[int] = (1,),
         title: str = None,
         x_label: str = None,
         y_label: str = None,
@@ -114,7 +114,7 @@ class Plotter:
             If None, scores are computed from the population data or the model training data. (default is None)
         population_data : torch.Tensor, optional
             The data used to compute the latent scores. If None, uses the training data. (default is None)
-        latent_variables_to_plot : tuple[int], optional
+        latent_variables : tuple[int], optional
             The latent dimensions to include in the plot. (default is (1,))
         title : str, optional
             The title for the plot. (default is None)
@@ -138,16 +138,16 @@ class Plotter:
         go.Figure
             The Plotly Figure object for the plot.
         """
-        if len(latent_variables_to_plot) > 2:
-            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables_to_plot argument.")
-        if len(latent_variables_to_plot) > self.model.latent_variables:
+        if len(latent_variables) > 2:
+            raise ValueError("Can only plot 1 or 2 latent variables. Select a subset using the latent_variables argument.")
+        if len(latent_variables) > self.model.latent_variables:
             raise ValueError(
-                f"Cannot plot {len(latent_variables_to_plot)} dimensions. "
+                f"Cannot plot {len(latent_variables)} dimensions. "
                 f"Fitted model is a {self.model.latent_variables} dimensional model."
             )
-        if len(latent_variables_to_plot) > self.model.latent_variables:
+        if len(latent_variables) > self.model.latent_variables:
             raise ValueError(
-                f"Cannot plot latent variable {latent_variables_to_plot}. "
+                f"Cannot plot latent variable {latent_variables}. "
                 f"Fitted model is a {self.model.latent_variables} dimensional model."
             )
 
@@ -161,12 +161,12 @@ class Plotter:
         else:
             scores = scores_to_plot
 
-        if scores[:, [i - 1 for i in latent_variables_to_plot]].shape[1] > 1:
-            x_label = x_label or f"Latent variable {latent_variables_to_plot[0]}"
-            y_label = y_label or f"Latent variable {latent_variables_to_plot[1]}"
+        if scores[:, [i - 1 for i in latent_variables]].shape[1] > 1:
+            x_label = x_label or f"Latent variable {latent_variables[0]}"
+            y_label = y_label or f"Latent variable {latent_variables[1]}"
 
         return self._distribution_plot(
-            latent_scores=scores[:, [i - 1 for i in latent_variables_to_plot]],
+            latent_scores=scores[:, [i - 1 for i in latent_variables]],
             title=title,
             x_label=x_label,
             y_label=y_label,

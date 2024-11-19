@@ -17,7 +17,7 @@ class MonotonePolynomialModule(nn.Module):
     intercept: bool
         Whether to include an intercept term. (Default: False)
     relationship_matrix : torch.Tensor, optional
-        A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item cateogires and latent traits. (Default: None)
+        A boolean tensor of shape (in_features, out_features,) that determines which inputs are related to which outputs. Typically used for IRT models to remove relationships between some items or item categories and latent variables. (Default: None)
     negative_relationships : bool, optional
         Whether to allow for negative relationships. (Default: False)
     shared_directions : int, optional
@@ -61,24 +61,26 @@ class MonotonePolynomialModule(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sp_tau = F.softplus(self.tau)
         
-        b = F.softplus(self.omega)
+        a = F.softplus(self.omega)
         for i in range(self.k):
             matrix = torch.zeros((2*(i+1)+1, 2*(i+1)-1, self.input_dim, self.output_dim), device=x.device)
             range_indices = torch.arange(2*(i+1)-1, device=x.device)
             matrix[range_indices, range_indices, :, :] = 1
             matrix[range_indices + 1, range_indices, :, :] = -2 * self.alpha[i]
             matrix[range_indices + 2, range_indices, :, :] = self.alpha[i] ** 2 + sp_tau[i]
-            b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
+            a = torch.einsum('abio,bio->aio', matrix, a)
         
         if self.negative_relationships:
-            b.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
+            a.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
 
         # remove relationship between some items and latent variables
         if self.relationship_matrix is not None:
-            b[:, ~self.relationship_matrix] = 0.0
+            a[:, ~self.relationship_matrix] = 0.0
+        # a dimensions: (degree, input_dim, output_dim)
+        # divide by 1, 2, ..., 2k+1 to get the polynomial coefficients
+        b = a / (torch.arange(1, 2*self.k+2, device=x.device).unsqueeze(1).unsqueeze(2))
         x_powers = x.unsqueeze(2) ** torch.arange(1, 2*self.k+2, device=x.device)
         # x_powers dimensions: (batch, input_dim, degree)
-        # b dimensions: (degree, input_dim, output_dim)
         result = torch.einsum('abc,cbd->ad', x_powers, b)
         if self.intercept is not None:
             result += self.intercept

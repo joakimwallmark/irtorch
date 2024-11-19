@@ -129,10 +129,10 @@ class Evaluator:
 
             # Select the number of components that maximizes the average log likelihood
             optimal_n_components = cv_n_components[average_log_likelihood.argmax()]
-            logger.info("Fitting Gaussian Mixture Model for latent trait density.")
+            logger.info("Fitting Gaussian Mixture Model for latent variable density.")
             gmm = GaussianMixtureModel(n_components=optimal_n_components, n_features=data.shape[1])
         else:
-            logger.info("Fitting Gaussian Mixture Model for latent trait density.")
+            logger.info("Fitting Gaussian Mixture Model for latent variable density.")
             gmm = GaussianMixtureModel(n_components=cv_n_components[0], n_features=data.shape[1])
 
         gmm.fit(data)

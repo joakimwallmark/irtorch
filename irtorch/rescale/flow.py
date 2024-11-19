@@ -80,7 +80,7 @@ class Flow(Scale):
             The batch size for the data loader. Default is None and uses no batches.
         learning_rate : float, optional
             The learning rate for the optimizer. Default is 0.01.
-        learning_rate_updates_before_stopping: int = 5,
+        learning_rate_updates_before_stopping, optional
             The number of learning rate updates before stopping the training. Default is 2.
         evaluation_interval_size: int, optional
             The number of iterations between each model evaluation during training. (default is 50)
@@ -214,7 +214,7 @@ class Flow(Scale):
         theta: torch.Tensor
     ) -> torch.Tensor:
         r"""
-        Computes the gradients of scale scores for each :math:`j` with respect to the input theta scores.
+        Computes the Jacobian of scale scores for each :math:`j` with respect to the input theta scores.
 
         Parameters
         ----------
@@ -224,7 +224,7 @@ class Flow(Scale):
         Returns
         -------
         torch.Tensor
-            A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
+            A tensor with the Jacobian for each input row. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
         self._flow_exists()
         theta_scores = theta.clone()

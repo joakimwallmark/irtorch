@@ -126,3 +126,24 @@ class TestVAE:
             assert lower.shape == mean.shape == upper.shape == (100, 2)
             assert torch.all(lower <= mean)  # Lower bound should be less than or equal to the mean
             assert torch.all(mean <= upper)  # Mean should be less than or equal to the upper bound
+
+    def test_latent_mean_se(self, algorithm: VAE):
+        input_data = torch.randn(10, algorithm.encoder.input_dim)
+
+        def encoder_mock(input_data: torch.Tensor) -> torch.Tensor:
+            means = (torch.arange(input_data.size(0)) - (input_data.size(0)/2)) / input_data.size(0)
+            means = means.view(-1, 1).repeat(input_data.size(0), 2).float()
+            variances = (torch.arange(input_data.size(0)) + 1) / input_data.size(0)
+            variances = variances.view(-1, 1).repeat(input_data.size(0), 2).float()
+            return means, variances.log()
+
+        algorithm.encoder = MagicMock(side_effect=encoder_mock)
+
+        mean, se = algorithm.latent_mean_se(input_data)
+
+        expected_mean = (torch.arange(input_data.size(0)) - (input_data.size(0)/2)) / input_data.size(0)
+        expected_mean = expected_mean.view(-1, 1).repeat(input_data.size(0), 2).float()
+        assert torch.all(mean == expected_mean)
+
+        assert mean.shape == se.shape == (100, 2)
+        assert torch.all(se > 0)

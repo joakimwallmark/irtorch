@@ -4,17 +4,17 @@ from torch.distributions import Distribution
 from irtorch.torch_modules import RationalQuadraticSpline
 
 class NeuralSplineFlow(nn.Module):
-    def __init__(self, transformation: RationalQuadraticSpline, distribution: Distribution):
-        """
-        Normalizing flow using rational-quadratic splines :cite:p:`Durkan2019`.
+    """
+    Normalizing flow using rational-quadratic splines :cite:p:`Durkan2019`.
 
-        Parameters
-        ----------
-        transform: RationalQuadraticSpline
-            Transforms values from the observed data to the chosen distribution.
-        distribution: Distribution 
-            The base distribution of the flow that generates the observed data.
-        """
+    Parameters
+    ----------
+    transform: RationalQuadraticSpline
+        Transforms values from the observed data to the chosen distribution.
+    distribution: Distribution 
+        The base distribution of the flow that generates the observed data.
+    """
+    def __init__(self, transformation: RationalQuadraticSpline, distribution: Distribution):
         super().__init__()
         self._transformation = transformation
         self._distribution = distribution

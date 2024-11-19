@@ -30,7 +30,7 @@ class MonotoneNN(BaseIRTModel):
     mc_correct : list[int], optional
         For multiple choice tests. The correct response category for each item. (Default: None)
     separate : str, optional
-        Whether to fit separate latent trait functions for items or items categories. Can be 'items' or 'categories'. 
+        Whether to fit separate latent variable functions for items or items categories. Can be 'items' or 'categories'. 
         Note that 'categories' results in a more flexible model with more parameters. (Default: 'categories')
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)

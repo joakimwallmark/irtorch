@@ -90,6 +90,7 @@ class Flow(Scale):
             The device to use for the computation. Default is "cuda" if available, otherwise "cpu".
         **kwargs
             Additional keyword arguments for :class:`irtorch.torch_modules.RationalQuadraticSpline` constructor.
+            By default, the spline is set to have 50 bins and the input bounds are set to -5.5 and 5.5 and output bounds to -3.0 and 3.0.
         """
         if transformation is None:
             spline_params = {
@@ -97,7 +98,7 @@ class Flow(Scale):
                 'upper_input_bound': 5.5,
                 'lower_output_bound': -3.0,
                 'upper_output_bound': 3.0,
-                'num_bins': 300,
+                'num_bins': 50,
             }
             spline_params.update(kwargs)
             transformation = RationalQuadraticSpline(

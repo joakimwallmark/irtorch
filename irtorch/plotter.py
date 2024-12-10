@@ -611,7 +611,7 @@ class Plotter:
                 group_probs_data,
                 group_probs_model,
                 title=title or f"IRF - Item {item}",
-                x_label=x_label or f"Latent variable {latent_variables[0]}",
+                x_label=x_label or "Latent variable",
                 y_label=y_label or "Probability",
                 grayscale=grayscale
             )

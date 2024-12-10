@@ -16,7 +16,7 @@ class RationalQuadraticSpline(nn.Module):
     variables : int
         The number of variables (dimensions) to transform.
     num_bins : int, optional
-        The number of bins to use for the spline (default is 14).
+        The number of bins to use for the spline (default is 30).
     lower_input_bound : float, optional
         The left boundary of the transformation interval (default is 0.0).
     upper_input_bound : float, optional

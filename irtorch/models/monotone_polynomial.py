@@ -61,11 +61,11 @@ class MonotonePolynomial(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import MonotonePolynomial
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = MonotonePolynomial(data)
-    >>> model.fit(train_data=data, algorithm=AE())
+    >>> model.fit(train_data=data, algorithm=JML())
     """
     def __init__(
         self,
@@ -174,5 +174,5 @@ class MonotonePolynomial(BaseIRTModel):
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
         if self.negative_latent_variable_item_relationships:
-            return self._modules["mono_poly"].directions.transpose(0, 1).sign().int()
+            return (self._modules["mono_poly"].directions * self._modules["mono_poly"].directions_mask).transpose(0, 1).sign().int()
         return torch.ones(self.items, self.latent_variables).int()

@@ -23,11 +23,11 @@ class RankCDF(Scale):
     --------
     >>> import irtorch
     >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.rescale import RankCDF
     >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
     >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=AE())
+    >>> model.fit(train_data=data, algorithm=JML())
     >>> thetas = model.latent_scores(data)
     >>> # Create and RankCDF instancce and supply it to the model.
     >>> model.add_scale_tranformation(RankCDF(thetas))

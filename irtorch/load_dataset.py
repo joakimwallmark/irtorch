@@ -52,7 +52,7 @@ def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
         A tuple containing the loaded dataset and the correct item responses.
     """
     try:
-        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_verb.pt"
+        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_verb.pt"
         data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
@@ -64,7 +64,7 @@ def swedish_sat_verbal() -> tuple[torch.Tensor, list[int]]:
     except Exception as e:
         raise RuntimeError("Failed to load correct item responses") from e
 
-    return data - 1, correct_category
+    return data, correct_category
 
 def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
     """
@@ -76,19 +76,20 @@ def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
         A tuple containing the loaded dataset and the correct item responses.
     """
     try:
-        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_nominal_quant.pt"
+        file_path = resources.files("irtorch") / "datasets" / "swedish_sat" / "swesat22b_quant.pt"
         data = torch.load(file_path, weights_only=False)
     except Exception as e:
         raise RuntimeError("Failed to load data") from e
 
     try:
         with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_quant_correct.txt").open("r", encoding="utf-8") as file:
+        # with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_quant_correct.txt").open("r", encoding="utf-8") as file:
             correct_category = file.read().replace("\n", "")
             correct_category = [int(char) - 1 for char in correct_category if char.isdigit()]
     except Exception as e:
         raise RuntimeError("Failed to load correct item responses") from e
 
-    return data - 1, correct_category
+    return data, correct_category
 
 def swedish_sat() -> tuple[torch.Tensor, list[int]]:
     """

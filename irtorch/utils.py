@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from irtorch.models import BaseIRTModel
 
-__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imw"]
+__all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imv"]
 
 logger = logging.getLogger("irtorch")
 
@@ -54,7 +54,7 @@ def cross_validation(
     First, we import necessary modules, load the data and split it into a training and testing set:
 
     >>> from irtorch.models import MonotoneNN
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.load_dataset import swedish_national_mathematics_2
     >>> from irtorch.utils import split_data, cross_validation
     >>> data_math = swedish_national_mathematics_2()
@@ -74,12 +74,12 @@ def cross_validation(
     Finally, we perform cross-validation to find a good set of parameters:
 
     >>> if __name__ == '__main__':
-    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = AE())
+    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = JML())
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
 
-    # randomly scrable the data
+    # randomly scramble the data
     data = data[torch.randperm(data.shape[0])]
     data_folds = torch.chunk(data, folds, dim=0)
 
@@ -297,7 +297,7 @@ def impute_missing(
     return imputed_data
 
 @torch.no_grad()
-def imw(
+def imv(
     model1: BaseIRTModel,
     model2: BaseIRTModel,
     data: torch.Tensor,
@@ -307,8 +307,8 @@ def imw(
     **kwargs
 ):
     r"""
-    Quantifies the improvement in model predictions from model 2 over model 1 by computing the InterModel Vigorish (IMW) metric by :cite:t:`Domingue2024`.
-    The IMW is the expected gain if one were to place fair bets on model 1 making correct predictions on the observed data,
+    Quantifies the improvement in model predictions from model 2 over model 1 by computing the InterModel Vigorish (IMV) metric by :cite:t:`Domingue2024`.
+    The IMV is the expected gain if one were to place fair bets on model 1 making correct predictions on the observed data,
     but the actual predictions are made by model 2.
     
     Parameters
@@ -326,12 +326,12 @@ def imw(
     max_iterations : int, optional
         The maximum number of iterations for the Newton-Raphson method. (default is 100)
     **kwargs
-        Additional keyword arguments to pass to the model evaluate method.
+        Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
 
     Returns
     -------
     torch.Tensor
-        The IMW value. A positive value indicates that model 2 predicts better than model 1.
+        The IMV value. A positive value indicates that model 2 predicts better than model 1.
 
     Examples
     --------
@@ -346,23 +346,23 @@ def imw(
     >>> model1.fit(train_data, MML())
     >>> model2.fit(train_data, MML())
     >>> model3.fit(train_data, MML())
-    >>> imw12 = irtorch.utils.imw(model1, model2, test_data)
-    >>> imw23 = irtorch.utils.imw(model2, model3, test_data)
-    >>> imw13 = irtorch.utils.imw(model1, model3, test_data)
-    >>> print(f"IMW 1-2: {imw12:.4f}")
-    >>> print(f"IMW 2-3: {imw23:.4f}")
-    >>> print(f"IMW 1-3: {imw13:.4f}")
+    >>> imv12 = irtorch.utils.imv(model1, model2, test_data)
+    >>> imv23 = irtorch.utils.imv(model2, model3, test_data)
+    >>> imv13 = irtorch.utils.imv(model1, model3, test_data)
+    >>> print(f"IMV 1-2: {imv12:.4f}")
+    >>> print(f"IMV 2-3: {imv23:.4f}")
+    >>> print(f"IMV 1-3: {imv13:.4f}")
     """
     # Same as the log of the geometric mean of the likelihoods
     log_geometric_mean1 = model1.evaluate.log_likelihood(data, model1_theta, reduction="mean", **kwargs)
     log_geometric_mean2 = model2.evaluate.log_likelihood(data, model2_theta, reduction="mean", **kwargs)
     # Probability of the entropy that leads to the geometric mean
     log_geometric_means = torch.stack((log_geometric_mean1, log_geometric_mean2))
-    w = _imw_newton_raphson(log_geometric_means, max_iter=max_iterations)
-    imw = (w[1]-w[0])/w[0]
-    return imw
+    w = _imv_newton_raphson(log_geometric_means, max_iter=max_iterations)
+    imv = (w[1]-w[0])/w[0]
+    return imv
 
-def _imw_newton_raphson(negative_entropy, max_iter=100, tol=1e-6):
+def _imv_newton_raphson(negative_entropy, max_iter=100, tol=1e-6):
     negative_entropy = negative_entropy.clone().detach()
     w = torch.full_like(negative_entropy, 0.75)
     for _ in range(max_iter):

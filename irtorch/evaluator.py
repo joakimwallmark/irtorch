@@ -626,10 +626,10 @@ class Evaluator:
         --------
         >>> import irtorch
         >>> from irtorch.models import MonotoneNN
-        >>> from irtorch.estimation_algorithms import AE
+        >>> from irtorch.estimation_algorithms import JML
         >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
         >>> model = MonotoneNN(1, data)
-        >>> model.fit(train_data=data, algorithm=AE())
+        >>> model.fit(train_data=data, algorithm=JML())
         >>> mid, amid, p_value = model.evaluation.mutual_information_difference(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:
@@ -789,11 +789,11 @@ class Evaluator:
         Examples
         --------
         >>> from irtorch.models import MonotoneNN
-        >>> from irtorch.estimation_algorithms import AE
+        >>> from irtorch.estimation_algorithms import JML
         >>> from irtorch.load_dataset import swedish_national_mathematics_1
         >>> data = swedish_national_mathematics_1()
         >>> model = MonotoneNN(1, data)
-        >>> model.fit(train_data=data, algorithm=AE())
+        >>> model.fit(train_data=data, algorithm=JML())
         >>> q3, p_value = model.evaluation.q3(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:

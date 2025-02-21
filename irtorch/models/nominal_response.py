@@ -98,7 +98,8 @@ class NominalResponse(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.zeros_(self.weight_param)
+        # randomize for better reproducibility across different machines
+        nn.init.normal_(self.weight_param, mean=0., std=0.01)
         nn.init.zeros_(self.bias_param)
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:

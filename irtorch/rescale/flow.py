@@ -23,11 +23,11 @@ class Flow(Scale):
     --------
     >>> import irtorch
     >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.rescale import Flow
     >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
     >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=AE())
+    >>> model.fit(train_data=data, algorithm=JML())
     >>> thetas = model.latent_scores(data)
     >>> # Initalize and fit the flow scale transformation. Supply it to the model.
     >>> flow = Flow(1)

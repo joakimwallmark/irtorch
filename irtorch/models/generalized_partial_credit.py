@@ -40,11 +40,11 @@ class GeneralizedPartialCredit(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import GeneralizedPartialCredit
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = GeneralizedPartialCredit(data)
-    >>> model.fit(train_data=data, algorithm=AE())
+    >>> model.fit(train_data=data, algorithm=JML())
     """
     def __init__(
         self,

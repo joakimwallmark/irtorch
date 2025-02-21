@@ -1,0 +1,26 @@
+{
+    "name": "IRTorch",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "runArgs": [
+        "--name", "irtorch_dev",
+        "--gpus", "all"
+    ],
+    "remoteUser": "vscode",
+    "customizations": {
+        "vscode": {
+        "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-toolsai.jupyter"
+            ],
+            "settings": {
+                "python.testing.pytestEnabled": true,
+                "python.testing.pytestArgs": ["./tests"]
+            }
+        }
+    },
+    "postCreateCommand": "pip install -e ."
+}

@@ -56,7 +56,14 @@ class MonotonePolynomialModule(nn.Module):
                 raise ValueError("shared_directions must be greater than 0.")
             if out_features % shared_directions != 0:
                 raise ValueError("out_features must be divisible by shared_directions.")
-            self.directions = nn.Parameter(torch.zeros(in_features, int(out_features / shared_directions), requires_grad=True))
+            # randomize for better reproducibility across different machines
+            self.directions = nn.init.normal_(
+                nn.Parameter(torch.zeros(in_features, int(out_features / shared_directions), requires_grad=True)),
+                mean=0.,
+                std=0.01
+            )
+            directions_mask = relationship_matrix.reshape(in_features, int(out_features / shared_directions), shared_directions)[:, :, 0].float()
+            self.register_buffer('directions_mask', directions_mask)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         sp_tau = F.softplus(self.tau)
@@ -71,7 +78,8 @@ class MonotonePolynomialModule(nn.Module):
             a = torch.einsum('abio,bio->aio', matrix, a)
         
         if self.negative_relationships:
-            a.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
+            effective_directions = self.directions * self.directions_mask
+            a.multiply_(effective_directions.repeat_interleave(self.shared_directions, dim=1))
 
         # remove relationship between some items and latent variables
         if self.relationship_matrix is not None:
@@ -108,7 +116,8 @@ class MonotonePolynomialModule(nn.Module):
             b = torch.einsum('abio,bio->aio', matrix, b) / (i + 1)
 
         if self.negative_relationships:
-            b.multiply_(self.directions.repeat_interleave(self.shared_directions, dim=1))
+            effective_directions = self.directions * self.directions_mask
+            b.multiply_(effective_directions.repeat_interleave(self.shared_directions, dim=1))
 
         # remove relationship between some items and latent variables
         if self.relationship_matrix is not None:

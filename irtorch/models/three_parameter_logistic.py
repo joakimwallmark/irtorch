@@ -41,12 +41,12 @@ class ThreeParameterLogistic(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import ThreeParameterLogistic
-    >>> from irtorch.estimation_algorithms import AE
+    >>> from irtorch.estimation_algorithms import JML
     >>> from irtorch.load_dataset import swedish_sat_binary
     >>> # Use quantitative part of the SAT data
     >>> data = swedish_sat_binary()[:, :80]
     >>> model = ThreeParameterLogistic(items=80)
-    >>> model.fit(train_data=data, algorithm=AE())
+    >>> model.fit(train_data=data, algorithm=JML())
     """
     def __init__(
         self,

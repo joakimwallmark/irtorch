@@ -1,9 +1,26 @@
 import pytest
 import torch
 from irtorch.plotter import Plotter
+from irtorch.rescale.scale import Scale
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import MML
 from unittest.mock import MagicMock
+
+class DummyScale(Scale):
+    def transform(self, theta: torch.Tensor) -> torch.Tensor:
+        return theta + 1
+    
+    def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
+        return transformed_theta - 1
+
+    def jacobian(self, theta: torch.Tensor) -> torch.Tensor:
+        # Return an identity matrix for each row
+        n, dims = theta.shape
+        return torch.eye(dims).unsqueeze(0).repeat(n, 1, 1)
+
+class MockModel(BaseIRTModel):
+    def forward(self, theta):
+        return torch.zeros((theta.shape[0], self.items))
 
 @pytest.fixture
 def mock_model():
@@ -22,6 +39,8 @@ def mock_model():
         "train_loss": [0.9, 0.8, 0.7],
         "validation_loss": [0.85, 0.75, 0.65]
     }
+    mock_model.scale = [DummyScale(invertible=True)]
+    mock_model.transform_theta = MagicMock(side_effect=mock_model.scale[0].transform)
     return mock_model
 
 @pytest.fixture
@@ -95,3 +114,8 @@ def test_plot_expected_sum_score_success(plotter_instance: Plotter):
     assert fig is not None
     assert fig.data is not None
     assert "Expected sum score" in fig.layout.title.text
+
+def test_plot_scale_transformations(plotter_instance: Plotter):
+    fig = plotter_instance.plot_scale_transformations(input_latent_variable=1, steps=10)
+    assert fig is not None
+    assert hasattr(fig, "data")

@@ -38,7 +38,7 @@ class RankCDF(Scale):
     >>> # Plot the differences
     >>> model.plot.plot_latent_score_distribution(thetas).show()
     >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
-    >>> # Plot an item on the flow transformed scale
+    >>> # Plot an item on the transformed scale
     >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] = None):

@@ -40,7 +40,7 @@ def test_split_activation():
     model = MonotoneNN(latent_variables=2, item_categories=[2, 2, 2], hidden_dim=[6], use_bounded_activation=True)
 
     input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
-    output_tensor_true = model.split_activation(input_tensor)
+    output_tensor_true = model._split_activation(input_tensor)
     output_tensor_true.sum().backward()
     assert output_tensor_true.shape == input_tensor.shape, "Output shape is incorrect with use_bounded_activation=True"
     assert input_tensor.grad is not None, "Gradients are not being tracked"
@@ -52,7 +52,7 @@ def test_split_activation():
     # Test when use_bounded_activation is False
     input_tensor = torch.cat((torch.ones(2, 3), -torch.ones(2, 3)), dim=1).requires_grad_()
     model.use_bounded_activation=False
-    output_tensor_false = model.split_activation(input_tensor)
+    output_tensor_false = model._split_activation(input_tensor)
     output_tensor_false.sum().backward()
     assert output_tensor_false.shape == input_tensor.shape, "Output shape is incorrect with use_bounded_activation=False"
     assert input_tensor.grad is not None, "Gradients are not being tracked"

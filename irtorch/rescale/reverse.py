@@ -43,7 +43,6 @@ class Reverse(Scale):
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
-        
         return theta * self._reverse
 
     def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:

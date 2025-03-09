@@ -74,7 +74,7 @@ class Bit(Scale):
     >>> data, mc_correct = irtorch.load_dataset.swedish_sat_quantitative()
     >>> model = MonotoneNN(data, mc_correct=mc_correct)
     >>> model.fit(train_data=data, algorithm=JML())
-    >>> thetas = model.latent_scores(data, theta_estimation="NN")
+    >>> thetas = model.latent_scores(data)
     >>> # Initalize the scale transformation
     >>> # mc_start_theta_approx sets the starting theta to the approximate score of a randomly guessing respondent
     >>> bit = Bit(model, population_theta=thetas, mc_start_theta_approx=True)

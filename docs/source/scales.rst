@@ -24,3 +24,7 @@ Rescaling
 .. autoclass:: irtorch.rescale.Rotate
     :show-inheritance:
     :members:
+
+.. autoclass:: irtorch.rescale.LinkCommonItems
+    :show-inheritance:
+    :members:

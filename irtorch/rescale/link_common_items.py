@@ -33,10 +33,12 @@ class LinkCommonItems(Scale):
         Note that the splines uses a fixed range of -5.5 to 5.5 for input values and a learned output range with initial
         values of -5.5 to 5.5. If latent scores are outside this range are common for your models, you may need to adjust the bounds.
         See :class:`irtorch.torch_modules.RationalQuadraticSpline` for more information.
+    inverted : bool, optional
+        Set to true if the theta scale of one model is inverted. Default is False.
     **kwargs
         Additional keyword arguments for :class:`irtorch.torch_modules.RationalQuadraticSpline` constructor when method is "spline".
         When method is "neuralnet", the number of neurons in the hidden layer can be set with the neurons argument.
-        Note that the number of neurons must be divisible by 3.
+        Note that the number of neurons must be divisible by 3. Default is 9.
         By default, the spline is set to have 50 bins and the input bounds are set to -5.5 and 5.5 and output bounds to -3.0 and 3.0.
 
     Notes
@@ -80,6 +82,7 @@ class LinkCommonItems(Scale):
         model_from_common_item_indices: list[int],
         model_to_common_item_indices: list[int],
         method: str = "spline",
+        inverted: bool = False,
         **kwargs
     ):
         if model_from.latent_variables != model_to.latent_variables:
@@ -103,6 +106,7 @@ class LinkCommonItems(Scale):
         self._common_item_categories = [
             model_from.item_categories[i] for i in model_from_common_item_indices
         ]
+        self._transformation_multiplier = torch.ones(1) * -1 if inverted else torch.ones(1)
 
         if method == "spline":
             Scale.__init__(self, invertible=False)
@@ -116,10 +120,12 @@ class LinkCommonItems(Scale):
             }
             spline_params.update(kwargs)
             self._transformation = RationalQuadraticSpline(1, **spline_params)
-        else:
+        elif method == "neuralnet":
             Scale.__init__(self, invertible=False)
             neurons = kwargs.get("neurons", 9)
             self._transformation = SoftplusLinear(1, neurons)
+        else:
+            raise NotImplementedError("Transformation method not implemented.")
 
     def fit(
         self,
@@ -162,6 +168,7 @@ class LinkCommonItems(Scale):
         self._transformation.to(device)
         self._model_from.to(device)
         self._model_to.to(device)
+        self._transformation_multiplier = self._transformation_multiplier.to(device)
         loader = DataLoader(TensorDataset(theta_from.to(device)), batch_size=batch_size, shuffle=True)
 
         lr_update_count = 0
@@ -212,6 +219,7 @@ class LinkCommonItems(Scale):
         self._transformation.eval()
         self._model_from.to("cpu")
         self._model_to.to("cpu")
+        self._transformation_multiplier = self._transformation_multiplier.to("cpu")
 
     def transform(self, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -223,10 +231,12 @@ class LinkCommonItems(Scale):
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
         if self._method == "neuralnet":
-            return self._split_activation(self._transformation(theta)).sum(dim=1).view(-1, 1)
+            transformed = self._split_activation(self._transformation(theta)).sum(dim=1).view(-1, 1)
         elif self._method == "spline":
             transformed, _ = self._transformation(theta)
-            return transformed
+        else:
+            raise NotImplementedError("Transformation method not implemented.")
+        return transformed * self._transformation_multiplier
 
     def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
         """
@@ -244,7 +254,7 @@ class LinkCommonItems(Scale):
         """
         if self._method == "spline":
             theta, _ = self._transformation(transformed_theta, inverse=True)
-            return theta
+            return theta * self._transformation_multiplier
         else:
             raise NotImplementedError("Inverse transformation is not yet implemented for monotonic neural networks.")
 
@@ -271,6 +281,7 @@ class LinkCommonItems(Scale):
             transformed_thetas = self._transformation(theta_scores)
         else:
             transformed_thetas, _ = self._transformation(theta_scores, inverse=False)
+        transformed_thetas = transformed_thetas * self._transformation_multiplier
         transformed_thetas.sum().backward()
         jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score
         return jacobians

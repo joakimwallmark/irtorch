@@ -26,4 +26,4 @@ WORKDIR /home/vscode
 
 # Install PyTorch with CUDA 12.6 support, pytest, JupyterLab, and ipykernel
 RUN pip3 install --upgrade pip && \
-    pip3 install --no-cache-dir torch pytest==7.2.0 jupyterlab ipykernel sphinx sphinx_rtd_theme nbsphinx sphinxcontrib.bibtex --extra-index-url https://download.pytorch.org/whl/cu126
+    pip3 install --no-cache-dir torch pytest==7.2.0 pytest-cov jupyterlab ipykernel sphinx sphinx_rtd_theme nbsphinx sphinxcontrib.bibtex --extra-index-url https://download.pytorch.org/whl/cu126

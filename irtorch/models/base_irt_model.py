@@ -7,9 +7,9 @@ from torch import nn
 from torch.distributions import MultivariateNormal
 import torch.nn.functional as F
 from irtorch._internal_utils import linear_regression, impute_missing_internal, dynamic_print, one_hot_encode_test_data, get_missing_mask
-from irtorch.rescale.scale import Scale
 
 if TYPE_CHECKING:
+    from irtorch.rescale.scale import Scale
     from irtorch.estimation_algorithms import BaseIRTAlgorithm
 
 logger = logging.getLogger("irtorch")

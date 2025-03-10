@@ -197,10 +197,10 @@ class MonotoneNN(BaseIRTModel):
         for latent_variable in range(self.latent_variables):
             layer_out = self._modules[f"linear0_dim{latent_variable}"](theta[:, latent_variable].unsqueeze(1))
 
-            layer_out = self.split_activation(layer_out)
+            layer_out = self._split_activation(layer_out)
             for i in range(1, self.hidden_layers):
                 layer_out = self._modules[f"linear{i}_dim{latent_variable}"](layer_out)
-                layer_out = self.split_activation(layer_out)
+                layer_out = self._split_activation(layer_out)
 
             layer_out = layer_out.reshape(-1, self.separations, self.hidden_out_dim).sum(dim=2)
 
@@ -225,7 +225,7 @@ class MonotoneNN(BaseIRTModel):
         out[:, self.missing_categories] = -torch.inf
         return out
 
-    def split_activation(self, x: torch.Tensor) -> torch.Tensor:
+    def _split_activation(self, x: torch.Tensor) -> torch.Tensor:
         """
         Runs various activation functions on every second/third item in the input tensor.
 

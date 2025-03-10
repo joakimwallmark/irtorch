@@ -1305,3 +1305,86 @@ class Plotter:
         # Convert RGB to hexadecimal
         hex_colors = ["#" + "".join(f"{int(c):02x}" for c in color) for color in colors]
         return hex_colors
+
+    @torch.no_grad()
+    def plot_scale_transformations(
+        self,
+        input_latent_variable: int = 1,
+        title: str = None,
+        x_label: str = None,
+        y_label: str = None,
+        color: str = None,
+        colorscale: str = DEFAULT_COLORSCALE,
+        input_theta_range: tuple[float, float] = None,
+        steps: int = None,
+        fixed_thetas: torch.Tensor = None
+    ) -> go.Figure:
+        """
+        Plots the scale transformations for the latent variable(s).
+
+        Parameters
+        ----------
+        input_latent_variable : int, optional
+            The latent variable to visualize (the input dimension). For multidimensional models, other latent variables are fixed (see fixed_thetas below). (default is 1)
+        title : str, optional
+            The title for the plot. (default is None and uses "Scale Transformation(s)")
+        x_label : str, optional
+            The label for the X-axis. (default is None and uses "Original scale")
+        y_label : str, optional
+            The label for the Y-axis. (default is None and uses "Transformed scale")
+        input_theta_range : tuple[float, float], optional
+            The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        second_input_theta_range : tuple[float, float], optional
+            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
+        steps : int, optional
+            The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
+        fixed_thetas: torch.Tensor, optional
+            Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
+
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
+        """
+        model_dim = self.model.latent_variables
+        if input_latent_variable > model_dim:
+            raise TypeError(f"Cannot plot latent variable {input_latent_variable} with a {model_dim}-dimensional model.")
+        if input_theta_range is not None and len(input_theta_range) != 2:
+            raise TypeError("input_theta_range needs to have a length of 2.")
+        if steps is None:
+            steps = 100
+
+        theta_grid = self._get_theta_grid_for_plotting(
+            (input_latent_variable,),
+            input_theta_range,
+            None,
+            steps,
+            fixed_thetas,
+            [input_latent_variable-1],
+            rescale=False
+        )
+
+        if self.model.scale:
+            transformed_theta = self.model.transform_theta(theta_grid)
+        else:
+            raise ValueError("No scale transformations available.")
+
+        original_vals = theta_grid[:, input_latent_variable-1]
+        fig = go.Figure()
+        default_colors = px.colors.qualitative.Plotly
+        for i in range(model_dim):
+            trace_color = color if color is not None else default_colors[i % len(default_colors)]
+            fig.add_trace(go.Scatter(
+                x=original_vals.cpu().detach().numpy(),
+                y=transformed_theta[:, i].cpu().detach().numpy(),
+                mode="lines",
+                name=f"Latent variable {i+1}",
+                line=dict(color=trace_color)
+            ))
+        fig.update_layout(
+            title=title or "Scale Transformation(s)",
+            xaxis_title=x_label or "Original scale",
+            yaxis_title=y_label or "Transformed scale",
+            legend_title="Transformed latent variable"
+        )
+        return fig

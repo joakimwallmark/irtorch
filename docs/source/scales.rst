@@ -13,6 +13,10 @@ Rescaling
     :show-inheritance:
     :members:
 
+.. autoclass:: irtorch.rescale.LinkCommonItems
+    :show-inheritance:
+    :members:
+
 .. autoclass:: irtorch.rescale.RankCDF
     :show-inheritance:
     :members:

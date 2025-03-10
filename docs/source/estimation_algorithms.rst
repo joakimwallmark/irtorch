@@ -1,6 +1,10 @@
 Estimation algorithms
 =====================
 
+.. autoclass:: irtorch.estimation_algorithms.BaseIRTAlgorithm
+    :members:
+    :show-inheritance:
+
 .. autoclass:: irtorch.estimation_algorithms.ae.AE
     :members:
     :show-inheritance:
@@ -14,9 +18,5 @@ Estimation algorithms
     :show-inheritance:
 
 .. autoclass:: irtorch.estimation_algorithms.vae.VAE
-    :members:
-    :show-inheritance:
-
-.. autoclass:: irtorch.estimation_algorithms.BaseIRTAlgorithm
     :members:
     :show-inheritance:

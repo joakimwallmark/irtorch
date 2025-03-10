@@ -6,371 +6,194 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+
 class RationalQuadraticSpline(nn.Module):
     """
-    This module implements a rational quadratic spline, as described in the paper
-    "Neural Spline Flows" by :cite:t:`Durkan2019`.
-
-    Parameters
-    ----------
-    variables : int
-        The number of variables (dimensions) to transform.
-    num_bins : int, optional
-        The number of bins to use for the spline (default is 30).
-    lower_input_bound : float, optional
-        The left boundary of the transformation interval (default is 0.0).
-    upper_input_bound : float, optional
-        The right boundary of the transformation interval (default is 1.0).
-    lower_output_bound : float, optional
-        The bottom boundary of the transformation interval (default is 0.0).
-    upper_output_bound : float, optional
-        The top boundary of the transformation interval (default is 1.0).
-    min_bin_width : float, optional
-        The minimum width of each bin (default is 1e-3).
-    min_bin_height : float, optional
-        The minimum height of each bin (default is 1e-3).
-    min_derivative : float, optional
-        The minimum derivative value at the knots (default is 1e-3).
-    derivative_outside_lower_input_bound : float, optional
-        The derivative value outside the lower input bound (default is None).
-    derivative_outside_upper_input_bound : float, optional
-        The derivative value outside the upper input bound (default is None).
+    A simplified rational quadratic spline with optional learnable output bounds.
+    
+    When free_endpoints=True, the lower and upper output bounds become trainable.
     """
-    def __init__(
-        self,
-        variables: int,
-        num_bins=30,
-        lower_input_bound=0.0,
-        upper_input_bound=1.0,
-        lower_output_bound=0.0,
-        upper_output_bound=1.0,
-        min_bin_width=1e-3,
-        min_bin_height=1e-3,
-        min_derivative=1e-3,
-        derivative_outside_lower_input_bound=None,
-        derivative_outside_upper_input_bound=None,
-    ):
-        super(RationalQuadraticSpline, self).__init__()
+    def __init__(self, variables: int, num_bins=30,
+                 lower_input_bound=0.0, upper_input_bound=1.0,
+                 lower_output_bound=0.0, upper_output_bound=1.0,
+                 min_bin_width=1e-3, min_bin_height=1e-3, min_derivative=1e-3,
+                 free_endpoints=False):
+        super().__init__()
         self.num_bins = num_bins
         self.lower_input_bound = lower_input_bound
         self.upper_input_bound = upper_input_bound
-        self.lower_output_bound = lower_output_bound
-        self.upper_output_bound = upper_output_bound
         self.min_bin_width = min_bin_width
         self.min_bin_height = min_bin_height
         self.min_derivative = min_derivative
-        if derivative_outside_lower_input_bound is None:
-            self.derivative_outside_lower_input_bound = \
-            (upper_output_bound-lower_output_bound) / (upper_input_bound-lower_input_bound)
-        else:
-            self.derivative_outside_lower_input_bound = derivative_outside_lower_input_bound
-        if derivative_outside_upper_input_bound is None:
-            self.derivative_outside_upper_input_bound = \
-            (upper_output_bound-lower_output_bound) / (upper_input_bound-lower_input_bound)
-        else:
-            self.derivative_outside_upper_input_bound = derivative_outside_upper_input_bound
+        self.free_endpoints = free_endpoints
 
-        self.unnormalized_widths = nn.Parameter(torch.rand(variables, num_bins))
-        self.unnormalized_heights = nn.Parameter(torch.rand(variables, num_bins))
-        self.unnormalized_derivatives = nn.Parameter(torch.rand(variables, num_bins - 1))
+        # Define output bounds as learnable parameters if free_endpoints==True.
+        if free_endpoints:
+            self.lower_output_bound = nn.Parameter(torch.tensor(lower_output_bound, dtype=torch.float))
+            self.upper_output_bound = nn.Parameter(torch.tensor(upper_output_bound, dtype=torch.float))
+        else:
+            self.register_buffer("lower_output_bound", torch.tensor(lower_output_bound, dtype=torch.float))
+            self.register_buffer("upper_output_bound", torch.tensor(upper_output_bound, dtype=torch.float))
+        
+        # Use the original bounds to compute a default derivative.
+        default_deriv = (upper_output_bound - lower_output_bound) / (upper_input_bound - lower_input_bound)
+        self.deriv_outside_lower = default_deriv
+        self.deriv_outside_upper = default_deriv
+
+        # Unnormalized spline parameters.
+        self.unnormalized_widths = nn.Parameter(torch.zeros(variables, num_bins))
+        self.unnormalized_heights = nn.Parameter(torch.zeros(variables, num_bins))
+        self.unnormalized_derivatives = nn.Parameter(torch.full((variables, num_bins - 1), 0.5405))
 
     def forward(self, inputs, inverse=False):
-        """
-        Apply the rational quadratic spline transformation.
-
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            The input tensor to transform.
-        inverse : bool, optional
-            If True, computes the inverse transformation (default is False).
-
-        Returns
-        -------
-        outputs : torch.Tensor
-            The transformed outputs.
-        logabsdet : torch.Tensor
-            The logarithm of the absolute value of the determinant of the Jacobian.
-        """
-        return self._unconstrained_rational_quadratic_spline(
-            inputs,
-            self.unnormalized_widths.unsqueeze(0).expand(inputs.shape[0], *self.unnormalized_widths.shape),
-            self.unnormalized_heights.unsqueeze(0).expand(inputs.shape[0], *self.unnormalized_heights.shape),
-            self.unnormalized_derivatives.unsqueeze(0).expand(inputs.shape[0], *self.unnormalized_derivatives.shape),
-            inverse=inverse,
-        )
-
-    def _unconstrained_rational_quadratic_spline(
-        self,
-        inputs,
-        unnormalized_widths,
-        unnormalized_heights,
-        unnormalized_derivatives,
-        inverse=False,
-    ):
-        """
-        Compute the unconstrained rational quadratic spline transformation (linear relationship outside the interval).
-
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            The input tensor to transform.
-        unnormalized_widths : torch.Tensor
-            The unnormalized widths for the bins.
-        unnormalized_heights : torch.Tensor
-            The unnormalized heights for the bins.
-        unnormalized_derivatives : torch.Tensor
-            The unnormalized derivatives at the knots.
-        inverse : bool, optional
-            If True, computes the inverse transformation (default is False).
-
-        Returns
-        -------
-        outputs : torch.Tensor
-            The transformed outputs.
-        logabsdet : torch.Tensor
-            The logarithm of the absolute value of the determinant of the Jacobian.
-        """
-        # Create masks for input intervals
+        # Expand parameters to match the batch dimension.
+        bs = inputs.shape[0]
+        widths = self.unnormalized_widths.unsqueeze(0).expand(bs, -1, -1)
+        heights = self.unnormalized_heights.unsqueeze(0).expand(bs, -1, -1)
+        derivs = self.unnormalized_derivatives.unsqueeze(0).expand(bs, -1, -1)
+        return self._spline_transform(inputs, widths, heights, derivs, inverse)
+    
+    def _compute_cumparams(self, unnormalized, lower, upper, min_size):
+        params = F.softmax(unnormalized, dim=-1)
+        params = min_size + (1 - min_size * self.num_bins) * params
+        cum_params = torch.cumsum(params, dim=-1)
+        cum_params = F.pad(cum_params, (1, 0), mode="constant", value=0.0)
+        scale = upper - lower
+        cum_params = scale * cum_params + lower
+        return cum_params, cum_params[..., 1:] - cum_params[..., :-1]
+    
+    def _pad_derivatives(self, derivs):
+        # Build a new tensor for padded derivatives without in-place modification.
+        const_val = torch.tensor(np.log(np.exp(1 - self.min_derivative) - 1),
+                                 dtype=derivs.dtype, device=derivs.device)
+        padded = F.pad(derivs, (1, 1))
+        first = const_val.expand(*padded.shape[:-1], 1)
+        last = const_val.expand(*padded.shape[:-1], 1)
+        return torch.cat([first, padded[..., 1:-1], last], dim=-1)
+    
+    def _spline_transform(self, inputs, widths_raw, heights_raw, derivs_raw, inverse):
+        # Set up the out-of-bound transformations.
         if inverse:
-            below_lower_bound_mask = inputs < self.lower_output_bound
-            above_upper_bound_mask = inputs > self.upper_output_bound
+            lb = self.lower_output_bound
+            ub = self.upper_output_bound
+            lower_trans = lambda x: self.lower_input_bound + (x - lb) / self.deriv_outside_lower
+            upper_trans = lambda x: self.upper_input_bound + (x - ub) / self.deriv_outside_upper
         else:
-            below_lower_bound_mask = inputs < self.lower_input_bound
-            above_upper_bound_mask = inputs > self.upper_input_bound
-        inside_interval_mask = ~below_lower_bound_mask & ~above_upper_bound_mask
-        outside_interval_mask = ~inside_interval_mask
-
+            lb, ub = self.lower_input_bound, self.upper_input_bound
+            lb_out = self.lower_output_bound
+            ub_out = self.upper_output_bound
+            lower_trans = lambda x: lb_out + (x - lb) * self.deriv_outside_lower
+            upper_trans = lambda x: ub_out + (x - ub) * self.deriv_outside_upper
+        
+        below = inputs < self.lower_input_bound
+        above = inputs > self.upper_input_bound
+        inside = ~(below | above)
+        
         outputs = torch.zeros_like(inputs)
         logabsdet = torch.zeros_like(inputs)
-
-        unnormalized_derivatives = F.pad(unnormalized_derivatives, pad=(1, 1))
-        constant = np.log(np.exp(1 - self.min_derivative) - 1)
-        unnormalized_derivatives[..., 0] = constant
-        unnormalized_derivatives[..., -1] = constant
-
-        if inverse:
-            outputs = torch.where(
-                below_lower_bound_mask,
-                self.lower_input_bound + (inputs - self.lower_output_bound) / self.derivative_outside_lower_input_bound,
-                outputs
-            )
-            outputs = torch.where(
-                above_upper_bound_mask,
-                self.upper_input_bound + (inputs - self.upper_output_bound) / self.derivative_outside_upper_input_bound,
-                outputs
-            )
-        else:
-            outputs = torch.where(
-                below_lower_bound_mask,
-                self.lower_output_bound + (inputs - self.lower_input_bound) * self.derivative_outside_lower_input_bound,
-                outputs
-            )
-            outputs = torch.where(
-                above_upper_bound_mask,
-                self.upper_output_bound + (inputs - self.upper_input_bound) * self.derivative_outside_upper_input_bound,
-                outputs
-            )
-        logabsdet = torch.where(
-            outside_interval_mask,
-            torch.zeros_like(logabsdet),
-            logabsdet
-        )
-
-        if torch.any(inside_interval_mask):
-            (
-                outputs[inside_interval_mask],
-                logabsdet[inside_interval_mask],
-            ) = self._rational_quadratic_spline(
-                inputs=inputs[inside_interval_mask],
-                unnormalized_widths=unnormalized_widths[inside_interval_mask, :],
-                unnormalized_heights=unnormalized_heights[inside_interval_mask, :],
-                unnormalized_derivatives=unnormalized_derivatives[inside_interval_mask, :],
-                inverse=inverse
-            )
-
+        derivs_padded = self._pad_derivatives(derivs_raw)
+        
+        outputs = torch.where(below, lower_trans(inputs), outputs)
+        outputs = torch.where(above, upper_trans(inputs), outputs)
+        logabsdet = torch.where(~inside, torch.zeros_like(logabsdet), logabsdet)
+        
+        if inside.any():
+            out_inside, logdet_inside = self._rational_quadratic_spline(
+                inputs[inside], widths_raw[inside], heights_raw[inside], derivs_padded[inside], inverse)
+            outputs[inside] = out_inside
+            logabsdet[inside] = logdet_inside
         return outputs, logabsdet
-
-    def _rational_quadratic_spline(
-        self,
-        inputs,
-        unnormalized_widths,
-        unnormalized_heights,
-        unnormalized_derivatives,
-        inverse=False
-    ):
-        """
-        Compute the rational quadratic spline transformation.
-
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            The input tensor to transform.
-        unnormalized_widths : torch.Tensor
-            The unnormalized widths for the bins.
-        unnormalized_heights : torch.Tensor
-            The unnormalized heights for the bins.
-        unnormalized_derivatives : torch.Tensor
-            The unnormalized derivatives at the knots.
-        inverse : bool, optional
-            If True, computes the inverse transformation (default is False).
-
-        Returns
-        -------
-        outputs : torch.Tensor
-            The transformed outputs.
-        logabsdet : torch.Tensor
-            The logarithm of the absolute value of the determinant of the Jacobian.
-
-        Raises
-        ------
-        ValueError
-            If minimal bin width or height is too large for the number of bins.
-        """
-        if torch.min(inputs) < self.lower_input_bound or torch.max(inputs) > self.upper_input_bound:
-            pass
-
-        num_bins = unnormalized_widths.shape[-1]
-
-        if self.min_bin_width * num_bins > 1.0:
-            raise ValueError("Minimal bin width too large for the number of bins")
-        if self.min_bin_height * num_bins > 1.0:
-            raise ValueError("Minimal bin height too large for the number of bins")
-
-        widths = F.softmax(unnormalized_widths, dim=-1)
-        widths = self.min_bin_width + (1 - self.min_bin_width * num_bins) * widths
-        cumwidths = torch.cumsum(widths, dim=-1)
-        cumwidths = F.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
-        cumwidths = (self.upper_input_bound - self.lower_input_bound) * cumwidths + self.lower_input_bound
-        cumwidths[..., 0] = self.lower_input_bound
-        cumwidths[..., -1] = self.upper_input_bound
-        widths = cumwidths[..., 1:] - cumwidths[..., :-1]
-
-        derivatives = self.min_derivative + F.softplus(unnormalized_derivatives)
-
-        heights = F.softmax(unnormalized_heights, dim=-1)
-        heights = self.min_bin_height + (1 - self.min_bin_height * num_bins) * heights
-        cumheights = torch.cumsum(heights, dim=-1)
-        cumheights = F.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
-        cumheights = (self.upper_output_bound - self.lower_output_bound) * cumheights + self.lower_output_bound
-        cumheights[..., 0] = self.lower_output_bound
-        cumheights[..., -1] = self.upper_output_bound
-        heights = cumheights[..., 1:] - cumheights[..., :-1]
-
-        if inverse:
-            cumheights[..., -1] += 1e-6
-            bin_idx = (torch.sum(inputs[..., None] >= cumheights, dim=-1) - 1)[..., None]
-        else:
-            cumwidths[..., -1] += 1e-6
-            bin_idx = (torch.sum(inputs[..., None] >= cumwidths, dim=-1) - 1)[..., None]
-
-        input_cumwidths = cumwidths.gather(-1, bin_idx)[..., 0]
-        input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
-
-        input_cumheights = cumheights.gather(-1, bin_idx)[..., 0]
+    
+    def _rational_quadratic_spline(self, inputs, widths_raw, heights_raw, derivs, inverse):
+        num_bins = widths_raw.shape[-1]
+        if self.min_bin_width * self.num_bins > 1.0 or self.min_bin_height * self.num_bins > 1.0:
+            raise ValueError("Min bin width/height too large for the number of bins")
+        
+        cum_widths, widths = self._compute_cumparams(widths_raw, self.lower_input_bound, self.upper_input_bound, self.min_bin_width)
+        lb_out = self.lower_output_bound
+        ub_out = self.upper_output_bound
+        cum_heights, heights = self._compute_cumparams(heights_raw, lb_out, ub_out, self.min_bin_height)
+        
+        derivs = self.min_derivative + F.softplus(derivs)
         delta = heights / widths
-        input_delta = delta.gather(-1, bin_idx)[..., 0]
-
-        input_derivatives = derivatives.gather(-1, bin_idx)[..., 0]
-        input_derivatives_plus_one = derivatives[..., 1:].gather(-1, bin_idx)[..., 0]
-
-        input_heights = heights.gather(-1, bin_idx)[..., 0]
-
+        
+        eps = 1e-6
         if inverse:
-            a = (inputs - input_cumheights) * (
-                input_derivatives + input_derivatives_plus_one - 2 * input_delta
-            ) + input_heights * (input_delta - input_derivatives)
-            b = input_heights * input_derivatives - (inputs - input_cumheights) * (
-                input_derivatives + input_derivatives_plus_one - 2 * input_delta
-            )
+            cum_boundaries = cum_heights.clone()
+            cum_boundaries[..., -1] += eps
+        else:
+            cum_boundaries = cum_widths.clone()
+            cum_boundaries[..., -1] += eps
+        
+        # Bucketize inputs: clamp indices so they are at most num_bins-1.
+        bin_idx = (inputs.unsqueeze(-1) >= cum_boundaries).sum(dim=-1) - 1
+        bin_idx = torch.clamp(bin_idx, max=num_bins - 1)
+        bin_idx = bin_idx.unsqueeze(-1)
+        
+        input_cumwidths = cum_widths.gather(-1, bin_idx)[..., 0]
+        input_bin_widths = widths.gather(-1, bin_idx)[..., 0]
+        input_cumheights = cum_heights.gather(-1, bin_idx)[..., 0]
+        input_delta = delta.gather(-1, bin_idx)[..., 0]
+        input_derivs = derivs.gather(-1, bin_idx)[..., 0]
+        input_derivs_plus = derivs[..., 1:].gather(-1, bin_idx)[..., 0]
+        input_heights = heights.gather(-1, bin_idx)[..., 0]
+        
+        if inverse:
+            a = (inputs - input_cumheights) * (input_derivs + input_derivs_plus - 2 * input_delta) \
+                + input_heights * (input_delta - input_derivs)
+            b = input_heights * input_derivs - (inputs - input_cumheights) * (input_derivs + input_derivs_plus - 2 * input_delta)
             c = -input_delta * (inputs - input_cumheights)
-
-            discriminant = b.pow(2) - 4 * a * c
-            assert (discriminant >= 0).all()
-
-            root = (2 * c) / (-b - torch.sqrt(discriminant))
+            disc = b.pow(2) - 4 * a * c
+            root = (2 * c) / (-b - torch.sqrt(disc))
             outputs = root * input_bin_widths + input_cumwidths
-
-            theta_one_minus_theta = root * (1 - root)
-            denominator = input_delta + (
-                (input_derivatives + input_derivatives_plus_one - 2 * input_delta)
-                * theta_one_minus_theta
-            )
-            derivative_numerator = input_delta.pow(2) * (
-                input_derivatives_plus_one * root.pow(2)
-                + 2 * input_delta * theta_one_minus_theta
-                + input_derivatives * (1 - root).pow(2)
-            )
-            logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-
+            theta1mt = root * (1 - root)
+            denom = input_delta + (input_derivs + input_derivs_plus - 2 * input_delta) * theta1mt
+            num = input_delta.pow(2) * (input_derivs_plus * root.pow(2) +
+                                         2 * input_delta * theta1mt +
+                                         input_derivs * (1 - root).pow(2))
+            logabsdet = torch.log(num) - 2 * torch.log(denom)
             return outputs, -logabsdet
         else:
             theta = (inputs - input_cumwidths) / input_bin_widths
-            theta_one_minus_theta = theta * (1 - theta)
-
-            numerator = input_heights * (
-                input_delta * theta.pow(2) + input_derivatives * theta_one_minus_theta
-            )
-            denominator = input_delta + (
-                (input_derivatives + input_derivatives_plus_one - 2 * input_delta)
-                * theta_one_minus_theta
-            )
-            outputs = input_cumheights + numerator / denominator
-
-            derivative_numerator = input_delta.pow(2) * (
-                input_derivatives_plus_one * theta.pow(2)
-                + 2 * input_delta * theta_one_minus_theta
-                + input_derivatives * (1 - theta).pow(2)
-            )
-            logabsdet = torch.log(derivative_numerator) - 2 * torch.log(denominator)
-
+            theta1mt = theta * (1 - theta)
+            num = input_heights * (input_delta * theta.pow(2) + input_derivs * theta1mt)
+            denom = input_delta + (input_derivs + input_derivs_plus - 2 * input_delta) * theta1mt
+            outputs = input_cumheights + num / denom
+            num_deriv = input_delta.pow(2) * (input_derivs_plus * theta.pow(2) +
+                                              2 * input_delta * theta1mt +
+                                              input_derivs * (1 - theta).pow(2))
+            logabsdet = torch.log(num_deriv) - 2 * torch.log(denom)
             return outputs, logabsdet
 
     @torch.no_grad()
-    def plot_spline(self, num_points=1000, spline_idx=0):
-        """
-        Plot the rational quadratic spline.
-
-        Parameters
-        ----------
-        spline_idx : int, optional
-            The index of the spline to plot (default is 0).
-        num_points : int, optional
-            The number of points to use for the plot (default is 1000).
-        """
+    def plot_spline(self, num_points: int = 1000, spline_idx: int = 0):
         x = torch.linspace(self.lower_input_bound, self.upper_input_bound, num_points)
-        y, _ = self.forward(x.unsqueeze(-1).repeat(1, self.unnormalized_widths.shape[0]))
+        x_expanded = x.unsqueeze(-1).repeat(1, self.unnormalized_widths.shape[0])
+        y, _ = self.forward(x_expanded)
         y = y[:, spline_idx]
-        df = pd.DataFrame({
-            "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
-            "y": y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
-        })
-        fig = px.line(df, x="x", y="y")
 
-        widths = F.softmax(self.unnormalized_widths, dim=-1)
-        widths = self.min_bin_width + (1 - self.min_bin_width * self.num_bins) * widths
-        cumwidths = torch.cumsum(widths, dim=-1)
-        cumwidths = F.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
-        cumwidths = (self.upper_input_bound - self.lower_input_bound) * cumwidths + self.lower_input_bound
-        cumwidths[..., 0] = self.lower_input_bound
-        cumwidths[..., -1] = self.upper_input_bound
-
-        heights = F.softmax(self.unnormalized_heights, dim=-1)
-        heights = self.min_bin_height + (1 - self.min_bin_height * self.num_bins) * heights
-        cumheights = torch.cumsum(heights, dim=-1)
-        cumheights = F.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
-        cumheights = (self.upper_output_bound - self.lower_output_bound) * cumheights + self.lower_output_bound
-        cumheights[..., 0] = self.lower_output_bound
-        cumheights[..., -1] = self.upper_output_bound
-
-        cumwidths = cumwidths[spline_idx].cpu().flatten().detach().numpy() if cumwidths.is_cuda else cumwidths[spline_idx].flatten().detach().numpy()
-        cumheights = cumheights[spline_idx].cpu().flatten().detach().numpy() if cumheights.is_cuda else cumheights[spline_idx].flatten().detach().numpy()
+        x_np = x.cpu().numpy()
+        y_np = y.cpu().numpy()
+        
+        df = pd.DataFrame({"x": x_np, "y": y_np})
+        fig = px.line(df, x="x", y="y", title="Rational Quadratic Spline")
+        
+        cumwidths, _ = self._compute_cumparams(
+            self.unnormalized_widths, self.lower_input_bound, self.upper_input_bound, self.min_bin_width
+        )
+        lower_output = self.lower_output_bound
+        upper_output = self.upper_output_bound
+        cumheights, _ = self._compute_cumparams(
+            self.unnormalized_heights, lower_output, upper_output, self.min_bin_height
+        )
+        
+        cumwidths_np = cumwidths[spline_idx].detach().cpu().numpy().flatten()
+        cumheights_np = cumheights[spline_idx].detach().cpu().numpy().flatten()
 
         fig.add_trace(go.Scatter(
-            x=cumwidths,
-            y=cumheights,
+            x=cumwidths_np,
+            y=cumheights_np,
             mode='markers',
-            name='Points'
+            name='Spline Knots'
         ))
-
         return fig

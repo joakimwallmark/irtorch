@@ -32,7 +32,7 @@ class Flow(Scale):
     >>> # Initalize and fit the flow scale transformation. Supply it to the model.
     >>> flow = Flow(1)
     >>> flow.fit(thetas)
-    >>> model.add_scale_tranformation(flow)
+    >>> model.add_scale_transformation(flow)
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones

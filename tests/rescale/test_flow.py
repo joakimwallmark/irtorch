@@ -1,7 +1,6 @@
 import pytest
 import torch
 from irtorch.rescale import Flow
-from irtorch.models import BaseIRTModel
 
 def test_fit_and_inverse():
     torch.manual_seed(42)

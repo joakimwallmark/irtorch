@@ -45,7 +45,7 @@ class LinkCommonItems(Scale):
 
     .. math::
 
-        \int \sum_{j \in \text { common }} \sum_x D_{K L}\left(P_P\left(X_j=x|\theta_P\right) \Vert P_Q \left(X_j=x| \theta_Q = g\left(\theta_P \right) \right)\right) f(\theta_P) d \theta_P
+        \int \sum_{j \in \text { common }} \sum_x D_{K L}\left[P_P\left(X_j=x|\theta_P\right) \Vert P_Q \left(X_j=x| \theta_Q = g\left(\theta_P \right) \right)\right] f(\theta_P) d \theta_P
 
     - :math:`P_P\left(X_j=x|\theta_P\right)` is the probability for a score :math:`x` on item :math:`j` from the model fitted to population P given :math:`\theta_P`.
     - :math:`P_Q \left(X_j=x| \theta_Q = g\left(\theta_P \right)\right)` is the probability for a score :math:`x` on item :math:`j` from the model fitted to population Q given :math:`\theta_Q = g\left(\theta_P \right)`.
@@ -242,9 +242,11 @@ class LinkCommonItems(Scale):
         torch.Tensor
             A 2D tensor containing theta scores on the the original scale.
         """
-        sig_transformed = torch.sigmoid(transformed_theta)
-        sig_theta = self._transformation(sig_transformed, inverse=True)
-        return torch.logit(sig_theta)
+        if self._method == "spline":
+            theta, _ = self._transformation(transformed_theta, inverse=True)
+            return theta
+        else:
+            raise NotImplementedError("Inverse transformation is not yet implemented for monotonic neural networks.")
 
     def jacobian(
         self,
@@ -263,7 +265,15 @@ class LinkCommonItems(Scale):
         torch.Tensor
             A tensor with the Jacobian for each input row. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        raise NotImplementedError("Jacobian computation is not yet implemented for this class.")
+        theta_scores = theta.clone()
+        theta_scores.detach_().requires_grad_(True)
+        if self._method == "neuralnet":
+            transformed_thetas = self._transformation(theta_scores)
+        else:
+            transformed_thetas, _ = self._transformation(theta_scores, inverse=False)
+        transformed_thetas.sum().backward()
+        jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score
+        return jacobians
     
     def _split_activation(self, x: torch.Tensor) -> torch.Tensor:
         """

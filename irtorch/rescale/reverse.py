@@ -26,7 +26,7 @@ class Reverse(Scale):
     >>> model.plot.plot_item_probabilities(1).show()
     >>> # reverse the first (and only) latent variable
     >>> reverse = Reverse([True])
-    >>> model.add_scale_tranformation(reverse)
+    >>> model.add_scale_transformation(reverse)
     >>> model.plot.plot_item_probabilities(1).show()
     """
     def __init__(self, reversed_latent_variables: list[bool]):

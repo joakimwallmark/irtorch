@@ -79,7 +79,7 @@ class Bit(Scale):
     >>> # mc_start_theta_approx sets the starting theta to the approximate score of a randomly guessing respondent
     >>> bit = Bit(model, population_theta=thetas, mc_start_theta_approx=True)
     >>> # Supply the new scale to the model
-    >>> model.add_scale_tranformation(bit)
+    >>> model.add_scale_transformation(bit)
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones

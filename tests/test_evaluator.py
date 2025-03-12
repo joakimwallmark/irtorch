@@ -33,6 +33,7 @@ def algorithm(latent_variables):
 @pytest.fixture
 def irt_model(latent_variables, algorithm: AE):
     item_categories = [2, 3]
+    items = 2
 
     def model_forward_mock(input_tensor: torch.Tensor):
         logits = [
@@ -63,7 +64,7 @@ def irt_model(latent_variables, algorithm: AE):
     mock_model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
     mock_model.latent_scores = MagicMock(side_effect=latent_scores)
     mock_model.item_categories = item_categories
-    mock_model.item_categories = item_categories
+    mock_model.items = items
     mock_model.mc_correct = None
     mock_model.latent_variables = latent_variables
 
@@ -330,6 +331,43 @@ def test_accuracy(evaluation: Evaluator):
     assert item_likelihoods.shape == (2,)  # We have 2 items
     assert item_likelihoods.dtype == torch.float32
     assert torch.all((accuracy >= 0) & (accuracy <= 1)), "All values are not between 0 and 1"
+
+def test_precisions(evaluation: Evaluator):
+    # Create synthetic test data
+    data = torch.cat(
+        [
+            torch.randint(0, item_cat, (30, 1))
+            for item_cat in evaluation.model.item_categories
+        ],
+        dim=1,
+    ).float()
+    # Introduce missing responses for testing (e.g., missing responses in the second item)
+    data[5:7, 1] = torch.nan
+
+    # Mock probabilities
+    def item_probabilities_mock(theta):
+        # static 3D tensor with dimensions (respondents, items, item categories)
+        t1 = torch.tensor(([0.55, 0.45, 0.0], [0.2, 0.35, 0.45])).unsqueeze(0).repeat(theta.shape[0] // 2, 1, 1)
+        t2 = torch.tensor(([0.15, 0.85, 0.0], [0.6, 0.05, 0.35])).unsqueeze(0).repeat(theta.shape[0] - (theta.shape[0] // 2), 1, 1)
+        return torch.cat([t1, t2])
+    
+    evaluation.model.item_probabilities = MagicMock(side_effect=item_probabilities_mock)
+
+    df = evaluation.predictions(data=data)
+
+    assert isinstance(df, pd.DataFrame), "predictions should return a pandas DataFrame"
+
+    # The number of rows should equal the number of items (in this case 2)
+    # and the DataFrame should have 6 columns for the metrics.
+    expected_rows = len(evaluation.model.item_categories)
+    expected_columns = ["precision", "recall", "f1", "w_precision", "w_recall", "w_f1"]
+    assert df.shape == (expected_rows, len(expected_columns)), f"Expected DataFrame shape ({expected_rows}, {len(expected_columns)}), got {df.shape}"
+
+    # Check that all expected columns are present.
+    for col in expected_columns:
+        assert col in df.columns, f"Missing expected column: {col}"
+        # Ensure that all metric values are within [0, 1]
+        assert df[col].between(0, 1).all(), f"Some values in {col} are outside the range [0, 1]"
 
 
 def test_residuals(evaluation: Evaluator):

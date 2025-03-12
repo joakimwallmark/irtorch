@@ -30,7 +30,7 @@ class RankCDF(Scale):
     >>> model.fit(train_data=data, algorithm=JML())
     >>> thetas = model.latent_scores(data)
     >>> # Create and RankCDF instancce and supply it to the model.
-    >>> model.add_scale_tranformation(RankCDF(thetas))
+    >>> model.add_scale_transformation(RankCDF(thetas))
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones

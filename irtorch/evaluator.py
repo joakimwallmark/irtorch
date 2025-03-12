@@ -274,7 +274,7 @@ class Evaluator:
         **kwargs
     ):
         """
-        Calculate the prediction accuracy of the model for the supplied data.
+        Calculate the prediction accuracy of the model for the supplied data. The response with the highest probability is considered the prediction.
 
         Parameters
         ----------
@@ -307,6 +307,88 @@ class Evaluator:
             dim = None
         
         return accuracy.nanmean(dim=dim)
+
+    @torch.no_grad()
+    def predictions(
+        self,
+        data: torch.Tensor = None,
+        theta: torch.Tensor = None,
+        **kwargs
+    ) -> pd.DataFrame:
+        r"""
+        Compute precision, recall, and F1 score for each item using the model's predictions.
+
+        This method works by first getting the predicted response (i.e. the one with the highest probability)
+        for each item, then comparing it to the true responses. For every response category of each item, it 
+        calculates the following metrics:
+
+        .. math::
+            \text{precision} = \frac{\text{true positives}}{\text{true positives} + \text{false positives}} \\
+            \text{recall} = \frac{\text{true positives}}{\text{true positives} + \text{false negatives}} \\
+            \text{F1} = \frac{2 \times \text{precision} \times \text{recall}}{\text{precision} + \text{recall}}
+
+        where true positives are the number of correct predictions,
+        false positives are the number of times the response was predicted but was incorrect,
+        and false negatives are the number of times the response was not predicted when it should have been.
+        Each metric is then averaged across all categories for each item.
+        Weighted versions based on the proportion of responses in each category are also computed.
+        Missing responses are automatically ignored.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data. If not provided, the model's training data is used.
+        theta: torch.Tensor, optional
+            The latent variable theta scores for the provided data on the original theta scale.
+            If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
+        **kwargs : dict, optional
+            Additional keyword arguments used for theta estimation. Refer to :meth:`irtorch.models.BaseIRTModel.latent_scores` for additional details.
+
+        Returns
+        -------
+        pd.DataFrame
+            A pandas dataframe with the precision, recall and F1 score (and their weighted variants) for each item. Each row corresponds to one item.
+        """
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
+
+        probabilities = self.model.item_probabilities(theta)
+        predictions = torch.argmax(probabilities, dim=2)
+
+        precision = torch.zeros(self.model.items)
+        recall = torch.zeros(self.model.items)
+        f1 = torch.zeros(self.model.items)
+        w_precision = torch.zeros(self.model.items)
+        w_recall = torch.zeros(self.model.items)
+        w_f1 = torch.zeros(self.model.items)
+        for item in range(self.model.items):
+            item_categories = self.model.item_categories[item]
+            for resp in range(item_categories):
+                category_pred = (predictions[~missing_mask[:, item], item] == resp)
+                category_obs = (data[~missing_mask[:, item], item] == resp)
+                weight = category_obs.sum()/category_obs.numel()
+                tp = (category_obs & category_pred).sum()
+                fp = (~category_obs & category_pred).sum()
+                fn = (category_obs & ~category_pred).sum()
+                inner_precision = 0 if tp == 0 else tp/(tp + fp)
+                inner_recall = 0 if tp == 0 else tp/(tp + fn)
+                inner_f1 = 0 if inner_precision*inner_recall == 0 else 2*inner_precision*inner_recall/(inner_precision + inner_recall)
+                
+                precision[item] += inner_precision / item_categories
+                recall[item] += inner_recall / item_categories
+                f1[item] += inner_f1 / item_categories
+                w_precision[item] += inner_precision * weight
+                w_recall[item] += inner_recall * weight
+                w_f1[item] += inner_f1 * weight
+        
+        df = pd.DataFrame({
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "w_precision": w_precision,
+            "w_recall": w_recall,
+            "w_f1": w_f1
+        })
+        return df
 
     @torch.no_grad()
     def infit_outfit(

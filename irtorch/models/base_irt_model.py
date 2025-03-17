@@ -626,7 +626,9 @@ class BaseIRTModel(ABC, nn.Module):
                 theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=device)
         
         if rescale and self.scale:
-            theta = self.transform_theta(theta)
+            return_theta = self.transform_theta(theta)
+        else:
+            return_theta = theta
 
         if standard_errors:
             if theta_estimation == "ML" or theta_estimation == "NN":
@@ -640,11 +642,11 @@ class BaseIRTModel(ABC, nn.Module):
                 else:
                     fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
                     se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-                return theta, se
+                return return_theta, se
             else:
                 logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
         
-        return theta
+        return return_theta
 
     def _initial_theta_from_training_data(self, data, device):
         try:

@@ -29,7 +29,7 @@ class Bit(Scale):
     items : list[int], optional
         The item indices for the items to use to compute the bit scores. (default is None and uses all items)
     grid_points : int, optional
-        The number of points to use for computing bit score. More steps lead to more accurate results. (default is 400)
+        The number of points to use for computing bit score. More steps lead to more accurate results. (default is 4000)
     mc_start_theta_approx : bool, optional
         For multiple choice models. Whether to approximate the starting theta scores using simulated random guesses.
         If True, runs :meth:`bit_score_starting_theta_mc`. (default is False)
@@ -96,7 +96,7 @@ class Bit(Scale):
         population_theta: torch.Tensor = None,
         start_theta: torch.Tensor = None,
         items: list[int] = None,
-        grid_points: int = 400,
+        grid_points: int = 4000,
         mc_start_theta_approx: bool = False,
         **kwargs
     ):

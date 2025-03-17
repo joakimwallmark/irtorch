@@ -115,7 +115,6 @@ class GradedResponse(BaseIRTModel):
             bias[item_ind] = item_bias
 
         self.bias_param = nn.Parameter(bias[self.free_bias])
-        # initial_bias = -torch.arange(-1., 1.01, 2/(self.max_item_responses - 1)).tile((self.items, 1)).flatten()
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         r"""

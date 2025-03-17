@@ -323,9 +323,9 @@ class Evaluator:
         calculates the following metrics:
 
         .. math::
-            \text{precision} = \frac{\text{true positives}}{\text{true positives} + \text{false positives}} \\
-            \text{recall} = \frac{\text{true positives}}{\text{true positives} + \text{false negatives}} \\
-            \text{F1} = \frac{2 \times \text{precision} \times \text{recall}}{\text{precision} + \text{recall}}
+            \text{precision} =& \frac{\text{true positives}}{\text{true positives} + \text{false positives}} \\
+            \text{recall} =& \frac{\text{true positives}}{\text{true positives} + \text{false negatives}} \\
+            \text{F1} =& \frac{2 \times \text{precision} \times \text{recall}}{\text{precision} + \text{recall}}
 
         where true positives are the number of correct predictions,
         false positives are the number of times the response was predicted but was incorrect,

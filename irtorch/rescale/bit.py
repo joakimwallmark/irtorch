@@ -246,26 +246,15 @@ class Bit(Scale):
             if theta.requires_grad:
                 theta.requires_grad_(False)
 
-            gradients = torch.zeros(theta.shape[0], len(self.model.item_categories), theta.shape[1])
-            theta_scores = theta.clone()
-            theta_scores.requires_grad_(True)
-            probs = self.model.item_probabilities(theta_scores)
-            entropies = entropy(probs)
-
-            for item in range(entropies.shape[1]):
-                if theta_scores.grad is not None:
-                    theta_scores.grad.zero_()
-                entropies[:, item].sum().backward(retain_graph=True)
-                for latent_variable in range(theta.shape[1]):
-                    gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
-
-            gradients[gradients.isnan()] = 0.
-            if self.items is not None:
-                gradients = gradients[:, self.items, :]
-
-            # sum over items and add dimension for jacobian
+            probs = self.model.item_probabilities(theta)
+            prob_grads = self.model.probability_gradients(theta, rescale=False)[:, self.items, :, 0]
+            entropy_gradient_summands = (1 + probs.log()) * prob_grads
+            item_bit_gradients = entropy_gradient_summands.sum(dim=2).abs()
+            gradients = item_bit_gradients.sum(dim=1)
+            
             # multiply by -1 if we are inversely related to the theta scores
-            return self._invert_scale_multiplier.flatten() * gradients.abs().sum(dim=1).unsqueeze(dim=-1)
+            # Add dimensions for jacobian to match method signature
+            return self._invert_scale_multiplier.flatten() * gradients[..., None, None]
         else:
             raise NotImplementedError("Multidimensional bit scale gradients is not implemented.")
         # if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:

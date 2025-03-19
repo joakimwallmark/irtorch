@@ -248,8 +248,8 @@ class Bit(Scale):
 
             probs = self.model.item_probabilities(theta)
             prob_grads = self.model.probability_gradients(theta, rescale=False)[:, self.items, :, 0]
-            entropy_gradient_summands = (1 + probs.log()) * prob_grads
-            item_bit_gradients = entropy_gradient_summands.sum(dim=2).abs()
+            entropy_gradient_summands = probs.log2() * prob_grads
+            item_bit_gradients = entropy_gradient_summands.nansum(dim=2).abs()
             gradients = item_bit_gradients.sum(dim=1)
             
             # multiply by -1 if we are inversely related to the theta scores
@@ -468,7 +468,7 @@ class Bit(Scale):
 
             # Convert back to non-inverted theta scale and compute grid entropies
             output = self.model(latent_variable_grid * invert_scale_multiplier)
-            entropies = entropy(self.model.probabilities_from_output(output))[:, self.items]
+            entropies = entropy(self.model.probabilities_from_output(output), log_base=2)[:, self.items]
 
             # Compute the absolute difference between each grid point entropy and the previous one
             diff = torch.zeros_like(entropies)

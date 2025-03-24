@@ -44,6 +44,17 @@ class CPspline(nn.Module):
         pdf_constraint: bool = False,
     ):
         super().__init__()
+        # Parameter validation
+        if deg < 0:
+            raise ValueError("Degree must be non-negative")
+        if ord_d < 0:
+            raise ValueError("Order of difference must be non-negative")
+        if n_int <= 0:
+            raise ValueError("Number of intervals must be positive")
+        if x_range is not None:
+            if x_range[1] <= x_range[0]:
+                raise ValueError("x_range[1] must be greater than x_range[0]")
+        
         self.deg = deg
         self.ord_d = ord_d
         self.n_int = n_int
@@ -52,10 +63,10 @@ class CPspline(nn.Module):
         self.pt_constraints = pt_constraints
         self.pdf_constraint = pdf_constraint
         self.knots = None
-        self.theta = None  # Parameters to be optimized
-        self.basis_matrix = None  # Design matrix
-        self.penalty_matrix = None  # Penalty matrix
-        self.smoothing_param_unconstrained = None  # Unconstrained parameter
+        self.theta = None
+        self.basis_matrix = None
+        self.penalty_matrix = None
+        self.smoothing_param_unconstrained = None
 
     def generate_knots(self, x_min, x_max):
         """
@@ -151,7 +162,7 @@ class CPspline(nn.Module):
         return B
 
     def bspline_basis_function(self, x, knots, deg, i):
-        r"""
+        """
         Compute an individual B-spline basis function using the recursive Cox-de Boor formula.
 
         Parameters
@@ -171,18 +182,24 @@ class CPspline(nn.Module):
             The values of the B-spline basis function :math:`N_{i,p}(x)` evaluated at points `x`.
         """
         if deg == 0:
+            # Handle edge case at the last knot
+            if i == len(knots) - 2:
+                return np.where((knots[i] <= x) & (x <= knots[i+1]), 1.0, 0.0)
             return np.where((knots[i] <= x) & (x < knots[i+1]), 1.0, 0.0)
-        else:
-            denom1 = knots[i+deg] - knots[i]
-            denom2 = knots[i+deg+1] - knots[i+1]
-            coef1 = 0.0
-            coef2 = 0.0
-            if denom1 > 0:
-                coef1 = (x - knots[i]) / denom1
-            if denom2 > 0:
-                coef2 = (knots[i+deg+1] - x) / denom2
-            return coef1 * self.bspline_basis_function(x, knots, deg-1, i) + \
-                   coef2 * self.bspline_basis_function(x, knots, deg-1, i+1)
+        
+        # Pre-compute terms for better efficiency
+        term1 = np.zeros_like(x, dtype=float)
+        term2 = np.zeros_like(x, dtype=float)
+        
+        denom1 = knots[i+deg] - knots[i]
+        if denom1 > 1e-10:  # Numerical stability threshold
+            term1 = ((x - knots[i]) / denom1) * self.bspline_basis_function(x, knots, deg-1, i)
+            
+        denom2 = knots[i+deg+1] - knots[i+1]
+        if denom2 > 1e-10:  # Numerical stability threshold
+            term2 = ((knots[i+deg+1] - x) / denom2) * self.bspline_basis_function(x, knots, deg-1, i+1)
+            
+        return term1 + term2
 
     def difference_matrix(self, n_bases, ord_d):
         """
@@ -190,53 +207,99 @@ class CPspline(nn.Module):
         """
         return np.diff(np.eye(n_bases), n=ord_d, axis=0)
 
-    def fit(self, data: pd.DataFrame, y_col: str, num_epochs: int = 1000, lr: float = 0.01,
-            constraint_penalty_weight: float = 1.0, smoothing_penalty_weight: float = 1.0):
+    def fit(self, data: pd.DataFrame, y_col: str, num_epochs: int = 1000, lr: float = 0.04,
+            constraint_penalty_weight: float = 1.0, smoothing_penalty_weight: float = 1.0,
+            early_stopping_patience: int = 150, early_stopping_tol: float = 1e-8):
         """
-        Fit the model to the provided data.
+        Fit the model to the provided data with early stopping.
         """
         x_data = data.drop(columns=y_col).values.flatten()
         y_data = data[y_col].values.flatten()
         y_data = torch.tensor(y_data, dtype=torch.float32)
+        
+        # Data validation
+        if len(x_data) < self.deg + 1:
+            raise ValueError(f"Need at least {self.deg + 1} data points for degree {self.deg}")
+        
         if self.x_range is not None:
             x_min, x_max = self.x_range
         else:
-            x_min = x_data.min()
-            x_max = x_data.max()
+            x_min, x_max = x_data.min(), x_data.max()
+            # Add small padding to avoid boundary issues
+            padding = 0.01 * (x_max - x_min)
+            x_min -= padding
+            x_max += padding
+            self.x_range = (x_min, x_max)
 
         self.knots = self.generate_knots(x_min, x_max)
-
+        
+        # Setup matrices
         b_spline_basis_matrix = self.bspline_basis(x_data, self.knots, self.deg)
         n_bases = b_spline_basis_matrix.shape[1]
         b_spline_basis_matrix = torch.tensor(b_spline_basis_matrix, dtype=torch.float32)
-
+        
         difference_matrix = self.difference_matrix(n_bases, self.ord_d)
         penalty_matrix = difference_matrix.T @ difference_matrix
         penalty_matrix = torch.tensor(penalty_matrix, dtype=torch.float32)
-
-        self.theta = nn.Parameter(torch.zeros(n_bases, dtype=torch.float32))
-        self.smoothing_param_unconstrained = nn.Parameter(torch.tensor(0.0, dtype=torch.float32), requires_grad=True)
+        
+        # Initialize parameters
+        if self.pdf_constraint:
+            # Initialize theta to ensure the spline starts close to being a valid PDF
+            mean_y = torch.mean(y_data)
+            self.theta = nn.Parameter(torch.full((n_bases,), mean_y/n_bases, dtype=torch.float32))
+        else:
+            self.theta = nn.Parameter(torch.zeros(n_bases, dtype=torch.float32))
+        
+        self.smoothing_param_unconstrained = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
         optimizer = optim.Adam([self.theta, self.smoothing_param_unconstrained], lr=lr)
-
+        
+        # Early stopping setup
+        best_loss = float('inf')
+        best_theta = None
+        best_smoothing_param = None
+        patience_counter = 0
+        
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             y_pred = b_spline_basis_matrix @ self.theta
-
+            
             data_loss = torch.mean((y_data - y_pred) ** 2)
-
             smoothing_param = torch.nn.functional.softplus(self.smoothing_param_unconstrained)
             smoothing_penalty = smoothing_param * (self.theta @ penalty_matrix @ self.theta)
             constraint_penalty = self.compute_constraint_penalty(b_spline_basis_matrix)
-
-            # loss = data_loss + constraint_penalty_weight * constraint_penalty
-            loss = data_loss + constraint_penalty_weight * constraint_penalty + smoothing_penalty_weight * smoothing_penalty
-
+            
+            loss = (data_loss + 
+                    constraint_penalty_weight * constraint_penalty + 
+                    smoothing_penalty_weight * smoothing_penalty)
+            
             loss.backward()
             optimizer.step()
-
+            
+            # Early stopping check
+            current_loss = loss.item()
+            if current_loss < best_loss - early_stopping_tol:
+                best_loss = current_loss
+                best_theta = self.theta.detach().clone()
+                best_smoothing_param = smoothing_param.item()
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                
+            if patience_counter >= early_stopping_patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
+                
             if (epoch + 1) % 10 == 0:
-                print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item()}, Smoothing Param: {smoothing_param.item()}")
-
+                print(f"Epoch {epoch+1}/{num_epochs}, Loss: {current_loss:.6f}, "
+                      f"Smoothing Param: {smoothing_param.item():.6f}")
+        
+        # Restore best parameters
+        if best_theta is not None:
+            self.theta.data = best_theta
+            # Convert float to tensor before applying operations
+            best_smoothing_param_tensor = torch.tensor(best_smoothing_param, dtype=torch.float32)
+            self.smoothing_param_unconstrained.data = torch.log(torch.exp(best_smoothing_param_tensor) - 1)
+        
         self.basis_matrix = b_spline_basis_matrix.detach()
 
     def compute_constraint_penalty(self, B):
@@ -292,11 +355,23 @@ class CPspline(nn.Module):
                         raise ValueError(f"Unknown constraint sense '{sense}'.")
 
         if self.pdf_constraint:
-            # Non-negativity
-            penalty += torch.mean(torch.relu(- (self.basis_matrix @ self.theta)))
-            # Integration constraint (approximate integration as sum)
-            integral = torch.sum(self.basis_matrix @ self.theta)
-            penalty += (integral - 1.0) ** 2
+            # Non-negativity constraint using the input basis matrix B
+            penalty += torch.mean(torch.relu(-(B @ self.theta)))
+            
+            # Integration constraint (approximate integration using trapezoidal rule)
+            # CURRENT IMPLEMENTATION (problematic):
+            # dx = 1.0 / (B.shape[0] - 1)
+            # integral = torch.sum(B @ self.theta) * dx
+            
+            # FIXED IMPLEMENTATION:
+            x = torch.linspace(self.knots[0], self.knots[-1], B.shape[0])
+            dx = x[1] - x[0]
+            y_values = B @ self.theta
+            # Trapezoidal rule: 0.5 * (y[0] + y[-1] + 2 * sum(y[1:-1])) * dx
+            integral = 0.5 * (y_values[0] + y_values[-1] + 2 * torch.sum(y_values[1:-1])) * dx
+            
+            # Stronger penalty for deviation from 1
+            penalty += 10.0 * (integral - 1.0) ** 2
 
         return penalty
 
@@ -348,3 +423,37 @@ class CPspline(nn.Module):
         with torch.no_grad():
             y_pred = B_new @ self.theta
         return y_pred.numpy()
+
+    def evaluate_derivative(self, data: Union[pd.Series, pd.DataFrame], derivative_order: int = 1) -> np.ndarray:
+        """
+        Evaluate the derivative of the fitted spline at given points.
+
+        Parameters
+        ----------
+        data : Union[pd.Series, pd.DataFrame]
+            The input data points where to evaluate the derivative.
+        derivative_order : int, default=1
+            The order of the derivative to compute.
+
+        Returns
+        -------
+        np.ndarray
+            The values of the specified derivative at the input points.
+        """
+        if data.empty:
+            return np.array([])
+
+        if isinstance(data, pd.Series):
+            x_new = data.values.flatten()
+        elif isinstance(data, pd.DataFrame):
+            x_new = data.values.flatten()
+        else:
+            raise ValueError("Input data must be a pandas Series or DataFrame.")
+
+        # Compute derivative of B-spline basis at new points
+        B_deriv = self.bspline_basis_derivative(self.theta.shape[0], derivative_order, x=x_new)
+        B_deriv = torch.tensor(B_deriv, dtype=torch.float32)
+
+        with torch.no_grad():
+            y_deriv = B_deriv @ self.theta
+        return y_deriv.numpy()

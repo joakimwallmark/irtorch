@@ -11,14 +11,18 @@ RUN apt-get update && \
         python3 \
         python3-pip \
         git \
+        openssh-client \
         make \
         pandoc && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/* \
 
 # Create a non-root user "vscode" and set up its home directory
 RUN useradd -ms /bin/bash vscode && \
     mkdir -p /home/vscode && \
     chown -R vscode:vscode /home/vscode
+
+# Configure Git to handle line endings
+RUN git config --global core.autocrlf input
 
 # Switch to the "vscode" user for subsequent commands
 USER vscode

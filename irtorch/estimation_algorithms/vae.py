@@ -63,9 +63,9 @@ class VAE(AE):
         evaluation_interval_size: int, optional
             The number of iterations between each model evaluation during training. (default is 80)
         max_epochs : int, optional
-            The maximum number of epochs to train for. (default is 1000)
+            The maximum number of epochs to train for. (default is 10000)
         batch_size : int, optional
-            The batch size for training. (default is 64)
+            The batch size for training. (default is None and uses the full dataset)
         batch_normalization_encoder : bool, optional
             Whether to use batch normalization for the encoder. (default is True)
         nonlinear_encoder : torch.nn.Module, optional

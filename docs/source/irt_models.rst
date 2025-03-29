@@ -39,6 +39,10 @@ IRT models
     :show-inheritance:
     :members:
 
+.. autoclass:: irtorch.models.MonotoneSpline
+    :show-inheritance:
+    :members:
+
 .. autoclass:: irtorch.models.ModelMix
     :show-inheritance:
     :members:

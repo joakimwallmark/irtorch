@@ -44,11 +44,11 @@ class GradedResponse(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,

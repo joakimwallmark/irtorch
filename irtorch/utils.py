@@ -54,7 +54,7 @@ def cross_validation(
     First, we import necessary modules, load the data and split it into a training and testing set:
 
     >>> from irtorch.models import MonotoneNN
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_2
     >>> from irtorch.utils import split_data, cross_validation
     >>> data_math = swedish_national_mathematics_2()
@@ -74,7 +74,7 @@ def cross_validation(
     Finally, we perform cross-validation to find a good set of parameters:
 
     >>> if __name__ == '__main__':
-    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = JML())
+    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = MML())
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")

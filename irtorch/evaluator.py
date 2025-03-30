@@ -26,8 +26,8 @@ logger = logging.getLogger("irtorch")
 class Evaluator:
     """
     Class for evaluating IRT model performance using various metrics.
-    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `evaluation` property. 
-    Thus the methods can be accessed through `model.evaluation.method_name()`.
+    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `evaluate` property. 
+    Thus the methods can be accessed through `model.evaluate.method_name()`.
 
     Parameters
     ----------
@@ -707,12 +707,12 @@ class Evaluator:
         Examples
         --------
         >>> import irtorch
-        >>> from irtorch.models import MonotoneNN
-        >>> from irtorch.estimation_algorithms import JML
+        >>> from irtorch.models import GeneralizedPartialCredit
+        >>> from irtorch.estimation_algorithms import MML
         >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
-        >>> model = MonotoneNN(1, data)
-        >>> model.fit(train_data=data, algorithm=JML())
-        >>> mid, amid, p_value = model.evaluation.mutual_information_difference(data, sample_hypothesis_test=True, samples=300)
+        >>> model = GeneralizedPartialCredit(data)
+        >>> model.fit(train_data=data, algorithm=MML())
+        >>> mid, amid, p_value = model.evaluate.mutual_information_difference(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:
             data = self.model.algorithm.train_data
@@ -870,13 +870,13 @@ class Evaluator:
 
         Examples
         --------
-        >>> from irtorch.models import MonotoneNN
-        >>> from irtorch.estimation_algorithms import JML
+        >>> from irtorch.models import GeneralizedPartialCredit
+        >>> from irtorch.estimation_algorithms import MML
         >>> from irtorch.load_dataset import swedish_national_mathematics_1
         >>> data = swedish_national_mathematics_1()
-        >>> model = MonotoneNN(1, data)
-        >>> model.fit(train_data=data, algorithm=JML())
-        >>> q3, p_value = model.evaluation.q3(data, sample_hypothesis_test=True, samples=300)
+        >>> model = GeneralizedPartialCredit(data)
+        >>> model.fit(train_data=data, algorithm=MML())
+        >>> q3, p_value = model.evaluate.q3(data, sample_hypothesis_test=True, samples=300)
         """
         if data is None:
             data = self.model.algorithm.train_data
@@ -1117,9 +1117,6 @@ class Evaluator:
         population_data: torch.Tensor,
         trapezoidal_segments: int,
     ):
-        # We approximate the density if
-        # population_data is not none and the correct density
-        # is not already in self.model.evaluation.latent_density
         if population_data is not None or (
             (
                 latent_density_method != "qmvn"

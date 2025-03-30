@@ -1,6 +1,4 @@
-import pandas as pd
 import torch
-from splinetorch.b_spline import BSpline
 from splinetorch.b_spline_basis import b_spline_basis, b_spline_basis_derivative
 from irtorch.models.base_irt_model import BaseIRTModel
 
@@ -27,9 +25,11 @@ class BSplineBasisFunction(torch.autograd.Function):
         # We assume no gradients are needed with respect to knots or degree.
         return grad_x, None, None
 
-class MonotoneSpline(BaseIRTModel):
+class SurprisalSpline(BaseIRTModel):
     r"""
-    Monotone cubic B-Spline IRT model.
+    Surprisals (negative logarithm of probabilities) are modeled using monotone cubic B-splines, hence the name.
+    Note that this model requires each latent variable to be positively related to all items.
+    Ordered polytomously scored data is supported.
 
     Parameters
     ----------
@@ -40,38 +40,42 @@ class MonotoneSpline(BaseIRTModel):
     item_categories : list[int]
         Number of categories for each item. One integer for each item. Missing responses exluded.
     item_theta_relationships : torch.Tensor, optional
-        A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
+        Boolean tensor of shape (items, latent_variables) specifying which latent variables
+        affect which items. True indicates a relationship exists.
+    knots : list[float], optional
+        Positions of the internal knots (bounds excluded) for the B-spline basis functions. If not provided, defaults to
+        [-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7].
+    degree : int, optional
+        Degree of the B-spline polynomials. Defaults to 3 (cubic splines).
 
     Notes
     -----
-    For an item :math:`j` with ordered item scores :math:`x=0, 1, 2, ...M_j` the model defines the self-information (negative logarithm of the probability) for responding with a score of :math:`x` or lower for all :math:`x<M_j` as follows:
+    For an item :math:`j` with ordered item scores :math:`x=0, 1, 2, ..., M_j` the model defines the probability for responding with a score of :math:`x` as follows:
 
     .. math::
 
-        -\log P(X_j \leq x | \mathbf{\theta}) = S_{jx\beta}(\mathbf{\theta})
+        P(X_j = x | \mathbf{\theta}) = \left(1-\exp[-S_x(\mathbf{\theta})]\right)\prod^{M_j}_{m=x+1}\exp(-S_m(\mathbf{\theta}))
 
-            
-    where:
-
-    - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - :math:`S_\beta` is a monotonic B-spline for item :math:`j` and score :math:`x` parameterized by :math:`\beta`.
-
-    From here, the probability of responding with a score of :math:`x` is calculated as:
+    where :math:`\mathbf{\theta}` is a vector of latent variables and the :math:`S_x(\mathbf{\theta})` functions are surprisals (negative logarithms of probabilities) defined as:
 
     .. math::
-        P(X_j = x | \mathbf{\theta}) = \begin{cases}
-            1-P(X_j \leq x +1 | \mathbf{\theta}), & \text{if } x = M_j\\
-            P(X_j \leq x | \mathbf{\theta})-P(X_j \leq x-1 | \mathbf{\theta}), & \text{otherwise}
-        \end{cases}
+        S_{M_j}(\mathbf{\theta})   & = -\log P(X_j < M_j | \mathbf{\theta}) \\
+        S_{M_j-1}(\mathbf{\theta}) & = -\log P(X_j < M_j-1 | X_j < M_j, \mathbf{\theta}) \\
+        S_{M_j-2}(\mathbf{\theta}) & = -\log P(X_j < M_j-2 | X_j-1 < M_j, \mathbf{\theta}) \\
+        ... \\
+        S_{1}(\mathbf{\theta}) & = -\log P(X_j < 1 | X_j < 2, \mathbf{\theta}) \\
+        S_{0}(\mathbf{\theta}) & = -\infty
+
+    Monotone B-splines are used to model the surprisal functions after transforming the latent variables to the unit interval using the sigmoid function.
 
     Examples
     --------
-    >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.models import SurprisalSpline
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
-    >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model = SurprisalSpline(data)
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,
@@ -80,7 +84,7 @@ class MonotoneSpline(BaseIRTModel):
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
         knots: list[float] = None,
-        degree: int = 3
+        degree: int = 3,
     ):
         if item_categories is None:
             if data is None:
@@ -101,14 +105,13 @@ class MonotoneSpline(BaseIRTModel):
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         if knots is None:
-            knots = torch.tensor([-5, -3, -2, -1, -0.5, 0, 0.5, 1, 2, 3, 5])
+            knots = torch.tensor([-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7])
         else:
             knots = torch.tensor(knots)
 
-        x_range = torch.tensor([knots.min().item(), knots.max().item()])
-        self.register_buffer('x_range', x_range)
-        knots = self._rescale_theta(knots)
-        knots = torch.cat((torch.zeros(degree), knots, torch.ones(degree)))
+        self.basis = None
+        knots = knots.sigmoid()
+        knots = torch.cat((torch.zeros(degree+1), knots, torch.ones(degree+1)))
         self.register_buffer('knots', knots)
         self.n_bases = len(knots) - degree - 1
         self.degree = degree
@@ -120,7 +123,6 @@ class MonotoneSpline(BaseIRTModel):
             spline_mask[:, :, item, :(max(item_categories)-item_cat)] = False
 
         self.register_buffer('spline_mask', spline_mask)
-        # self.coefficients = torch.nn.Parameter(torch.randn(spline_mask.sum())*0.01-2.5)
         self.coefficients = torch.nn.Parameter(torch.full((spline_mask.sum(), ), -2.5))
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
@@ -135,21 +137,22 @@ class MonotoneSpline(BaseIRTModel):
         Returns
         -------
         output : torch.Tensor
-            3D tensor with dimensions (respondents, items, item categories)
+            3D tensor of response probabilities with dimensions (respondents, items, item categories)
         """
-        rescaled_theta = self._rescale_theta(theta)
-        # ensure between 0 and 1
-        rescaled_theta = torch.clamp(rescaled_theta, 0, 1)
+        rescaled_theta = theta.sigmoid()
         all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
         # (thetas, basis)
 
-        basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
-        # basis = b_spline_basis(rescaled_theta.T.flatten(), knots=self.knots, degree=self.degree)
+        if self.basis is not None: # use precomputed basis if available
+            basis = self.basis
+        else:
+            basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
+            basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
         
-        basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
         # (lv, basis, items, max(item_categories)-1)
         all_coef[self.spline_mask] = torch.nn.functional.softplus(self.coefficients)
         all_coef = all_coef.cumsum(dim=1)
+
         surp = torch.einsum('...pb,...bic->...pic', basis, all_coef) # (lv, batch, items, max(item_categories)-1)
         surprisal = surp.sum(dim=0) # (batch, items, max(item_categories)-1)
 
@@ -159,13 +162,10 @@ class MonotoneSpline(BaseIRTModel):
         probabilities = a*b
         return torch.flip(probabilities, dims=[-1])
 
-    def _rescale_theta(self, theta: torch.Tensor) -> torch.Tensor:
-        x_resc = (theta - self.x_range[0]) / (self.x_range[1] - self.x_range[0])
-        return x_resc
-
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
-        Compute probabilities from the output tensor from the forward method.
+        Probabilities forwarded from the output tensor from the forward method.
+        For this model, the output is already the probabilities and the method exists for compatibility and consistency between models.
 
         Parameters
         ----------
@@ -224,22 +224,7 @@ class MonotoneSpline(BaseIRTModel):
         else:
             raise ValueError("loss_reduction must be 'sum' or 'none'")
 
-    @torch.no_grad()
-    def item_theta_relationship_directions(self, theta:torch.Tensor = None) -> torch.Tensor:
-        """
-        Get the relationship directions between each item and latent variable for a fitted model.
-
-        Parameters
-        ----------
-        theta : torch.Tensor, optional
-            Not needed for this model. (default is None)
-
-        Returns
-        -------
-        torch.Tensor
-            A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
-        """
-        weights = torch.zeros(self.items, self.latent_variables)
-        weights[self.free_weights] = self.weight_param
-        return weights.sign().int()
-    
+    def precompute_basis(self, theta: torch.Tensor):
+        rescaled_theta = theta.sigmoid()
+        basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
+        self.basis = basis.view(self.latent_variables, -1, self.n_bases)

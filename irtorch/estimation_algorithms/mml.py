@@ -2,7 +2,7 @@ import logging
 import copy
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch.models import BaseIRTModel
+from irtorch.models import BaseIRTModel, SurprisalSpline
 from irtorch.utils import gauss_hermite
 from irtorch._internal_utils import dynamic_print
 from irtorch.irt_dataset import PytorchIRTDataset
@@ -137,6 +137,7 @@ class MML(BaseIRTAlgorithm):
             scheduler,
             learning_rate_updates_before_stopping
         )
+        
         model.to("cpu")
         model.eval()
 
@@ -171,11 +172,14 @@ class MML(BaseIRTAlgorithm):
             The number of times the learning rate can be reduced before stopping training.
         """
         lr_update_count = 0
-
+        best_model_state = None
         latent_combos_rep = points.repeat_interleave(train_data.size(0), dim=0)
         train_data_rep = train_data.repeat(points.size(0), 1)
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
         irt_dataset_rep = PytorchIRTDataset(data=train_data_rep)
+        # precompute basis functions for spline models
+        if isinstance(model, SurprisalSpline):
+            model.precompute_basis(latent_combos_rep)
 
         best_loss = float("inf")
         prev_lr = [group["lr"] for group in self.optimizer.param_groups]
@@ -210,6 +214,10 @@ class MML(BaseIRTAlgorithm):
                 break
 
             logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
+
+        # remove basis functions for spline models after fitting
+        if isinstance(model, SurprisalSpline):
+            model.basis = None
 
         # Load the best model state
         if best_model_state is not None:

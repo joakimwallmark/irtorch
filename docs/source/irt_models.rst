@@ -39,7 +39,7 @@ IRT models
     :show-inheritance:
     :members:
 
-.. autoclass:: irtorch.models.MonotoneSpline
+.. autoclass:: irtorch.models.SurprisalSpline
     :show-inheritance:
     :members:
 

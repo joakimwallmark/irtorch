@@ -34,12 +34,12 @@ class OneParameterLogistic(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import OneParameterLogistic
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_sat_binary
     >>> # Use quantitative part of the SAT data
     >>> data = swedish_sat_binary()[:, :80]
     >>> model = OneParameterLogistic(items=80)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,

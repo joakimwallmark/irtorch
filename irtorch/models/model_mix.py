@@ -20,13 +20,13 @@ class ModelMix(BaseIRTModel):
     The GPC model is used for the first 14 items and MNN for the last 14 items.
     
     >>> from irtorch.models import GeneralizedPartialCredit, MonotoneNN, ModelMix
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_2
     >>> data_math = swedish_national_mathematics_2()
     >>> gpc = GeneralizedPartialCredit(data=data_math[:, :14])
     >>> mnn = MonotoneNN(data = data_math[:, 14:])
     >>> mix_model = ModelMix([gpc, mnn])
-    >>> mix_model.fit(train_data=data_math, algorithm=JML())
+    >>> mix_model.fit(train_data=data_math, algorithm=MML())
     """
     def __init__(
         self,

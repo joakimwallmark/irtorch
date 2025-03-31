@@ -12,7 +12,7 @@ def start_timer():
     global START_TIME
     gc.collect()
     torch.cuda.empty_cache()
-    torch.cuda.reset_max_memory_allocated()
+    torch.cuda.reset_peak_memory_stats()  # Updated from reset_max_memory_allocated()
     torch.cuda.synchronize()
     START_TIME = time.time()
 

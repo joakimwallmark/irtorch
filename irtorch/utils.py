@@ -7,6 +7,7 @@ import torch.multiprocessing as mp
 import pandas as pd
 import numpy as np
 from irtorch.models import BaseIRTModel
+from irtorch.timer import start_timer, end_timer_and_print
 
 __all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imv"]
 
@@ -20,6 +21,7 @@ def cross_validation(
     theta_estimation: str = "ML",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     cores_to_use: int = None,
+    multiprocessing: bool = True,
     **kwargs
 ) -> pd.DataFrame:
     """
@@ -49,32 +51,36 @@ def cross_validation(
 
     Examples
     --------
-    This example demonstrates how to use cross_validation() function with the Swedish National Mathematics dataset.
-
-    First, we import necessary modules, load the data and split it into a training and testing set:
-
-    >>> from irtorch.models import MonotoneNN
+    >>> # Import necessary modules, load the data and split it into a training and testing set:
+    >>> import irtorch
+    >>> from irtorch.models import GeneralizedPartialCredit
     >>> from irtorch.estimation_algorithms import MML
-    >>> from irtorch.load_dataset import swedish_national_mathematics_2
     >>> from irtorch.utils import split_data, cross_validation
-    >>> data_math = swedish_national_mathematics_2()
+    >>> data_math = irtorch.load_dataset.swedish_national_mathematics_2()
     >>> train_data, test_data = split_data(data_math, 0.8)
-
-    Next, we initialize the IRT model:
-
-    >>> model = MonotoneNN(data=data_math)
-
-    We then set up a grid of parameters for cross-validation:
-
+    >>> # Initialize the IRT model:
+    >>> model = GeneralizedPartialCredit(data=data_math)
+    >>> # Set up a grid of parameters for cross-validation:
     >>> params_grid = {
-    ...     'learning_rate': [0.05, 0.1],
-    ...     'batch_size': [64, 128],
+    ...     "learning_rate": [0.1, 0.15],
+    ...     "learning_rate_update_patience": [3, 7],
     ... }
-
-    Finally, we perform cross-validation to find a good set of parameters:
-
+    >>> # Perform cross-validation to find a good set of parameters:
     >>> if __name__ == '__main__':
-    ...     result = cross_validation(model, data=train_data, folds=5, params_grid=params_grid, theta_estimation='NN', device='cpu', algorithm = MML())
+    >>>     result = cross_validation(
+    ...         model,
+    ...         data=train_data,
+    ...         folds=5,
+    ...         params_grid=params_grid,
+    ...         theta_estimation='ML',
+    ...         device='cpu',
+    ...         algorithm = MML(),
+    ...         multiprocessing=True
+    ...     )
+    >>>     print(result)
+    >>>     print(f"--------------------\nBest hyperparameters\n--------------------")
+    >>>     best_params = result.loc[result["log_likelihood"].idxmax(), ["learning_rate", "learning_rate_update_patience"]]
+    >>>     print(f"learning rate: {best_params['learning_rate']} \nlearning rate update patience: {best_params['learning_rate_update_patience']}")
     """
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
@@ -89,52 +95,119 @@ def cross_validation(
         {name: value for name, value in zip(param_comb_names, combination)}
         for combination in param_combinations
     ]
-    # Add additional kwargs to each parameter dictionary
     for param_dict in param_dicts:
         param_dict.update(kwargs)
 
     logger.info(f"Performing cross-validation with {len(param_dicts)} parameter combinations")
 
-    # Prepare arguments for multiprocessing
-    jobs = []
-    for params in param_dicts:
-        for fold in range(folds):
-            train_data = torch.cat([data_folds[i] for i in range(folds) if i != fold])
-            validation_data = data_folds[fold]
-            jobs.append((copy.deepcopy(model), train_data, validation_data, params, theta_estimation, device))
-
-    if device == "cpu":
+    start_timer()
+    
+    if device == "cpu" and multiprocessing:
         if cores_to_use is None:
-            cores_to_use = min(mp.cpu_count(), len(jobs))
-        print(f"Using {cores_to_use} cores")
-        original_threads = torch.get_num_threads()
+            cores_to_use = min(mp.cpu_count(), len(param_combinations))
+        
         try:
-            # Ensure each subprocess uses a single thread for PyTorch.
-            torch.set_num_threads(1)
-            with mp.Pool(cores_to_use) as pool:
-                results = pool.starmap(_cv_fold, jobs)
-        finally:
-            torch.set_num_threads(original_threads)
-
-    elif device == "cuda":
+            logger.info(f"Attempting to initialize multiprocessing with {cores_to_use} cores")
+            # Always use 'spawn' for cross-platform compatibility
+            mp.set_start_method('spawn', force=True)
+            
+            jobs = []
+            for params in param_dicts:
+                jobs.append((copy.deepcopy(model), data_folds, params, theta_estimation, device))
+            
+            original_threads = torch.get_num_threads()
+            try:
+                threads_per_worker = max(1, original_threads // cores_to_use)
+                torch.set_num_threads(threads_per_worker)
+                
+                with mp.Pool(cores_to_use) as pool:
+                    results = pool.starmap(_cv_param_combination, jobs)
+                    
+                logger.info("Multiprocessing completed successfully")
+                
+            finally:
+                torch.set_num_threads(original_threads)
+                
+        except Exception as e:
+            logger.warning(f"Multiprocessing initialization failed with error: {str(e)}. Falling back to sequential processing.")
+            multiprocessing = False
+    
+    # Fall back to sequential processing if multiprocessing is disabled or failed
+    if device == "cuda" or not multiprocessing:
+        logger.info("Using sequential processing")
         results = []
-        for job in jobs:
-            results.append(_cv_fold(*job))
+        for params in param_dicts:
+            result = _cv_param_combination(
+                copy.deepcopy(model), 
+                data_folds, 
+                params, 
+                theta_estimation, 
+                device
+            )
+            results.append(result)
 
-    # average over folds
+    end_timer_and_print("Cross-validation completed")
+
+    # Combine results
     results = pd.DataFrame(results)
     results.drop(list(kwargs.keys()), axis=1, inplace=True)
-    results = results.groupby(param_comb_names).mean().reset_index()
     return results
 
-def _cv_fold(irt_model : BaseIRTModel, train_data, validation_data, params, theta_estimation, device):
-    if device == "cpu":
-        torch.set_num_threads(1) # One thread per core, to avoid overloading the CPU
+def _test_mp():
+    """Simple function to test multiprocessing."""
+    return True
 
-    irt_model.fit(train_data, device=device, **params)
-    log_likelihood = irt_model.evaluate.log_likelihood(validation_data, theta_estimation = theta_estimation, reduction="sum").item()
+def _cv_param_combination(model, data_folds, params, theta_estimation, device):
+    """Worker function for cross-validation parameter combinations."""
+    try:
+        results = []
+        for i, validation_fold in enumerate(data_folds):
+            train_folds = [x for j, x in enumerate(data_folds) if j != i]
+            train_data = torch.cat(train_folds, dim=0)
+            
+            # Create a fresh copy of the params for each fold
+            fold_params = params.copy()
+            
+            # Handle algorithm separately to avoid it being included in averaging
+            algorithm = None
+            if "algorithm" in fold_params:
+                algorithm = copy.deepcopy(fold_params.pop("algorithm"))
+            
+            result = _cv_fold(model, train_data, validation_fold, fold_params, theta_estimation, device, algorithm)
+            
+            # Add algorithm back to result if it was present
+            if algorithm is not None:
+                result["algorithm"] = algorithm
+                
+            results.append(result)
+        
+        # Average results across folds, excluding non-numeric values
+        avg_result = {}
+        for k in results[0].keys():
+            if k == "algorithm":
+                avg_result[k] = results[0][k]  # Just take the first one
+            else:
+                avg_result[k] = sum(d[k] for d in results) / len(results)
+        
+        return avg_result
+    except Exception as e:
+        logger.error(f"Error in _cv_param_combination: {str(e)}")
+        raise
 
-    return {**params, "log_likelihood": log_likelihood}
+def _cv_fold(irt_model, train_data, validation_data, params, theta_estimation, device, algorithm=None):
+    """Worker function for a single cross-validation fold."""
+    try:
+        if device == "cpu":
+            torch.set_num_threads(1)  # One thread per core, to avoid overloading the CPU
+
+        # Fit model using provided parameters
+        irt_model.fit(train_data, device=device, algorithm=algorithm, **params)
+        log_likelihood = irt_model.evaluate.log_likelihood(validation_data, theta_estimation=theta_estimation, reduction="sum").item()
+
+        return {**params, "log_likelihood": log_likelihood}
+    except Exception as e:
+        logger.error(f"Error in _cv_fold: {str(e)}")
+        raise
 
 
 def gauss_hermite(n, mean, covariance):

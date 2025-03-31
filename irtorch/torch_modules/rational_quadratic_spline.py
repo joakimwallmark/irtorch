@@ -101,17 +101,20 @@ class RationalQuadraticSpline(nn.Module):
         if inverse:
             lb = self.lower_output_bound
             ub = self.upper_output_bound
-            lower_trans = lambda x: self.lower_input_bound + (x - lb) / self.deriv_outside_lower
-            upper_trans = lambda x: self.upper_input_bound + (x - ub) / self.deriv_outside_upper
+            lb_out = self.lower_input_bound
+            ub_out = self.upper_input_bound
+            lower_trans = lambda x: lb_out + (x - lb) / self.deriv_outside_lower
+            upper_trans = lambda x: ub_out + (x - ub) / self.deriv_outside_upper
         else:
-            lb, ub = self.lower_input_bound, self.upper_input_bound
+            lb = self.lower_input_bound
+            ub = self.upper_input_bound
             lb_out = self.lower_output_bound
             ub_out = self.upper_output_bound
             lower_trans = lambda x: lb_out + (x - lb) * self.deriv_outside_lower
             upper_trans = lambda x: ub_out + (x - ub) * self.deriv_outside_upper
         
-        below = inputs < self.lower_input_bound
-        above = inputs > self.upper_input_bound
+        below = inputs < lb
+        above = inputs > ub
         inside = ~(below | above)
         
         outputs = torch.zeros_like(inputs)

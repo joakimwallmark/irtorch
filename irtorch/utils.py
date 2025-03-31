@@ -13,6 +13,23 @@ __all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_m
 
 logger = logging.getLogger("irtorch")
 
+def _prepare_cross_validation_data(data: torch.Tensor, folds: int) -> list[torch.Tensor]:
+    """Prepare data for cross-validation by shuffling and splitting into folds."""
+    shuffled_data = data[torch.randperm(data.shape[0])]
+    return torch.chunk(shuffled_data, folds, dim=0)
+
+def _create_param_grid(params_grid: dict, kwargs: dict) -> list[dict]:
+    """Create list of parameter combinations from grid."""
+    param_combinations = list(product(*params_grid.values()))
+    param_names = list(params_grid.keys())
+    param_dicts = [
+        {name: value for name, value in zip(param_names, combination)}
+        for combination in param_combinations
+    ]
+    for param_dict in param_dicts:
+        param_dict.update(kwargs)
+    return param_dicts
+
 def cross_validation(
     model: BaseIRTModel,
     data: torch.Tensor,
@@ -85,73 +102,67 @@ def cross_validation(
     if device == "cuda" and not torch.cuda.is_available():
         raise ValueError("CUDA is not available on this machine, use device = 'cpu'.")
 
-    # randomly scramble the data
-    data = data[torch.randperm(data.shape[0])]
-    data_folds = torch.chunk(data, folds, dim=0)
-
-    param_combinations = list(product(*params_grid.values()))
-    param_comb_names = list(params_grid.keys())
-    param_dicts = [
-        {name: value for name, value in zip(param_comb_names, combination)}
-        for combination in param_combinations
-    ]
-    for param_dict in param_dicts:
-        param_dict.update(kwargs)
-
+    data_folds = _prepare_cross_validation_data(data, folds)
+    param_dicts = _create_param_grid(params_grid, kwargs)
+    
     logger.info(f"Performing cross-validation with {len(param_dicts)} parameter combinations")
-
     start_timer()
     
-    if device == "cpu" and multiprocessing:
-        if cores_to_use is None:
-            cores_to_use = min(mp.cpu_count(), len(param_combinations))
-        
-        try:
-            logger.info(f"Attempting to initialize multiprocessing with {cores_to_use} cores")
-            # Always use 'spawn' for cross-platform compatibility
-            mp.set_start_method('spawn', force=True)
-            
-            jobs = []
-            for params in param_dicts:
-                jobs.append((copy.deepcopy(model), data_folds, params, theta_estimation, device))
-            
-            original_threads = torch.get_num_threads()
-            try:
-                threads_per_worker = max(1, original_threads // cores_to_use)
-                torch.set_num_threads(threads_per_worker)
-                
-                with mp.Pool(cores_to_use) as pool:
-                    results = pool.starmap(_cv_param_combination, jobs)
-                    
-                logger.info("Multiprocessing completed successfully")
-                
-            finally:
-                torch.set_num_threads(original_threads)
-                
-        except Exception as e:
-            logger.warning(f"Multiprocessing initialization failed with error: {str(e)}. Falling back to sequential processing.")
-            multiprocessing = False
-    
-    # Fall back to sequential processing if multiprocessing is disabled or failed
-    if device == "cuda" or not multiprocessing:
-        logger.info("Using sequential processing")
-        results = []
-        for params in param_dicts:
-            result = _cv_param_combination(
-                copy.deepcopy(model), 
-                data_folds, 
-                params, 
-                theta_estimation, 
-                device
-            )
-            results.append(result)
+    results = (
+        _run_multiprocessing(model, data_folds, param_dicts, theta_estimation, device, cores_to_use)
+        if device == "cpu" and multiprocessing
+        else _run_sequential(model, data_folds, param_dicts, theta_estimation, device)
+    )
 
     end_timer_and_print("Cross-validation completed")
+    
+    results_df = pd.DataFrame(results)
+    results_df.drop(list(kwargs.keys()), axis=1, inplace=True)
+    return results_df
 
-    # Combine results
-    results = pd.DataFrame(results)
-    results.drop(list(kwargs.keys()), axis=1, inplace=True)
+def _run_multiprocessing(model, data_folds, param_dicts, theta_estimation, device, cores_to_use):
+    if cores_to_use is None:
+        cores_to_use = min(mp.cpu_count(), len(param_dicts))
+    
+    try:
+        logger.info(f"Attempting to initialize multiprocessing with {cores_to_use} cores")
+        mp.set_start_method('spawn', force=True)
+        
+        jobs = []
+        for params in param_dicts:
+            jobs.append((copy.deepcopy(model), data_folds, params, theta_estimation, device))
+        
+        original_threads = torch.get_num_threads()
+        try:
+            threads_per_worker = max(1, original_threads // cores_to_use)
+            torch.set_num_threads(threads_per_worker)
+            
+            with mp.Pool(cores_to_use) as pool:
+                results = pool.starmap(_cv_param_combination, jobs)
+            
+            logger.info("Multiprocessing completed successfully")
+            
+        finally:
+            torch.set_num_threads(original_threads)
+            
+    except Exception as e:
+        logger.warning(f"Multiprocessing initialization failed with error: {str(e)}. Falling back to sequential processing.")
+        return _run_sequential(model, data_folds, param_dicts, theta_estimation, device)
+
     return results
+
+def _run_sequential(model, data_folds, param_dicts, theta_estimation, device):
+    logger.info("Using sequential processing")
+    return [
+        _cv_param_combination(
+            copy.deepcopy(model), 
+            data_folds, 
+            params, 
+            theta_estimation, 
+            device
+        )
+        for params in param_dicts
+    ]
 
 def _cv_param_combination(model, data_folds, params, theta_estimation, device):
     """Worker function for cross-validation parameter combinations."""

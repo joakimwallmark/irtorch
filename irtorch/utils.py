@@ -24,7 +24,7 @@ def cross_validation(
     multiprocessing: bool = True,
     **kwargs
 ) -> pd.DataFrame:
-    """
+    r"""
     Perform cross-validation on the given model and data. Uses log-likelihood for model evaluation. Note that for running on the CPU on windows, `if __name__ == '__main__':` needs to be added to the main script before calling this function, see examples.
 
     Parameters
@@ -153,10 +153,6 @@ def cross_validation(
     results.drop(list(kwargs.keys()), axis=1, inplace=True)
     return results
 
-def _test_mp():
-    """Simple function to test multiprocessing."""
-    return True
-
 def _cv_param_combination(model, data_folds, params, theta_estimation, device):
     """Worker function for cross-validation parameter combinations."""
     try:
@@ -197,9 +193,6 @@ def _cv_param_combination(model, data_folds, params, theta_estimation, device):
 def _cv_fold(irt_model, train_data, validation_data, params, theta_estimation, device, algorithm=None):
     """Worker function for a single cross-validation fold."""
     try:
-        if device == "cpu":
-            torch.set_num_threads(1)  # One thread per core, to avoid overloading the CPU
-
         # Fit model using provided parameters
         irt_model.fit(train_data, device=device, algorithm=algorithm, **params)
         log_likelihood = irt_model.evaluate.log_likelihood(validation_data, theta_estimation=theta_estimation, reduction="sum").item()

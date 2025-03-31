@@ -203,10 +203,13 @@ class GradedResponse(BaseIRTModel):
         ll = reshaped_probabilities[torch.arange(data.size(0)), data].log()
         if loss_reduction == "sum":
             return ll.sum()
-        elif loss_reduction == "none" and missing_mask is not None:
-            ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
-            ll_masked[~missing_mask] = ll
-            return ll_masked
+        elif loss_reduction == "none":
+            if missing_mask is not None:
+                ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
+                ll_masked[~missing_mask] = ll
+                return ll_masked
+            else:
+                return ll
         else:
             raise ValueError("loss_reduction must be 'sum' or 'none'")
 

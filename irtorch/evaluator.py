@@ -5,7 +5,7 @@ import torch
 import pandas as pd
 import numpy as np
 from torch.distributions import MultivariateNormal
-from irtorch.estimation_algorithms import VAE, AE, MML
+from irtorch.estimation_algorithms import VAE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
 from irtorch.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import (

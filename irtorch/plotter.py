@@ -294,6 +294,7 @@ class Plotter:
         data: torch.Tensor,
         latent_variables: tuple[int] = (1,),
         items: list[int] = None,
+        expected_sum_score: bool = False,
         title: str = None,
         x_label: str = None,
         y_label: str = None,
@@ -316,6 +317,8 @@ class Plotter:
             The latent variables to plot. (default is (1,))
         items : list[int], optional
             The items to consider for computing the log-likelihood. If None, all items in the model are used. (default is None)
+        expected_sum_score : bool, optional
+            Whether to plot the expected sum score instead of the log-likelihood. (default is False)
         title : str, optional
             The title for the plot. (default is None)
         x_label : str, optional
@@ -360,7 +363,9 @@ class Plotter:
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
         
-        if rescale and self.model.scale:
+        if expected_sum_score:
+            scores_to_plot = self.model.expected_scores(theta_grid, return_item_scores=False).unsqueeze(1)
+        elif rescale and self.model.scale:
             scores_to_plot = self.model.transform_theta(theta_grid)
             scores_to_plot = scores_to_plot[:, latent_indices]
         else:
@@ -389,14 +394,35 @@ class Plotter:
                 scores_to_plot = scores_to_plot[start_idx:]
                 log_likelihood = log_likelihood.detach_().squeeze_()[start_idx:]
                 
-            return self._2d_line_plot(
+            if x_label is None and expected_sum_score:
+                x_label = "Expected sum score"
+                
+            fig = self._2d_line_plot(
                 x = scores_to_plot,
                 y = log_likelihood,
-                title = title or "Log-likelihood",
+                title = title or None,
                 x_label = x_label or "Latent variable",
                 y_label = y_label or "Log-likelihood",
                 color = color or None
             )
+            if expected_sum_score:
+                fig.add_vline(
+                    x=data.sum().item(),
+                    line_dash="dash",
+                    line_color="gray",
+                    opacity=0.7
+                )
+                fig.add_annotation(
+                    x=data.sum().item(),
+                    y=1.0,
+                    yref="paper",
+                    text=f"Observed sum score: {data.sum().item()}",
+                    showarrow=True,
+                    arrowhead=1,
+                    ax=0,
+                    ay=-40
+                )
+            return fig
         if len(latent_variables) == 2:
             grid_size = int(np.sqrt(log_likelihood.size()))
             return self._3d_surface_plot(

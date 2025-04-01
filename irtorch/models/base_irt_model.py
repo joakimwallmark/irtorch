@@ -56,7 +56,7 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         Evaluation
-            An instance of the :class:`irtorch.Evaluation` class.
+            An instance of the :class:`irtorch.Evaluator` class.
         """
         if self._evaluate is None:
             from ..evaluator import Evaluator

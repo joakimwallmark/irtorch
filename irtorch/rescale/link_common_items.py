@@ -74,7 +74,7 @@ class LinkCommonItems(Scale):
     >>> link.fit(theta_from = model2.latent_scores(data2), learning_rate=0.01, max_epochs=1000)
     >>> model2.add_scale_transformation(link)
     >>> # Plot the transformation
-    >>> model2.plot.plot_scale_transformations(input_theta_range=(-5, 5)).show()
+    >>> model2.plot.scale_transformations(input_theta_range=(-5, 5)).show()
     """
     def __init__(self,
         model_from: BaseIRTModel,

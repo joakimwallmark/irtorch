@@ -36,7 +36,7 @@ class Plotter:
         self.markersize = 9
 
 
-    def plot_training_history(self) -> go.Figure:
+    def training_history(self) -> go.Figure:
         """
         Plots the training history of the model.
 
@@ -90,7 +90,7 @@ class Plotter:
         return fig
 
     @torch.no_grad()
-    def plot_latent_score_distribution(
+    def latent_score_distribution(
         self,
         scores_to_plot: torch.Tensor = None,
         population_data: torch.Tensor = None,
@@ -175,7 +175,7 @@ class Plotter:
             contour_plot_bins=contour_plot_bins,
         )
 
-    def plot_item_entropy(
+    def item_entropy(
         self,
         item: int,
         latent_variables: tuple[int] = (1,),
@@ -289,7 +289,7 @@ class Plotter:
                 colorscale = colorscale
             )
 
-    def plot_log_likelihood(
+    def log_likelihood(
         self,
         data: torch.Tensor,
         latent_variables: tuple[int] = (1,),
@@ -411,7 +411,7 @@ class Plotter:
             )
         
     @torch.no_grad()
-    def plot_item_latent_variable_relationships(
+    def item_latent_variable_relationships(
         self,
         relationships: torch.Tensor = None,
         theta: torch.Tensor = None,
@@ -477,7 +477,7 @@ class Plotter:
         return fig
 
     @torch.no_grad()
-    def plot_item_probabilities(
+    def item_probabilities(
         self,
         item: int,
         latent_variables: tuple = (1, ),
@@ -629,7 +629,7 @@ class Plotter:
             )
 
     @torch.no_grad()
-    def plot_information(
+    def information(
         self,
         items: list[int] = None,
         latent_variables: tuple[int] = (1,),
@@ -750,7 +750,7 @@ class Plotter:
                 colorscale = colorscale
             )
 
-    def plot_expected_sum_score(
+    def expected_sum_score(
         self,
         items: list[int] = None,
         latent_variables: tuple[int] = (1,),
@@ -1307,7 +1307,7 @@ class Plotter:
         return hex_colors
 
     @torch.no_grad()
-    def plot_scale_transformations(
+    def scale_transformations(
         self,
         input_latent_variable: int = 1,
         title: str = None,

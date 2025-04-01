@@ -23,11 +23,11 @@ class Reverse(Scale):
     >>> data_sat, correct_responses = irtorch.load_dataset.swedish_sat_verbal()
     >>> model = NominalResponse(data=data_sat, mc_correct=correct_responses)
     >>> model.fit(train_data=data_sat, algorithm=MML())
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     >>> # reverse the first (and only) latent variable
     >>> reverse = Reverse([True])
     >>> model.add_scale_transformation(reverse)
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     """
     def __init__(self, reversed_latent_variables: list[bool]):
         super().__init__(invertible=True)

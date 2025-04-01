@@ -36,10 +36,10 @@ class RankCDF(Scale):
     >>> # Or alternatively by directly converting the old ones
     >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
-    >>> model.plot.plot_latent_score_distribution(thetas).show()
-    >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
+    >>> model.plot.latent_score_distribution(thetas).show()
+    >>> model.plot.latent_score_distribution(rescaled_thetas).show()
     >>> # Plot an item on the transformed scale
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     """
     def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] = None):
         super().__init__(invertible=False)

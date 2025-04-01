@@ -1,5 +1,6 @@
 import logging
 import copy
+import math
 import torch
 import numpy as np
 from irtorch.models import BaseIRTModel
@@ -185,7 +186,7 @@ class AE(BaseIRTAlgorithm):
         """
         for epoch in range(max_epochs):
             train_loss = self._train_step(model, epoch, learning_rate_updates_before_stopping)
-            if np.isnan(train_loss):
+            if math.isnan(train_loss):  # or simply: if train_loss != train_loss:
                 break
             if self.lr_update_count >= learning_rate_updates_before_stopping:
                 break

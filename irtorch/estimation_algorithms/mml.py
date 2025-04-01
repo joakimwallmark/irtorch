@@ -2,7 +2,7 @@ import logging
 import copy
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch.models import BaseIRTModel, SurprisalSpline
+from irtorch.models import BaseIRTModel, SurprisalSpline, NestedLogit
 from irtorch.utils import gauss_hermite
 from irtorch._internal_utils import dynamic_print
 from irtorch.irt_dataset import PytorchIRTDataset
@@ -178,9 +178,10 @@ class MML(BaseIRTAlgorithm):
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
         irt_dataset_rep = PytorchIRTDataset(data=train_data_rep)
         # precompute basis functions for spline models
-        if isinstance(model, SurprisalSpline):
+        if isinstance(model, SurprisalSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
             model.precompute_basis(latent_combos_rep)
 
+        best_epoch = 0
         best_loss = float("inf")
         prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
@@ -216,7 +217,7 @@ class MML(BaseIRTAlgorithm):
             logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
 
         # remove basis functions for spline models after fitting
-        if isinstance(model, SurprisalSpline):
+        if isinstance(model, SurprisalSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
             model.basis = None
 
         # Load the best model state

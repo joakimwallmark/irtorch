@@ -136,4 +136,4 @@ tests/fitted_models/*
 notebooks/old
 runs/
 *test.ipynb
-local_test.py
+local_experiments.py

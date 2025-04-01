@@ -1,29 +1,6 @@
 import torch
-from splinetorch.b_spline_basis import b_spline_basis, b_spline_basis_derivative
-from irtorch.models.base_irt_model import BaseIRTModel
-
-class BSplineBasisFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, knots, degree):
-        # Save inputs needed for backward.
-        ctx.save_for_backward(x, knots)
-        ctx.degree = degree
-        # Compute the forward B-spline basis using your original function.
-        # (This is the non-smooth version, so autograd's default backward would be zero.)
-        basis = b_spline_basis(x, knots, degree)
-        return basis
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        x, knots = ctx.saved_tensors
-        degree = ctx.degree
-        # Compute the analytic derivative of the B-spline basis with respect to x.
-        d_basis_dx = b_spline_basis_derivative(x, knots, degree, order=1)
-        # grad_output has shape (n_points, n_bases). For each x[i], the contribution is:
-        # dLoss/dx[i] = sum_j grad_output[i,j] * d_basis_dx[i,j]
-        grad_x = (grad_output * d_basis_dx).sum(dim=1)
-        # We assume no gradients are needed with respect to knots or degree.
-        return grad_x, None, None
+from irtorch.models import BaseIRTModel
+from irtorch.torch_modules import BSplineBasisFunction
 
 class SurprisalSpline(BaseIRTModel):
     r"""
@@ -139,16 +116,14 @@ class SurprisalSpline(BaseIRTModel):
         output : torch.Tensor
             3D tensor of response probabilities with dimensions (respondents, items, item categories)
         """
-        rescaled_theta = theta.sigmoid()
-        all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
-        # (thetas, basis)
-
         if self.basis is not None: # use precomputed basis if available
             basis = self.basis
         else:
+            rescaled_theta = theta.sigmoid()
             basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
             basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
         
+        all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
         # (lv, basis, items, max(item_categories)-1)
         all_coef[self.spline_mask] = torch.nn.functional.softplus(self.coefficients)
         all_coef = all_coef.cumsum(dim=1)

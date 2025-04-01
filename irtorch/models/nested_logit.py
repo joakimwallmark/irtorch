@@ -1,9 +1,10 @@
 import torch
 from irtorch.models import BaseIRTModel
+from irtorch.torch_modules import BSplineBasisFunction
 
 class NestedLogit(BaseIRTModel):
     r"""
-    Nested logit IRT model for multiple choice items:cite:p:`Birnbaum1968`. The paper uses a 3PL model :class:`irtorch.models.ThreeParameterLogistic` nested with a nominal response model :class:`irtorch.models.NominalResponse`.
+    Nested logit IRT model for multiple choice items :cite:p:`Birnbaum1968`. The original paper uses a 3PL model :class:`irtorch.models.ThreeParameterLogistic` nested with a nominal response model :class:`irtorch.models.NominalResponse`.
     This implementation allows one to choose any IRT model for dichotomously scored items in place of the 3PL, and either a nominal response model or B-splines for the incorrect responses.
 
     Requires the correct response model to be fitted in advance. The incorrect response probabilities are then estimated using a nominal response model or B-splines.
@@ -51,25 +52,29 @@ class NestedLogit(BaseIRTModel):
                 item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
         super().__init__(latent_variables=latent_variables, item_categories=item_categories, mc_correct=mc_correct)
-        if item_theta_relationships is not None:
+        if item_theta_relationships is None:
+            item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)
+        else:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
                     f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
                 )
             assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
-        
+
+
         self.correct_response_model: BaseIRTModel = correct_response_model
         self.incorrect_response_model = incorrect_response_model
         self.correct_mask = torch.zeros(self.items, self.max_item_responses, dtype=torch.bool)
         for item in range(self.items):
             self.correct_mask[item, mc_correct[item]] = True
 
+        incorrect_item_categories = [item_cat - 1 for item_cat in item_categories]
         if incorrect_response_model == "nominal":
             from irtorch.models import NominalResponse
             self.nominal_response_model = NominalResponse(
                 latent_variables=latent_variables,
-                item_categories=[item_cat - 1 for item_cat in item_categories], # only the incorrect responses
+                item_categories=incorrect_item_categories,
                 item_theta_relationships=item_theta_relationships,
             )
         elif incorrect_response_model == "bspline":
@@ -84,15 +89,20 @@ class NestedLogit(BaseIRTModel):
             self.register_buffer('knots', knots)
             self.n_bases = len(knots) - degree - 1
             self.degree = degree
-            # (lv, n_bases, items, max(item_categories)-1) with True where splines are supposed to be
+            # (lv, n_bases, items, max(incorrect_item_categories)) with True where splines are supposed to be
             spline_mask = item_theta_relationships.T.reshape(self.latent_variables, 1, -1, 1)
-            spline_mask = spline_mask.repeat(1, self.n_bases, 1, max(item_categories)-1)
+            spline_mask = spline_mask.repeat(1, self.n_bases, 1, max(incorrect_item_categories))
+            response_mask = torch.ones((self.items, max(incorrect_item_categories)), dtype=torch.bool)
             # remove entries for items with fewer responses
-            for item, item_cat in enumerate(item_categories):
-                spline_mask[:, :, item, :(max(item_categories)-item_cat)] = False
+            for item, item_cat in enumerate(incorrect_item_categories):
+                spline_mask[:, :, item, item_cat:] = False
+                response_mask[item, item_cat:] = False
 
             self.register_buffer('spline_mask', spline_mask)
-            self.coefficients = torch.nn.Parameter(torch.full((spline_mask.sum(), ), -2.5))
+            self.register_buffer('response_mask', response_mask)
+            self.coefficients = torch.nn.Parameter(torch.randn((spline_mask.sum(), ))*0.01)
+        else:
+            raise ValueError("Incorrect response model must be 'nominal' or 'bspline'.")
 
     def _dichotomize_data(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -123,9 +133,22 @@ class NestedLogit(BaseIRTModel):
         if self.incorrect_response_model == "nominal":
             incorrect_output = self.nominal_response_model(theta)
             incorrect_probabilities = self.nominal_response_model.probabilities_from_output(incorrect_output)
-        # elif self.incorrect_response_model == "bspline":
+        elif self.incorrect_response_model == "bspline":
+            if self.basis is not None: # use precomputed basis if available
+                basis = self.basis
+            else:
+                rescaled_theta = theta.sigmoid()
+                basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
+                basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
+            
+            all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
+            all_coef[self.spline_mask] = self.coefficients # (lv, basis, items, max(incorrect_item_categories))
+            logits = torch.einsum('...pb,...bic->...pic', basis, all_coef) # (lv, batch, items, max(incorrect_item_categories))
+            logit_sums = logits.sum(dim=0) # (batch, items, max(incorrect_item_categories))
+            logit_sums[:, ~self.response_mask] = -torch.inf
+            incorrect_probabilities = torch.softmax(logit_sums, dim=2)
         else:
-            raise NotImplementedError("B-spline model not implemented yet.")
+            raise ValueError("Incorrect response model must be 'nominal' or 'bspline'.")
 
         incorrect_probabilities = incorrect_probabilities * correct_probabilities[:, :, 0:1]
         all_probabilities[:, self.correct_mask] = correct_probabilities[:, :, 1]
@@ -213,3 +236,8 @@ class NestedLogit(BaseIRTModel):
                 return ll
         else:
             raise ValueError("loss_reduction must be 'sum' or 'none'")
+        
+    def precompute_basis(self, theta: torch.Tensor):
+        rescaled_theta = theta.sigmoid()
+        basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
+        self.basis = basis.view(self.latent_variables, -1, self.n_bases)

@@ -31,7 +31,7 @@ class MonotonePolynomial(BaseIRTModel):
 
     Notes
     -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows:
 
     .. math::
 
@@ -45,10 +45,7 @@ class MonotonePolynomial(BaseIRTModel):
     where:
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - When mc_correct is not specified: 
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - When mc_correct is specified:
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
+    - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
     - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
     - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     

@@ -29,7 +29,7 @@ class NestedLogit(BaseIRTModel):
         The degree of the B-spline basis functions when using the B-spline model for the incorrect responses. (Default: 3)
     knots : list[float], optional
         The positions of the internal knots (bounds excluded) for the B-spline basis functions when using the B-spline model for the incorrect responses. If not provided, defaults to
-        [-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7].
+        [-1.7, -0.7, 0, 0.7, 1.7].
         
     """
     def __init__(
@@ -42,7 +42,7 @@ class NestedLogit(BaseIRTModel):
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
         degree: int = 3,
-        knots: list[float] = None,
+        knots: list[float] = [-1.7, -0.7, 0, 0.7, 1.7],
     ):
         if item_categories is None:
             if data is None:
@@ -78,10 +78,7 @@ class NestedLogit(BaseIRTModel):
                 item_theta_relationships=item_theta_relationships,
             )
         elif incorrect_response_model == "bspline":
-            if knots is None:
-                knots = torch.tensor([-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7])
-            else:
-                knots = torch.tensor(knots)
+            knots = torch.tensor(knots)
 
             self.basis = None
             knots = knots.sigmoid()

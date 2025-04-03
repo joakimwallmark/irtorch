@@ -318,7 +318,7 @@ class Plotter:
         items : list[int], optional
             The items to consider for computing the log-likelihood. If None, all items in the model are used. (default is None)
         expected_sum_score : bool, optional
-            Whether to plot the expected sum score instead of the log-likelihood. (default is False)
+            Whether to plot the log-likelihood against the expected sum score instead of the latent variable(s). (default is False)
         title : str, optional
             The title for the plot. (default is None)
         x_label : str, optional

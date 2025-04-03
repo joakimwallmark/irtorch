@@ -42,7 +42,7 @@ class NestedLogit(BaseIRTModel):
         item_categories: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
         degree: int = 3,
-        knots: list[float] = [-1.7, -0.7, 0, 0.7, 1.7],
+        knots: list[float] = None,
     ):
         if item_categories is None:
             if data is None:
@@ -59,15 +59,25 @@ class NestedLogit(BaseIRTModel):
                 raise ValueError(
                     f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
-            assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
-
+            if not isinstance(item_theta_relationships, torch.Tensor):
+                item_theta_relationships = torch.tensor(item_theta_relationships, dtype=torch.bool)
+            elif item_theta_relationships.dtype != torch.bool:
+                try:
+                    item_theta_relationships = item_theta_relationships.bool()
+                except RuntimeError as exc:
+                    raise TypeError("item_theta_relationships must be convertible to boolean type.") from exc
+            if not torch.all(item_theta_relationships.sum(dim=1) > 0):
+                raise ValueError("all items must have a relationship with a least one latent variable.")
 
         self.correct_response_model: BaseIRTModel = correct_response_model
         self.incorrect_response_model = incorrect_response_model
-        self.correct_mask = torch.zeros(self.items, self.max_item_responses, dtype=torch.bool)
+
+        correct_mask = torch.zeros(self.items, self.max_item_responses, dtype=torch.bool)
         for item in range(self.items):
-            self.correct_mask[item, mc_correct[item]] = True
+            if not (0 <= mc_correct[item] < self.item_categories[item]):
+                raise ValueError(f"mc_correct[{item}]={mc_correct[item]} is out of bounds for item {item} with {self.item_categories[item]} categories.")
+            correct_mask[item, mc_correct[item]] = True
+        self.register_buffer('correct_mask', correct_mask)
 
         incorrect_item_categories = [item_cat - 1 for item_cat in item_categories]
         if incorrect_response_model == "nominal":
@@ -78,8 +88,7 @@ class NestedLogit(BaseIRTModel):
                 item_theta_relationships=item_theta_relationships,
             )
         elif incorrect_response_model == "bspline":
-            knots = torch.tensor(knots)
-
+            knots = torch.tensor([-1.7, -0.7, 0, 0.7, 1.7]) if knots is None else torch.tensor(knots)
             self.basis = None
             knots = knots.sigmoid()
             knots = torch.cat((torch.zeros(degree+1), knots, torch.ones(degree+1)))
@@ -100,6 +109,18 @@ class NestedLogit(BaseIRTModel):
             self.coefficients = torch.nn.Parameter(torch.randn((spline_mask.sum(), ))*0.01)
         else:
             raise ValueError("Incorrect response model must be 'nominal' or 'bspline'.")
+        
+        # --- Precompute Incorrect Index Mapping ---
+        self._max_incorrect_cats =max(incorrect_item_categories)
+        # Map from compact incorrect index (0 to k-1) to full response index (0 to max_responses-1)
+        map_indices = torch.full((self.items, self._max_incorrect_cats), -1, dtype=torch.long) # Fill with -1 initially
+
+        # Find the incorrect item indices
+        full_range = torch.arange(self.max_item_responses)
+        for i in range(self.items):
+            map_indices[i] = full_range[~self.correct_mask[i]]
+
+        self.register_buffer('incorrect_indices_map', map_indices)
 
     def _dichotomize_data(self, data: torch.Tensor) -> torch.Tensor:
         """
@@ -124,12 +145,20 @@ class NestedLogit(BaseIRTModel):
         output : torch.Tensor
             2D tensor. Rows are respondents and columns are item category logits.
         """
-        all_probabilities = torch.zeros(theta.shape[0], self.items, self.max_item_responses, device=theta.device)
+        batch_size = theta.shape[0]
+        device = theta.device
+        target_shape = (batch_size, self.items, self.max_item_responses)
+
+        all_probabilities = torch.zeros(theta.shape[0], self.items, self.max_item_responses, device=device)
         corrrect_output = self.correct_response_model(theta)
         correct_probabilities = self.correct_response_model.probabilities_from_output(corrrect_output)
+        P_correct_total = correct_probabilities[:, :, 1]  # (batch, items)
+        P_incorrect_total = correct_probabilities[:, :, 0] # (batch, items)
+    
         if self.incorrect_response_model == "nominal":
             incorrect_output = self.nominal_response_model(theta)
-            incorrect_probabilities = self.nominal_response_model.probabilities_from_output(incorrect_output)
+            # Shape: (batch, items, _max_incorrect_cats)
+            P_k_given_incorrect = self.nominal_response_model.probabilities_from_output(incorrect_output)
         elif self.incorrect_response_model == "bspline":
             if self.basis is not None: # use precomputed basis if available
                 basis = self.basis
@@ -138,18 +167,51 @@ class NestedLogit(BaseIRTModel):
                 basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
                 basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
             
-            all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
+            all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=device)
             all_coef[self.spline_mask] = self.coefficients # (lv, basis, items, max(incorrect_item_categories))
             logits = torch.einsum('...pb,...bic->...pic', basis, all_coef) # (lv, batch, items, max(incorrect_item_categories))
             logit_sums = logits.sum(dim=0) # (batch, items, max(incorrect_item_categories))
-            logit_sums[:, ~self.response_mask] = -torch.inf
-            incorrect_probabilities = torch.softmax(logit_sums, dim=2)
+            # logit_sums[:, ~self.response_mask] = -torch.inf
+
+            # Apply response mask (broadcasted) before softmax
+            batch_response_mask = self.response_mask.unsqueeze(0).expand(batch_size, -1, -1) # (batch, items, max_incorrect)
+            logit_sums = torch.where(batch_response_mask, logit_sums, torch.tensor(float('-inf'), device=device))
+
+            # Shape: (batch, items, _max_incorrect_cats)
+            P_k_given_incorrect = torch.softmax(logit_sums, dim=2)
         else:
             raise ValueError("Incorrect response model must be 'nominal' or 'bspline'.")
 
-        incorrect_probabilities = incorrect_probabilities * correct_probabilities[:, :, 0:1]
-        all_probabilities[:, self.correct_mask] = correct_probabilities[:, :, 1]
-        all_probabilities[:, ~self.correct_mask] = incorrect_probabilities.view(theta.shape[0], -1)
+        P_k_incorrect_scaled = P_k_given_incorrect * P_incorrect_total.unsqueeze(-1)
+        all_probabilities = torch.zeros(target_shape, device=device)
+
+        # Get indices for correct responses (precomputed mask -> indices tensor)
+        mc_correct_tensor = torch.tensor(self.mc_correct, dtype=torch.long, device=device)
+        correct_indices = mc_correct_tensor.view(1, -1, 1).expand(batch_size, -1, -1) # (batch, items, 1)
+        # Assemble correct probabilities using Scatter (out-of-place)
+        all_probabilities = all_probabilities.scatter(
+            dim=-1,
+            index=correct_indices,
+            src=P_correct_total.unsqueeze(-1) # (batch, items, 1)
+        )
+
+        # Expand map and mask for batch
+        # Note: Buffers are automatically on the correct device
+        map_expanded = self.incorrect_indices_map.unsqueeze(0).expand(batch_size, -1, -1) # (batch, items, max_incorrect)
+
+        # Use scatter_add to add the scaled incorrect probabilities
+        # Indices from map_expanded, source from masked_src
+        all_probabilities = all_probabilities.scatter_add(
+            dim=-1,
+            index=map_expanded, # Target indices in full response range
+            src=P_k_incorrect_scaled     # Scaled incorrect probs (masked)
+        )
+
+        # Optional: Clamp probabilities slightly away from 0/1 for numerical stability downstream
+        # all_probabilities = torch.clamp(all_probabilities, min=1e-9, max=1.0 - 1e-9)
+        # Optional: Renormalize - should ideally sum to 1 already
+        # all_probabilities = all_probabilities / all_probabilities.sum(dim=-1, keepdim=True)
+
         return all_probabilities
 
     @torch.no_grad()

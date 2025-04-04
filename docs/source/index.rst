@@ -42,7 +42,7 @@ The package utilizes **PyTorch** for parameter optimization and GPU support.
    :maxdepth: 2
    :caption: Literature 🧾
 
-   literature 
+   literature
 
 .. * :ref:`genindex`
 .. * :ref:`modindex`

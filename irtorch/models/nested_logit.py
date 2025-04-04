@@ -4,10 +4,10 @@ from irtorch.torch_modules import BSplineBasisFunction
 
 class NestedLogit(BaseIRTModel):
     r"""
-    Nested logit IRT model for multiple choice items :cite:p:`Birnbaum1968`. The original paper uses a 3PL model :class:`irtorch.models.ThreeParameterLogistic` nested with a nominal response model :class:`irtorch.models.NominalResponse`.
+    Nested logit IRT model for multiple choice items :cite:p:`Suh2010`. The original paper uses a 3PL model :class:`irtorch.models.ThreeParameterLogistic` nested with a nominal response model :class:`irtorch.models.NominalResponse`.
     This implementation allows one to choose any IRT model for dichotomously scored items in place of the 3PL, and either a nominal response model or B-splines for the incorrect responses.
 
-    Requires the correct response model to be fitted in advance. The incorrect response probabilities are then estimated using a nominal response model or B-splines.
+    Requires the correct response model to be specified in advance. It can also be a previously fitted model. The incorrect response probabilities are then estimated using a nominal response model or B-splines.
 
     Parameters
     ----------
@@ -30,7 +30,16 @@ class NestedLogit(BaseIRTModel):
     knots : list[float], optional
         The positions of the internal knots (bounds excluded) for the B-spline basis functions when using the B-spline model for the incorrect responses. If not provided, defaults to
         [-1.7, -0.7, 0, 0.7, 1.7].
-        
+    
+    Examples
+    --------
+    >>> from irtorch.models import NestedLogit, ThreeParameterLogistic
+    >>> from irtorch.estimation_algorithms import MML
+    >>> from irtorch.load_dataset import swedish_sat_quantitative
+    >>> data, correct_responses = swedish_sat_quantitative()
+    >>> model_3pl = ThreeParameterLogistic(items = data.shape[1])
+    >>> model_nested = NestedLogit(correct_responses, model_3pl, data=data)
+    >>> model_nested.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,

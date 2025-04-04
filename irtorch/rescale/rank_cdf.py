@@ -23,23 +23,23 @@ class RankCDF(Scale):
     --------
     >>> import irtorch
     >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.rescale import RankCDF
     >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
     >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     >>> thetas = model.latent_scores(data)
     >>> # Create and RankCDF instancce and supply it to the model.
-    >>> model.add_scale_tranformation(RankCDF(thetas))
+    >>> model.add_scale_transformation(RankCDF(thetas))
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones
     >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
-    >>> model.plot.plot_latent_score_distribution(thetas).show()
-    >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
+    >>> model.plot.latent_score_distribution(thetas).show()
+    >>> model.plot.latent_score_distribution(rescaled_thetas).show()
     >>> # Plot an item on the transformed scale
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     """
     def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] = None):
         super().__init__(invertible=False)

@@ -2,7 +2,7 @@ import logging
 import copy
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch.models import BaseIRTModel
+from irtorch.models import BaseIRTModel, SurprisalSpline, NestedLogit
 from irtorch.utils import gauss_hermite
 from irtorch._internal_utils import dynamic_print
 from irtorch.irt_dataset import PytorchIRTDataset
@@ -15,7 +15,7 @@ class MML(BaseIRTAlgorithm):
     Marginal Maximum Likelihood (MML) for fitting IRT models :cite:p:`Bock1981`. 
     Uses a multivariate normal distribution for the latent variables and Gradient Descent to optimize the model parameters.
     This method is generally effecive for models with a small number of latent variables. More than 3 is not supported.
-    Note that this method runs much faster on a GPU.
+    Note that this typically method runs much faster on a GPU.
 
     The marginal log-likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
 
@@ -52,7 +52,7 @@ class MML(BaseIRTAlgorithm):
         integration_method: str = "quasi_mc",
         quadrature_points: int = None,
         covariance_matrix: torch.Tensor = None,
-        learning_rate: float = 0.15,
+        learning_rate: float = 0.20,
         learning_rate_update_patience: int = 7,
         learning_rate_updates_before_stopping: int = 2,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -76,7 +76,7 @@ class MML(BaseIRTAlgorithm):
         covariance_matrix : torch.Tensor, optional
             The covariance matrix for the multivariate normal distribution for the latent variables. (default is None and uses uncorrelated variables)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.15)
+            The initial learning rate for the optimizer. (default is 0.25)
         learning_rate_update_patience : int, optional
             The number of epochs to wait before reducing the learning rate. (default is 7)
         learning_rate_updates_before_stopping : int, optional
@@ -124,7 +124,12 @@ class MML(BaseIRTAlgorithm):
         # we multiply the learning rate by the factor
         # patience: We need no improvement after x epochs for it to trigger
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode="min", factor=0.6, patience=learning_rate_update_patience
+            self.optimizer,
+            mode="min",
+            factor=0.6,
+            patience=learning_rate_update_patience,  # More epochs before reducing
+            threshold=5e-5,  # Consider improvements of this or more as significant
+            threshold_mode='rel'  # Make threshold relative to the loss
         )
 
         model.to(device)
@@ -137,6 +142,7 @@ class MML(BaseIRTAlgorithm):
             scheduler,
             learning_rate_updates_before_stopping
         )
+        
         model.to("cpu")
         model.eval()
 
@@ -167,16 +173,24 @@ class MML(BaseIRTAlgorithm):
             The logarithm of the integral weights associated with the points.
         scheduler : torch.optim.lr_scheduler.ReduceLROnPlateau
             The learning rate scheduler.
-        learning_rate_updates_before_stopping : int, optional
+        learning_rate_updates_before_stopping : int
             The number of times the learning rate can be reduced before stopping training.
+
+        Returns
+        -------
+        None
         """
         lr_update_count = 0
-
+        best_model_state = None
         latent_combos_rep = points.repeat_interleave(train_data.size(0), dim=0)
         train_data_rep = train_data.repeat(points.size(0), 1)
         log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
         irt_dataset_rep = PytorchIRTDataset(data=train_data_rep)
+        # precompute basis functions for spline models
+        if isinstance(model, SurprisalSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
+            model.precompute_basis(latent_combos_rep)
 
+        best_epoch = 0
         best_loss = float("inf")
         prev_lr = [group["lr"] for group in self.optimizer.param_groups]
         for epoch in range(max_epochs):
@@ -210,6 +224,10 @@ class MML(BaseIRTAlgorithm):
                 break
 
             logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
+
+        # remove basis functions for spline models after fitting
+        if isinstance(model, SurprisalSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
+            model.basis = None
 
         # Load the best model state
         if best_model_state is not None:

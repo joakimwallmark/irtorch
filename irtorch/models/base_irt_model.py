@@ -17,7 +17,7 @@ logger = logging.getLogger("irtorch")
 class BaseIRTModel(ABC, nn.Module):
     """
     Abstract base class for Item Response Theory models. All IRT models should inherit from this class.
-    
+
     Parameters
     ----------
     latent_variables : int
@@ -56,7 +56,7 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         Evaluation
-            An instance of the :class:`irtorch.Evaluation` class.
+            An instance of the :class:`irtorch.Evaluator` class.
         """
         if self._evaluate is None:
             from ..evaluator import Evaluator
@@ -70,14 +70,14 @@ class BaseIRTModel(ABC, nn.Module):
 
         Returns
         -------
-        Plotting
-            An instance of the :class:`irtorch.Plotting` class.
+        Plotter
+            An instance of the :class:`irtorch.Plotter` class.
         """
         if self._plot is None:
             from ..plotter import Plotter
             self._plot = Plotter(self)
         return self._plot
-    
+
     @abstractmethod
     def forward(self, theta) -> torch.Tensor:
         """
@@ -151,7 +151,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         Parameters
         ----------
-        theta : torch.Tensor
+        transformed_theta : torch.Tensor
             A 2D tensor containing transformed theta scores. Each column represents one latent variable.
 
         Returns
@@ -162,7 +162,7 @@ class BaseIRTModel(ABC, nn.Module):
         for scale in self.scale:
             transformed_theta = scale.inverse(transformed_theta)
         return transformed_theta
-    
+
     def theta_transform_jacobian(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Compute the Jacobian matrix of the scale transformations for each row in the input theta scores.
@@ -236,9 +236,9 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with output. Columns are item response categories and rows are respondents
         missing_mask: torch.Tensor, optional
             A 2D tensor with missing data mask. (default is None)
-        loss_reduction: str, optional 
+        loss_reduction: str, optional
             The reduction argument for torch.nn.functional.cross_entropy(). (default is 'sum')
-        
+
         Returns
         -------
         torch.Tensor
@@ -253,7 +253,7 @@ class BaseIRTModel(ABC, nn.Module):
             reshaped_output = reshaped_output[~missing_mask]
             respondents = data.size(0)
             data = data[~missing_mask]
-        
+
         ll = -F.cross_entropy(reshaped_output, data, reduction=loss_reduction)
         # For MML, we need the output to include missing values for missing item responses
         if loss_reduction == "none" and missing_mask is not None:
@@ -289,8 +289,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         if return_item_scores:
             return expected_item_scores
-        else:
-            return expected_item_scores.sum(dim=1)
+        return expected_item_scores.sum(dim=1)
 
     @torch.inference_mode(False)
     def expected_item_score_gradients(
@@ -415,7 +414,7 @@ class BaseIRTModel(ABC, nn.Module):
         -------
         torch.Tensor
             A tensor with the information for each theta score. Dimensions are:
-            
+
             - By default: (theta rows, items, FIM rows, FIM columns).
             - If degrees are specified: (theta rows, items).
             - If item is False: (theta rows, FIM rows, FIM columns).
@@ -438,7 +437,7 @@ class BaseIRTModel(ABC, nn.Module):
         - :math:`\ell(\mathbf{\theta}|X)` is the log-likelihood of :math:`\mathbf{\theta}`, given the latent variable vector :math:`X`.
         - :math:`\nabla_{\mathbf{\theta}} \ell(\mathbf{\theta}|X)` is the gradient vector of the log-likelihood with respect to :math:`\mathbf{\theta}`.
         - :math:`\nabla_{\mathbf{\theta}}^2 \ell(\mathbf{\theta}|X)` is the Hessian matrix (the second derivatives of the log-likelihood with respect to :math:`\mathbf{\theta}`).
-        
+
         For additional details, see :cite:t:`Chang2017`.
         """
         if degrees is not None and len(degrees) != self.latent_variables:
@@ -462,8 +461,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         if item:
             return information.detach()
-        else:
-            return information.detach().nansum(dim=1) # sum over items
+        return information.detach().nansum(dim=1) # sum over items
 
     def item_theta_relationship_directions(self, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -484,7 +482,7 @@ class BaseIRTModel(ABC, nn.Module):
         for item, _ in enumerate(self.item_categories):
             weights = linear_regression(theta, item_sum_scores[:,item].reshape(-1, 1))[1:].reshape(-1)
             item_theta_mask[item, :] = weights.sign().int()
-        
+
         return item_theta_mask.int()
 
     @torch.no_grad()
@@ -505,7 +503,7 @@ class BaseIRTModel(ABC, nn.Module):
         probs = self.item_probabilities(theta)
         dist = torch.distributions.Categorical(probs)
         return dist.sample().float()
-    
+
     @torch.inference_mode(False)
     def probability_gradients(self, theta: torch.Tensor, rescale: bool = True) -> torch.Tensor:
         r"""
@@ -522,8 +520,8 @@ class BaseIRTModel(ABC, nn.Module):
         -------
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, items, item categories, latent variables).
-        
-        
+
+
         Notes
         -----
         When rescale is True, the gradients are computed on the transformed scale using the Jacobian of the transformation.
@@ -556,8 +554,8 @@ class BaseIRTModel(ABC, nn.Module):
         rescale: bool = True,
     ):
         r"""
-        Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP). 
-        ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.        
+        Returns the latent scores :math:`\mathbf{\theta}` for the provided test data using encoder the neural network (NN), maximum likelihood (ML), expected a posteriori (EAP) or maximum a posteriori (MAP).
+        ML and MAP uses the LBFGS algorithm. EAP and MAP are not recommended for non-variational autoencoder models as there is nothing pulling the latent distribution towards a normal.
         EAP for models with more than three factors is not recommended since the integration grid becomes huge.
 
         Parameters
@@ -624,12 +622,14 @@ class BaseIRTModel(ABC, nn.Module):
 
             if theta_estimation in ["ML", "MAP"]:
                 theta = self._ml_map_theta_scores(data, theta, theta_estimation, learning_rate=lbfgs_learning_rate, device=device)
-        
+
         if rescale and self.scale:
-            theta = self.transform_theta(theta)
+            return_theta = self.transform_theta(theta)
+        else:
+            return_theta = theta
 
         if standard_errors:
-            if theta_estimation == "ML" or theta_estimation == "NN":
+            if theta_estimation in ["ML", "NN"]:
                 if hasattr(self.algorithm, 'latent_mean_se') and theta_estimation == "NN":
                     theta_orig, se = self.algorithm.latent_mean_se(encoder_data)
                     if rescale and self.scale:
@@ -640,11 +640,10 @@ class BaseIRTModel(ABC, nn.Module):
                 else:
                     fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
                     se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
-                return theta, se
-            else:
-                logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
-        
-        return theta
+                return return_theta, se
+            logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
+
+        return return_theta
 
     def _initial_theta_from_training_data(self, data, device):
         try:
@@ -667,7 +666,7 @@ class BaseIRTModel(ABC, nn.Module):
             theta = training_thetas.repeat(data.shape[0], 1)
             init_data = data.repeat_interleave(training_thetas.shape[0], dim=0)
             missing_mask = missing_mask.repeat_interleave(training_thetas.shape[0], dim=0)
-            
+
             logits = logits.repeat(data.shape[0], 1)
             lls = self.log_likelihood(init_data, logits, missing_mask, loss_reduction="none")
             lls = lls.view(logits.shape[0], -1).nansum(dim=1)
@@ -682,13 +681,13 @@ class BaseIRTModel(ABC, nn.Module):
         finally:
             self.to("cpu")
         return theta.to("cpu")
-    
+
     def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
         r"""
-        The averge population difficulty for each item. Ranges from 0 to 1.
-        
+        The average population difficulty for each item. Ranges from 0 to 1.
+
         Calculated as the average proportion of item points missing for each item as:
-        
+
         .. math::
 
             \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
@@ -700,14 +699,11 @@ class BaseIRTModel(ABC, nn.Module):
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
         - :math:`\text{max}_j` is the maximum score on item :math:`j`.
         - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
-            
+
         Parameters
         ----------
         theta : torch.Tensor
             A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
-        rescale_by_item_score : bool, optional
-            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. 
-            This makes different item difficulties comparable. (default is True)
 
         Returns
         -------
@@ -722,13 +718,13 @@ class BaseIRTModel(ABC, nn.Module):
             item_scores = 1-item_scores
         return item_scores.mean(dim=0)
 
-    def population_discimination(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
+    def population_discrimination(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
         r"""
-        The averge population discrimination for each item. 
+        The average population discrimination for each item.
         Relatively large values means that an item is good at distinguishing between higher and lower ability respondents for the population supplied by the theta argument.
-        
+
         Calculated as the average gradients of the expected item scores with respect to the latent variables scaled by the maximum item scores.
-        
+
         .. math::
 
             \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
@@ -740,14 +736,15 @@ class BaseIRTModel(ABC, nn.Module):
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
         - :math:`\text{max}_j` is the maximum score on item :math:`j`.
         - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
-            
+
         Parameters
         ----------
         theta : torch.Tensor
             A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
-        rescale_by_item_score : bool, optional
-            Whether to rescale the expected items scores to have a max of one by dividing by the max item score. 
-            This makes different item difficulties comparable. (default is True)
+        rescale : bool, optional
+            Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
+        **kwargs
+            Additional keyword arguments to pass to the expected_item_score_gradients method.
 
         Returns
         -------
@@ -781,7 +778,7 @@ class BaseIRTModel(ABC, nn.Module):
             The learning rate to use for the LBFGS optimizer. (default is 0.3)
         device: str, optional
             The device to use for computation. Can be 'cpu' or 'cuda'. (default is "cuda" if available else "cpu")
-        
+
         Returns
         -------
         torch.Tensor
@@ -858,7 +855,7 @@ class BaseIRTModel(ABC, nn.Module):
             optimized_theta_scores = optimized_theta_scores.detach().to("cpu")
             self.requires_grad_(True)
         return optimized_theta_scores
-    
+
     @torch.no_grad()
     def _eap_theta_scores(self, data: torch.Tensor, grid_points: int = None) -> torch.Tensor:
         """
@@ -870,7 +867,7 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with test data. Columns are items and rows are respondents
         grid_points: int, optional
             The number of grid points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-        
+
         Returns
         -------
         torch.Tensor
@@ -941,14 +938,14 @@ class BaseIRTModel(ABC, nn.Module):
     def _theta_grid(self, theta_scores: torch.Tensor, grid_size: int = None):
         """
         Returns a new theta score tensor covering a large range of latent variable values in a grid.
-        
+
         Parameters
         ----------
         theta_scores: torch.Tensor
             The input test scores. Typically obtained from the training data.
         grid_size: int
             The number of grid points for each latent variable.
-        
+
         Returns
         -------
         torch.Tensor
@@ -976,7 +973,7 @@ class BaseIRTModel(ABC, nn.Module):
         Save the fitted model.
 
         Parameters
-        -------
+        ----------
         path : str
             Where to save fitted model.
         """
@@ -992,7 +989,7 @@ class BaseIRTModel(ABC, nn.Module):
         Loads the model from a file. The initialized model should have the same structure and hyperparameter settings as the fitted model that is being loaded (e.g., the same number of latent variables).
 
         Parameters
-        -------
+        ----------
         path : str
             Where to load fitted model from.
         """

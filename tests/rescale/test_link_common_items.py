@@ -1,6 +1,6 @@
 import pytest
 import torch
-import torch.nn as nn
+from torch import nn
 from irtorch.rescale import LinkCommonItems
 from irtorch.models import BaseIRTModel
 

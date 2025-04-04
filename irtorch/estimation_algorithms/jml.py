@@ -11,7 +11,7 @@ logger = logging.getLogger("irtorch")
 class JML(BaseIRTAlgorithm):
     r"""
     Joint Maximum Likelihood (JML) for fitting IRT models :cite:p:`Birnbaum1968`.
-    JML optimizes the log-likelihood directly without any latent variable integration or distrbutional assumptions.
+    JML optimizes the log-likelihood directly without any latent variable integration or distributional assumptions.
     Instead of rotating between optimizing the latent variables and the model parameters as with the typical JML implementation, 
     all parameters are updated at the same time using the Adam optimizer.
 
@@ -40,7 +40,7 @@ class JML(BaseIRTAlgorithm):
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
-        Train the model.
+        Train the model using Joint Maximum Likelihood.
 
         Parameters
         ----------

@@ -27,6 +27,10 @@ IRT models
     :show-inheritance:
     :members:
 
+.. autoclass:: irtorch.models.NestedLogit
+    :show-inheritance:
+    :members:
+
 .. autoclass:: irtorch.models.NominalResponse
     :show-inheritance:
     :members:
@@ -36,6 +40,10 @@ IRT models
     :members:
 
 .. autoclass:: irtorch.models.MonotonePolynomial
+    :show-inheritance:
+    :members:
+
+.. autoclass:: irtorch.models.SurprisalSpline
     :show-inheritance:
     :members:
 

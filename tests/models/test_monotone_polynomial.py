@@ -3,16 +3,6 @@ import torch
 from irtorch.models import MonotonePolynomial
 from irtorch.irt_dataset import PytorchIRTDataset
 
-def test_mc_correct_output_idx():
-    model = MonotonePolynomial(
-        latent_variables = 2,
-        item_categories=[3, 4],
-        mc_correct=[1, 0]
-    )
-
-    assert torch.equal(model.mc_correct_output_idx, torch.tensor([False, True,  False, False,  True, False, False, False]))
-
-
 def test_log_likelihood():
     model = MonotonePolynomial(
         latent_variables = 2,
@@ -53,7 +43,6 @@ def test_forward_ordered(separate):
         latent_variables = 2,
         item_categories=[2, 3, 3],
         degree=3,
-        mc_correct=None,
         separate=separate,
         item_theta_relationships=item_theta_relationships,
         negative_latent_variable_item_relationships=True,
@@ -88,48 +77,6 @@ def test_forward_ordered(separate):
             assert torch.all(original_parameters[item_theta_relationships.transpose(0, 1)] != param[item_theta_relationships.transpose(0, 1)]), f"Parameters for {name} should have changed"
         else:
             assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
-
-@pytest.mark.parametrize("separate", ["items", "categories"])
-def test_forward_mc(separate):
-    item_theta_relationships=torch.tensor([[1, 1], [1, 1], [0, 1]], dtype=torch.bool)
-    model = MonotonePolynomial(
-        latent_variables = 2,
-        item_categories=[2, 3, 3],
-        mc_correct=[1, 0, 2],
-        separate=separate,
-        item_theta_relationships=item_theta_relationships,
-    )
-
-    original_parameter_dictionary = {k: v.clone() for k, v in model.named_parameters()}
-
-    optimizer = torch.optim.Adam(
-        [{"params": model.parameters()}], lr=0.02, amsgrad=True
-    )
-    theta = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.5], [0.8, 0.6]])
-    data = torch.tensor([[0, 1, 0], [1, 1, 1], [1, 2, 1], [1, 2, 2]]).float()
-    for _ in range(100): # update many times, otherwise tau may not change
-        optimizer.zero_grad()
-        output = model.forward(theta)
-        assert output.shape == (4, 9), "Incorrect output shape"
-
-        loss = -model.log_likelihood(data=data, output=output)
-        loss.backward()
-        optimizer.step()
-        
-    # Assert that the parameters have updated
-    changed_indices = item_theta_relationships.transpose(0, 1)
-    if separate == "categories":
-        changed_indices = changed_indices.repeat_interleave(3, dim=1)
-        changed_indices[:, 2] = False
-    for name, param in model.named_parameters():
-        original_parameters = original_parameter_dictionary[name]
-        if name in ["mono_poly.omega", "mono_poly.alpha", "mono_poly.tau"]:
-            assert torch.all(original_parameters[:, changed_indices] != param[:, changed_indices]), f"Parameters for {name} should have changed"
-        elif name == "mono_poly.directions":
-            assert torch.all(original_parameters[item_theta_relationships.transpose(0, 1)] != param[item_theta_relationships.transpose(0, 1)]), f"Parameters for {name} should have changed"
-        else:
-            assert torch.all(original_parameters != param), f"Parameters for {name} should have changed"
-
 
 def test_probabilities_from_output():
     model = MonotonePolynomial(

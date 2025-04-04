@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-import torch.nn as nn
+from torch import nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class GeneralizedPartialCredit(BaseIRTModel):
@@ -40,11 +40,11 @@ class GeneralizedPartialCredit(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import GeneralizedPartialCredit
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = GeneralizedPartialCredit(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,
@@ -64,9 +64,9 @@ class GeneralizedPartialCredit(BaseIRTModel):
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         self.output_size = self.items * self.max_item_responses

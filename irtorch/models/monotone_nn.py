@@ -1,6 +1,6 @@
 import logging
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.torch_modules import SoftplusLinear, NegationLayer
@@ -65,11 +65,11 @@ class MonotoneNN(BaseIRTModel):
     Examples
     --------
     >>> from irtorch.models import MonotoneNN
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = MonotoneNN(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,
@@ -94,9 +94,9 @@ class MonotoneNN(BaseIRTModel):
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
         else:
             item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)
@@ -243,12 +243,11 @@ class MonotoneNN(BaseIRTModel):
             x1 = F.elu(x[:, ::3])
             x2 = -F.elu(-x[:, 1::3])
             x3 = BoundedELU.apply(x[:, 2::3], 1.0)
-            y = torch.stack((x1, x2, x3), dim=2).view(x.shape)
-        else:
-            x1 = F.elu(x[:, ::2])
-            x2 = -F.elu(-x[:, 1::2])
-            y = torch.stack((x1, x2), dim=2).view(x.shape)
-        return y
+            return torch.stack((x1, x2, x3), dim=2).view(x.shape)
+        
+        x1 = F.elu(x[:, ::2])
+        x2 = -F.elu(-x[:, 1::2])
+        return torch.stack((x1, x2), dim=2).view(x.shape)
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """

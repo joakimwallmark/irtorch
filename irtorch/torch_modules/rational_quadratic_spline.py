@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 import numpy as np
 import pandas as pd
@@ -9,15 +9,41 @@ import plotly.graph_objects as go
 
 class RationalQuadraticSpline(nn.Module):
     """
-    A simplified rational quadratic spline with optional learnable output bounds.
-    
-    When free_endpoints=True, the lower and upper output bounds become trainable.
+    This module implements a rational quadratic spline, as described in the paper "Neural Spline Flows" by :cite:t:`Durkan2019`.
+
+    Parameters
+    ----------
+    variables : int
+        The number of variables (dimensions) to transform.
+    num_bins : int, optional
+        The number of bins to use for the spline (default is 30).
+    lower_input_bound : float, optional
+        The left boundary of the transformation interval (default is 0.0).
+    upper_input_bound : float, optional
+        The right boundary of the transformation interval (default is 1.0).
+    lower_output_bound : float, optional
+        The bottom boundary of the transformation interval (default is 0.0).
+    upper_output_bound : float, optional
+        The top boundary of the transformation interval (default is 1.0).
+    min_bin_width : float, optional
+        The minimum width of each bin (default is 1e-3).
+    min_bin_height : float, optional
+        The minimum height of each bin (default is 1e-3).
+    min_derivative : float, optional
+        The minimum derivative value at the knots (default is 1e-3).
+    free_endpoints : bool, optional
+        When free_endpoints=True, the lower and upper output bounds become trainable parameters (default is False).
     """
-    def __init__(self, variables: int, num_bins=30,
-                 lower_input_bound=0.0, upper_input_bound=1.0,
-                 lower_output_bound=0.0, upper_output_bound=1.0,
-                 min_bin_width=1e-3, min_bin_height=1e-3, min_derivative=1e-3,
-                 free_endpoints=False):
+    def __init__(
+        self,
+        variables: int,
+        num_bins=30,
+        lower_input_bound=0.0,
+        upper_input_bound=1.0,
+        lower_output_bound=0.0, upper_output_bound=1.0,
+        min_bin_width=1e-3, min_bin_height=1e-3, min_derivative=1e-3,
+        free_endpoints=False
+    ):
         super().__init__()
         self.num_bins = num_bins
         self.lower_input_bound = lower_input_bound
@@ -64,8 +90,7 @@ class RationalQuadraticSpline(nn.Module):
     
     def _pad_derivatives(self, derivs):
         # Build a new tensor for padded derivatives without in-place modification.
-        const_val = torch.tensor(np.log(np.exp(1 - self.min_derivative) - 1),
-                                 dtype=derivs.dtype, device=derivs.device)
+        const_val = torch.tensor(np.log(np.exp(1 - self.min_derivative) - 1), dtype=derivs.dtype, device=derivs.device)
         padded = F.pad(derivs, (1, 1))
         first = const_val.expand(*padded.shape[:-1], 1)
         last = const_val.expand(*padded.shape[:-1], 1)
@@ -76,17 +101,20 @@ class RationalQuadraticSpline(nn.Module):
         if inverse:
             lb = self.lower_output_bound
             ub = self.upper_output_bound
-            lower_trans = lambda x: self.lower_input_bound + (x - lb) / self.deriv_outside_lower
-            upper_trans = lambda x: self.upper_input_bound + (x - ub) / self.deriv_outside_upper
+            lb_out = self.lower_input_bound
+            ub_out = self.upper_input_bound
+            lower_trans = lambda x: lb_out + (x - lb) / self.deriv_outside_lower
+            upper_trans = lambda x: ub_out + (x - ub) / self.deriv_outside_upper
         else:
-            lb, ub = self.lower_input_bound, self.upper_input_bound
+            lb = self.lower_input_bound
+            ub = self.upper_input_bound
             lb_out = self.lower_output_bound
             ub_out = self.upper_output_bound
             lower_trans = lambda x: lb_out + (x - lb) * self.deriv_outside_lower
             upper_trans = lambda x: ub_out + (x - ub) * self.deriv_outside_upper
         
-        below = inputs < self.lower_input_bound
-        above = inputs > self.upper_input_bound
+        below = inputs < lb
+        above = inputs > ub
         inside = ~(below | above)
         
         outputs = torch.zeros_like(inputs)

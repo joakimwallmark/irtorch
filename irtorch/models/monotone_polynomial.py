@@ -1,6 +1,6 @@
 import logging
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.torch_modules.monotone_polynomial import MonotonePolynomialModule
@@ -10,10 +10,6 @@ logger = logging.getLogger("irtorch")
 class MonotonePolynomial(BaseIRTModel):
     r"""
     Monotonic Polynomial IRT model :cite:p:`Falk2016` with monotonic polynomials for each item or item response category.
-
-    If mc_correct is specified, the latent variable effect for the correct item response is a cumulative sum of the effects for the other possible item responses to ensure monotonicity. This model is also referred to as the Monotone Multiple Choice (MMC) model.
-    
-    If mc_correct is not specified, the item response categories are treated as ordered, and the latent variable effect for an item response category is the cumulative sum of the effects for the lower categories.
 
     Parameters
     ----------
@@ -25,8 +21,6 @@ class MonotonePolynomial(BaseIRTModel):
         Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
     degree : int, optional
         The degree of the monotonic polynomials. (default is 3)
-    mc_correct : list[int], optional
-        For multiple choice tests. The correct response category for each item. (Default: None)
     separate : str, optional
         Whether to fit separate latent variable functions for items or items categories. Can be 'items' or 'categories'. 
         Note that 'categories' results in a more flexible model with more parameters. (Default: 'categories')
@@ -37,7 +31,7 @@ class MonotonePolynomial(BaseIRTModel):
 
     Notes
     -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows (selecting response option :math:`x` for multiple choice items):
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows:
 
     .. math::
 
@@ -51,21 +45,18 @@ class MonotonePolynomial(BaseIRTModel):
     where:
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - When mc_correct is not specified: 
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - When mc_correct is specified:
-        - :math:`\delta_{jm}(\mathbf{\theta}) = \text{monotone}_{jm}(\mathbf{\theta}) + b_{jm}` for all incorrect response options, and :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{M_j}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}` for the correct response option.
+    - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
     - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
     - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     
     Examples
     --------
     >>> from irtorch.models import MonotonePolynomial
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
     >>> model = MonotonePolynomial(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(
         self,
@@ -73,25 +64,25 @@ class MonotonePolynomial(BaseIRTModel):
         latent_variables: int = 1,
         item_categories: list[int] = None,
         degree: int = 3,
-        mc_correct: list[int] = None,
         item_theta_relationships: torch.Tensor = None,
         separate: str = "categories",
         negative_latent_variable_item_relationships: bool = True,
     ):
+        if item_categories is None and data is None:
+            raise ValueError("Either item_categories or data must be provided to initialize the model.")
+        
         if item_categories is None:
-            if data is None:
-                raise ValueError("Either item_categories or data must be provided to initialize the model.")
-            else:
-                # replace nan with -inf to get max
-                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+            # replace nan with -inf to get max
+            data_no_nan = torch.where(torch.isnan(data), float("-inf"), data)
+            item_categories = (data_no_nan.max(dim=0).values + 1).int().tolist()
                 
-        super().__init__(latent_variables, item_categories, mc_correct)
+        super().__init__(latent_variables, item_categories)
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
         else:
             item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)
@@ -103,13 +94,6 @@ class MonotonePolynomial(BaseIRTModel):
             self.separations = self.items
         if separate == "categories":
             self.separations = self.output_length
-
-        self.mc_correct_output_idx = None
-        if mc_correct is not None:
-            item_start_positions = torch.arange(0, self.output_length, self.max_item_responses)
-            indices = (item_start_positions + torch.tensor(mc_correct)).long()
-            self.mc_correct_output_idx = torch.zeros(self.output_length, dtype=torch.bool)
-            self.mc_correct_output_idx.index_fill_(0, indices, True)
 
         missing_categories = torch.zeros(self.items, self.max_item_responses, dtype=torch.int)
         for item, item_cat in enumerate(self.item_categories):
@@ -135,11 +119,7 @@ class MonotonePolynomial(BaseIRTModel):
         if self.separate == "items":
             out = out.repeat_interleave(self.max_item_responses, dim=1)
 
-        if self.mc_correct_output_idx is None:
-            out = out.view(out.shape[0], -1, self.max_item_responses).cumsum(dim=2).reshape(out.shape[0], -1)
-        else:
-            out[:, self.mc_correct_output_idx] = out.view(out.shape[0], -1, self.max_item_responses).sum(dim=2)
-
+        out = out.view(out.shape[0], -1, self.max_item_responses).cumsum(dim=2).reshape(out.shape[0], -1)
         bias = torch.zeros(self.output_length, device=theta.device)
         bias[self.free_bias] = self.bias_param
         out += bias

@@ -23,11 +23,11 @@ class Flow(Scale):
     --------
     >>> import irtorch
     >>> from irtorch.models import GradedResponse
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.rescale import Flow
     >>> data = irtorch.load_dataset.swedish_national_mathematics_1()
     >>> model = GradedResponse(data)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     >>> thetas = model.latent_scores(data)
     >>> # Initalize and fit the flow scale transformation. Supply it to the model.
     >>> flow = Flow(1)
@@ -38,12 +38,12 @@ class Flow(Scale):
     >>> # Or alternatively by directly converting the old ones
     >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
-    >>> model.plot.plot_latent_score_distribution(thetas).show()
-    >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
+    >>> model.plot.latent_score_distribution(thetas).show()
+    >>> model.plot.latent_score_distribution(rescaled_thetas).show()
     >>> # Put the thetas back to the original scale
     >>> original_thetas = model.inverse_transform_theta(rescaled_thetas)
     >>> # Plot an item on the flow transformed scale
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     """
     def __init__(self, latent_variables: int):
         super().__init__(invertible=True)

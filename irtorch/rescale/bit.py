@@ -29,7 +29,7 @@ class Bit(Scale):
     items : list[int], optional
         The item indices for the items to use to compute the bit scores. (default is None and uses all items)
     grid_points : int, optional
-        The number of points to use for computing bit score. More steps lead to more accurate results. (default is 400)
+        The number of points to use for computing bit score. More steps lead to more accurate results. (default is 4000)
     mc_start_theta_approx : bool, optional
         For multiple choice models. Whether to approximate the starting theta scores using simulated random guesses.
         If True, runs :meth:`bit_score_starting_theta_mc`. (default is False)
@@ -69,26 +69,26 @@ class Bit(Scale):
     --------
     >>> import irtorch
     >>> from irtorch.models import MonotoneNN
-    >>> from irtorch.estimation_algorithms import JML
+    >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.rescale import Bit
     >>> data, mc_correct = irtorch.load_dataset.swedish_sat_quantitative()
     >>> model = MonotoneNN(data, mc_correct=mc_correct)
-    >>> model.fit(train_data=data, algorithm=JML())
+    >>> model.fit(train_data=data, algorithm=MML())
     >>> thetas = model.latent_scores(data)
     >>> # Initalize the scale transformation
     >>> # mc_start_theta_approx sets the starting theta to the approximate score of a randomly guessing respondent
     >>> bit = Bit(model, population_theta=thetas, mc_start_theta_approx=True)
     >>> # Supply the new scale to the model
-    >>> model.add_scale_tranformation(bit)
+    >>> model.add_scale_transformation(bit)
     >>> # Estimate thetas on the transformed scale
     >>> rescaled_thetas = model.latent_scores(data)
     >>> # Or alternatively by directly converting the old ones
     >>> rescaled_thetas = model.transform_theta(thetas)
     >>> # Plot the differences
-    >>> model.plot.plot_latent_score_distribution(thetas).show()
-    >>> model.plot.plot_latent_score_distribution(rescaled_thetas).show()
+    >>> model.plot.latent_score_distribution(thetas).show()
+    >>> model.plot.latent_score_distribution(rescaled_thetas).show()
     >>> # Plot an item on the bit transformed scale
-    >>> model.plot.plot_item_probabilities(1).show()
+    >>> model.plot.item_probabilities(1).show()
     """
     def __init__(
         self,
@@ -96,7 +96,7 @@ class Bit(Scale):
         population_theta: torch.Tensor = None,
         start_theta: torch.Tensor = None,
         items: list[int] = None,
-        grid_points: int = 400,
+        grid_points: int = 4000,
         mc_start_theta_approx: bool = False,
         **kwargs
     ):
@@ -246,26 +246,15 @@ class Bit(Scale):
             if theta.requires_grad:
                 theta.requires_grad_(False)
 
-            gradients = torch.zeros(theta.shape[0], len(self.model.item_categories), theta.shape[1])
-            theta_scores = theta.clone()
-            theta_scores.requires_grad_(True)
-            probs = self.model.item_probabilities(theta_scores)
-            entropies = entropy(probs)
-
-            for item in range(entropies.shape[1]):
-                if theta_scores.grad is not None:
-                    theta_scores.grad.zero_()
-                entropies[:, item].sum().backward(retain_graph=True)
-                for latent_variable in range(theta.shape[1]):
-                    gradients[:, item, latent_variable] = theta_scores.grad[:, latent_variable]
-
-            gradients[gradients.isnan()] = 0.
-            if self.items is not None:
-                gradients = gradients[:, self.items, :]
-
-            # sum over items and add dimension for jacobian
+            probs = self.model.item_probabilities(theta)
+            prob_grads = self.model.probability_gradients(theta, rescale=False)[:, self.items, :, 0]
+            entropy_gradient_summands = probs.log2() * prob_grads
+            item_bit_gradients = entropy_gradient_summands.nansum(dim=2).abs()
+            gradients = item_bit_gradients.sum(dim=1)
+            
             # multiply by -1 if we are inversely related to the theta scores
-            return self._invert_scale_multiplier.flatten() * gradients.abs().sum(dim=1).unsqueeze(dim=-1)
+            # Add dimensions for jacobian to match method signature
+            return self._invert_scale_multiplier.flatten() * gradients[..., None, None]
         else:
             raise NotImplementedError("Multidimensional bit scale gradients is not implemented.")
         # if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
@@ -479,7 +468,7 @@ class Bit(Scale):
 
             # Convert back to non-inverted theta scale and compute grid entropies
             output = self.model(latent_variable_grid * invert_scale_multiplier)
-            entropies = entropy(self.model.probabilities_from_output(output))[:, self.items]
+            entropies = entropy(self.model.probabilities_from_output(output), log_base=2)[:, self.items]
 
             # Compute the absolute difference between each grid point entropy and the previous one
             diff = torch.zeros_like(entropies)

@@ -21,7 +21,7 @@ class SurprisalSpline(BaseIRTModel):
         affect which items. True indicates a relationship exists.
     knots : list[float], optional
         Positions of the internal knots (bounds excluded) for the B-spline basis functions. If not provided, defaults to
-        [-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7].
+        [-1.7, -0.7, 0, 0.7, 1.7].
     degree : int, optional
         Degree of the B-spline polynomials. Defaults to 3 (cubic splines).
 
@@ -82,7 +82,7 @@ class SurprisalSpline(BaseIRTModel):
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         if knots is None:
-            knots = torch.tensor([-1.7, -0.8, -0.3, 0, 0.3, 0.8, 1.7])
+            knots = torch.tensor([-1.7, -0.7, 0, 0.7, 1.7])
         else:
             knots = torch.tensor(knots)
 

@@ -30,7 +30,7 @@ setup(
         "pandas>=2.2.0,<4.0.0",
         "plotly>=5.19.0,<7.0.0",
         "factor_analyzer>=0.4.1",
-        "splinetorch>=0.0.1", 
+        "splinetorch>=0.0.2", 
     ],
     zip_safe=False,
 )

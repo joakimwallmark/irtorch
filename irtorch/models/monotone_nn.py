@@ -243,12 +243,11 @@ class MonotoneNN(BaseIRTModel):
             x1 = F.elu(x[:, ::3])
             x2 = -F.elu(-x[:, 1::3])
             x3 = BoundedELU.apply(x[:, 2::3], 1.0)
-            y = torch.stack((x1, x2, x3), dim=2).view(x.shape)
-        else:
-            x1 = F.elu(x[:, ::2])
-            x2 = -F.elu(-x[:, 1::2])
-            y = torch.stack((x1, x2), dim=2).view(x.shape)
-        return y
+            return torch.stack((x1, x2, x3), dim=2).view(x.shape)
+        
+        x1 = F.elu(x[:, ::2])
+        x2 = -F.elu(-x[:, 1::2])
+        return torch.stack((x1, x2), dim=2).view(x.shape)
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """

@@ -68,12 +68,13 @@ class MonotonePolynomial(BaseIRTModel):
         separate: str = "categories",
         negative_latent_variable_item_relationships: bool = True,
     ):
+        if item_categories is None and data is None:
+            raise ValueError("Either item_categories or data must be provided to initialize the model.")
+        
         if item_categories is None:
-            if data is None:
-                raise ValueError("Either item_categories or data must be provided to initialize the model.")
-            else:
-                # replace nan with -inf to get max
-                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+            # replace nan with -inf to get max
+            data_no_nan = torch.where(torch.isnan(data), float("-inf"), data)
+            item_categories = (data_no_nan.max(dim=0).values + 1).int().tolist()
                 
         super().__init__(latent_variables, item_categories)
         if item_theta_relationships is not None:

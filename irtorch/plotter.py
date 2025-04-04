@@ -20,7 +20,7 @@ DEFAULT_COLORSCALE = "Greens"
 class Plotter:
     """
     Class for producing various plots from an IRT model.
-    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `plot` property. 
+    A fitted :doc:`model <irt_models>` typically holds an instance of this class in its `plot` property.
     Thus the methods can be accessed through `model.plot.method_name()`.
 
     Parameters
@@ -242,7 +242,7 @@ class Plotter:
         latent_indices = [theta - 1 for theta in latent_variables]
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
-        
+
         mean_output = self.model(theta_grid)
         item_entropies = entropy(self.model.probabilities_from_output(mean_output))[:, item - 1]
 
@@ -264,7 +264,7 @@ class Plotter:
                 start_idx = min_indices[-1].item()  # get the last index
                 scores_to_plot = scores_to_plot[start_idx:]
                 item_entropies = item_entropies[start_idx:]
-                
+
             fig = self._2d_line_plot(
                 x = scores_to_plot,
                 y = item_entropies,
@@ -275,9 +275,9 @@ class Plotter:
             )
             fig.update_yaxes(range=[0, None])
             return fig
-        
+
         if len(latent_variables) == 2:
-            grid_size = int(np.sqrt(item_entropies.size()))
+            grid_size = int(np.sqrt(item_entropies.numel()))
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
@@ -339,7 +339,7 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
-        
+
         Returns
         -------
         go.Figure
@@ -362,7 +362,7 @@ class Plotter:
         latent_indices = [theta - 1 for theta in latent_variables]
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
-        
+
         if expected_sum_score:
             scores_to_plot = self.model.expected_scores(theta_grid, return_item_scores=False).unsqueeze(1)
         elif rescale and self.model.scale:
@@ -393,10 +393,10 @@ class Plotter:
                 start_idx = min_indices[-1].item()  # get the last index
                 scores_to_plot = scores_to_plot[start_idx:]
                 log_likelihood = log_likelihood.detach_().squeeze_()[start_idx:]
-                
+
             if x_label is None and expected_sum_score:
                 x_label = "Expected sum score"
-                
+
             fig = self._2d_line_plot(
                 x = scores_to_plot,
                 y = log_likelihood,
@@ -435,7 +435,7 @@ class Plotter:
                 z_label = "Log-likelihood",
                 colorscale = colorscale
             )
-        
+
     @torch.no_grad()
     def item_latent_variable_relationships(
         self,
@@ -456,7 +456,7 @@ class Plotter:
             If not provided, the relationships are computed using :meth:`irtorch.models.BaseIRTModel.expected_item_score_gradients`.
         theta : torch.Tensor, optional
             The theta scores to use for computing the relationships. Need to be on the original theta scale.
-            If not provided, the training theta scores are used. (default is None)	
+            If not provided, the training theta scores are used. (default is None)
         title : str, optional
             The title for the plot. (default is "Relationships: Items vs. latent variables")
         x_label : str, optional
@@ -480,11 +480,11 @@ class Plotter:
             relationships = self.model.expected_item_score_gradients(theta).mean(dim=0)
 
         relationships = relationships.numpy()
-        
+
         df = pd.DataFrame(relationships)
         df.columns = [f"{i+1}" for i in range(df.shape[1])]
         df.index = [f"Item {i+1}" for i in range(df.shape[0])]
-        
+
         fig = px.imshow(
             df,
             labels=dict(x=x_label, y=y_label, color="Relationship"),
@@ -499,7 +499,7 @@ class Plotter:
         per_item_height = 20
         total_height = base_height + (per_item_height * 80)
         fig.update_layout(height=total_height, width=800)
-        
+
         return fig
 
     @torch.no_grad()
@@ -603,7 +603,7 @@ class Plotter:
             scores_to_plot = self.model.transform_theta(theta_grid)
         else:
             scores_to_plot = theta_grid
-        
+
         if plot_derivative and len(latent_variables) == 1:
             prob_matrix = self.model.probability_gradients(theta_grid, rescale)[:, item - 1, :self.model.item_categories[item - 1], latent_variables[0] - 1]
         else:
@@ -626,7 +626,7 @@ class Plotter:
 
                 group_probs_data = group_probs_data[:, item - 1, 0:self.model.item_categories[item - 1]]
                 group_probs_model = group_probs_model[:, item - 1, 0:self.model.item_categories[item - 1]]
-                
+
             else:
                 group_probs_data = group_probs_model = latent_group_means = None
 
@@ -641,7 +641,7 @@ class Plotter:
                 y_label=y_label or "Probability",
                 grayscale=grayscale
             )
-        
+
         if len(latent_variables) == 2:
             return self._item_probabilities_3dplot(
                 scores_to_plot[:, latent_indices[0]],
@@ -725,7 +725,7 @@ class Plotter:
         latent_indices = [theta - 1 for theta in latent_variables]
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
-        
+
         if theta_grid.shape[0] > 2000:
             logger.warning("A large grid of latent variable values is used for plotting. This may take a while. Consider lowering the steps argument.")
 
@@ -754,7 +754,7 @@ class Plotter:
                 start_idx = min_indices[-1].item()  # get the last index
                 scores_to_plot = scores_to_plot[start_idx:]
                 information = information.detach_().squeeze_()[start_idx:]
-                
+
             return self._2d_line_plot(
                 x = scores_to_plot,
                 y = information,
@@ -764,7 +764,7 @@ class Plotter:
                 color = color or None
             )
         if len(latent_variables) == 2:
-            grid_size = int(np.sqrt(information.size()))
+            grid_size = int(np.sqrt(information.numel()))
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
@@ -844,7 +844,7 @@ class Plotter:
         latent_indices = [theta - 1 for theta in latent_variables]
 
         theta_grid = self._get_theta_grid_for_plotting(latent_variables, theta_range, second_theta_range, steps, fixed_thetas, latent_indices, rescale)
-        
+
         if items is not None:
             item_mask = torch.zeros(self.model.items, dtype=bool)
             item_mask[[item - 1 for item in items]] = 1
@@ -852,7 +852,7 @@ class Plotter:
         else:
             sum_scores = self.model.expected_scores(theta_grid, return_item_scores=False)
 
-                
+
         if rescale and self.model.scale:
             scores_to_plot = self.model.transform_theta(theta_grid)[:, latent_indices]
         else:
@@ -876,7 +876,7 @@ class Plotter:
                 start_idx = min_indices[-1].item()  # get the last index
                 scores_to_plot = scores_to_plot[start_idx:]
                 sum_scores = sum_scores[start_idx:]
-                
+
             fig = self._2d_line_plot(
                 x = scores_to_plot,
                 y = sum_scores,
@@ -887,9 +887,9 @@ class Plotter:
             )
             fig.update_yaxes(range=[0, None])
             return fig
-        
+
         if len(latent_variables) == 2:
-            grid_size = int(np.sqrt(sum_scores.size()))
+            grid_size = int(np.sqrt(sum_scores.numel()))
             return self._3d_surface_plot(
                 x = scores_to_plot[:, 0].reshape((grid_size, grid_size)),
                 y = scores_to_plot[:, 1].reshape((grid_size, grid_size)),
@@ -922,7 +922,7 @@ class Plotter:
         else:
             theta_source = None
 
-        if fixed_thetas is None:    
+        if fixed_thetas is None:
             if theta_source is not None:
                 fixed_thetas = theta_source[:, mask].median(dim=0).values
             else:
@@ -976,7 +976,7 @@ class Plotter:
         color: str
     ) -> go.Figure:
         df = pd.DataFrame({
-            "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(), 
+            "x": x.cpu().detach().numpy() if x.is_cuda else x.detach().numpy(),
             "y": y.cpu().detach().numpy() if y.is_cuda else y.detach().numpy()
         })
         fig = px.line(
@@ -1081,7 +1081,7 @@ class Plotter:
             colors = self._generate_grayscale_colors(num_categories)
         else:
             colors = px.colors.qualitative.Plotly
-        
+
         # Adjust the size of the palette if there are more categories than colors
         if len(colors) < num_categories:
             colors = colors * (num_categories // len(colors) + 1)
@@ -1182,7 +1182,7 @@ class Plotter:
 
         # Ensure we have enough colors for the number of responses
         if len(colors) < num_responses:
-            colors += colors * (num_responses // len(colors) + 1) 
+            colors += colors * (num_responses // len(colors) + 1)
 
         fig = go.Figure()
         for response_category in range(num_responses):

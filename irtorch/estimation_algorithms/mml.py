@@ -173,8 +173,12 @@ class MML(BaseIRTAlgorithm):
             The logarithm of the integral weights associated with the points.
         scheduler : torch.optim.lr_scheduler.ReduceLROnPlateau
             The learning rate scheduler.
-        learning_rate_updates_before_stopping : int, optional
+        learning_rate_updates_before_stopping : int
             The number of times the learning rate can be reduced before stopping training.
+
+        Returns
+        -------
+        None
         """
         lr_update_count = 0
         best_model_state = None

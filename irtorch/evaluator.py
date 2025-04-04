@@ -7,7 +7,7 @@ import numpy as np
 from torch.distributions import MultivariateNormal
 from irtorch.estimation_algorithms import VAE, MML
 from irtorch.quantile_mv_normal import QuantileMVNormal
-from irtorch.gaussian_mixture_model import GaussianMixtureModel
+from irtorch.torch_modules.gaussian_mixture_model import GaussianMixtureModel
 from irtorch._internal_utils import (
     conditional_score_distribution,
     sum_incorrect_probabilities,

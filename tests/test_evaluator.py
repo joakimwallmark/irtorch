@@ -7,7 +7,7 @@ from irtorch.models import BaseIRTModel
 from irtorch.evaluator import Evaluator
 from irtorch.estimation_algorithms import AE
 from irtorch.quantile_mv_normal import QuantileMVNormal
-from irtorch.gaussian_mixture_model import GaussianMixtureModel
+from irtorch.torch_modules.gaussian_mixture_model import GaussianMixtureModel
 
 @pytest.fixture
 def algorithm(latent_variables):

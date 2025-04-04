@@ -420,13 +420,18 @@ def impute_missing_internal(
 
     if method == "zero":
         imputed_data = torch.where(torch.isnan(imputed_data), torch.tensor(0.0), imputed_data)
-    elif method == "mean":
+        return imputed_data
+        
+    if method == "mean":
         means = imputed_data.nanmean(dim=0)
         mask = torch.isnan(imputed_data)
         imputed_data[mask] = means.repeat(data.shape[0], 1)[mask]
-    elif method == "random incorrect":
+        return imputed_data
+        
+    if method == "random incorrect":
         if mc_correct is None:
             raise ValueError("mc_correct must be provided when using random_incorrect imputation without a model")
+            
         if item_categories is None:
             item_categories = (torch.where(~imputed_data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
@@ -438,13 +443,9 @@ def impute_missing_internal(
             missing_indices = (imputed_data[:, col].isnan()).squeeze()
             # randomly sample from the incorrect responses and replace missing
             imputed_data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))]
-    else:
-        raise ValueError(
-            f"{method} imputation is not implmented"
-        )
-        
+        return imputed_data
 
-    return imputed_data
+    raise ValueError(f"{method} imputation is not implemented")
 
 def sum_score(data: torch.Tensor, mc_correct: list[int] = None):
     """

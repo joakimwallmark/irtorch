@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-import torch.nn as nn
+from torch import nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class ThreeParameterLogistic(BaseIRTModel):
@@ -17,7 +17,7 @@ class ThreeParameterLogistic(BaseIRTModel):
         Number of items.
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
-    
+
     Notes
     -----
     For an item :math:`j`, the model defines the probability for responding correctly as:
@@ -36,7 +36,7 @@ class ThreeParameterLogistic(BaseIRTModel):
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\mathbf{a}_j` is a vector of weights for item :math:`j`.
     - :math:`d_j` is the bias term for item :math:`j`.
-    - :math:`c_j` is the probably of guessing correctly on item :math:`j`.
+    - :math:`c_j` is the probability of guessing correctly on item :math:`j`.
 
     Examples
     --------
@@ -64,9 +64,9 @@ class ThreeParameterLogistic(BaseIRTModel):
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (items, latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({items}, {latent_variables})."
+                    f"item_theta_relationships must have shape ({items}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationships must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
         else:
             item_theta_relationships = torch.ones(items, latent_variables, dtype=torch.bool)
@@ -91,7 +91,7 @@ class ThreeParameterLogistic(BaseIRTModel):
         Parameters
         ----------
         theta : torch.Tensor
-            2D tensor with latent variables. Rows are respondents and latent variables are columns. 
+            2D tensor with latent variables. Rows are respondents and latent variables are columns.
 
         Returns
         -------
@@ -146,9 +146,9 @@ class ThreeParameterLogistic(BaseIRTModel):
             A 2D tensor with output. Columns are item response categories and rows are respondents
         missing_mask: torch.Tensor, optional
             A 2D tensor with missing data mask. (default is None)
-        loss_reduction: str, optional 
+        loss_reduction: str, optional
             The reduction argument. (default is 'sum')
-        
+
         Returns
         -------
         torch.Tensor
@@ -167,15 +167,13 @@ class ThreeParameterLogistic(BaseIRTModel):
         ll = reshaped_probabilities[torch.arange(data.size(0)), data].log()
         if loss_reduction == "sum":
             return ll.sum()
-        elif loss_reduction == "none":
+        if loss_reduction == "none":
             if missing_mask is not None:
                 ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
                 ll_masked[~missing_mask] = ll
                 return ll_masked
-            else:
-                return ll
-        else:
-            raise ValueError("loss_reduction must be 'sum' or 'none'")
+            return ll
+        raise ValueError("loss_reduction must be 'sum' or 'none'")
 
     def item_parameters(self, irt_format = False) -> pd.DataFrame:
         """
@@ -222,7 +220,7 @@ class ThreeParameterLogistic(BaseIRTModel):
         ----------
         theta : torch.Tensor, optional
             Not needed for this model. (default is None)
-            
+
         Returns
         -------
         torch.Tensor

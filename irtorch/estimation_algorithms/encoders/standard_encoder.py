@@ -1,5 +1,5 @@
 import logging
-import torch.nn as nn
+from torch import nn
 from irtorch.estimation_algorithms.encoders import BaseEncoder
 
 logger = logging.getLogger("irtorch")

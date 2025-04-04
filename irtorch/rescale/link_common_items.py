@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from irtorch.rescale import Scale

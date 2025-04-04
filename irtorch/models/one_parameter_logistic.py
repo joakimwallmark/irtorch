@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-import torch.nn as nn
+from torch import nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class OneParameterLogistic(BaseIRTModel):

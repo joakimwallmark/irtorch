@@ -1,6 +1,6 @@
 import logging
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.torch_modules.monotone_polynomial import MonotonePolynomialModule
@@ -79,9 +79,9 @@ class MonotonePolynomial(BaseIRTModel):
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
         else:
             item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)

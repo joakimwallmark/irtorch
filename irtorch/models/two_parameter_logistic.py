@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-import torch.nn as nn
+from torch import nn
 from irtorch.models.base_irt_model import BaseIRTModel
 
 class TwoParameterLogistic(BaseIRTModel):
@@ -17,7 +17,7 @@ class TwoParameterLogistic(BaseIRTModel):
         Number of items.
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
-    
+
     Notes
     -----
     For an item :math:`j`, the model defines the probability for responding correctly as:
@@ -62,9 +62,9 @@ class TwoParameterLogistic(BaseIRTModel):
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (items, latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({items}, {latent_variables})."
+                    f"item_theta_relationships must have shape ({items}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationships must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
         else:
             item_theta_relationships = torch.ones(items, latent_variables, dtype=torch.bool)
@@ -86,7 +86,7 @@ class TwoParameterLogistic(BaseIRTModel):
     def reset_parameters(self) -> None:
         nn.init.ones_(self.weight_param)
         nn.init.zeros_(self.bias_param)
-    
+
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
@@ -94,7 +94,7 @@ class TwoParameterLogistic(BaseIRTModel):
         Parameters
         ----------
         theta : torch.Tensor
-            2D tensor with latent variables. Rows are respondents and latent variables are columns. 
+            2D tensor with latent variables. Rows are respondents and latent variables are columns.
 
         Returns
         -------
@@ -103,7 +103,7 @@ class TwoParameterLogistic(BaseIRTModel):
         """
         bias = torch.zeros(self.output_size, device=theta.device)
         bias[self.free_bias] = self.bias_param
-        
+
         weights = torch.zeros(self.items, self.latent_variables, device=theta.device)
         weights[self.free_weights] = self.weight_param
         weighted_theta = torch.matmul(theta, weights.T).repeat_interleave(self.max_item_responses, dim=1)
@@ -129,7 +129,7 @@ class TwoParameterLogistic(BaseIRTModel):
         """
         if irt_format and self.latent_variables > 1:
             raise ValueError("IRT format is only available for unidimensional models.")
-        
+
         biases = self.bias_param
         biases = biases.reshape(-1, 1)
         weights = torch.zeros(self.items, self.latent_variables)
@@ -143,7 +143,7 @@ class TwoParameterLogistic(BaseIRTModel):
         else:
             biases_df = pd.DataFrame(biases.detach().numpy())
             biases_df.columns = ["d"]
-            
+
         parameters = pd.concat([weights_df, biases_df], axis=1)
 
         return parameters
@@ -157,7 +157,7 @@ class TwoParameterLogistic(BaseIRTModel):
         ----------
         theta : torch.Tensor, optional
             Not needed for this model. (default is None)
-            
+
         Returns
         -------
         torch.Tensor
@@ -166,4 +166,3 @@ class TwoParameterLogistic(BaseIRTModel):
         weights = torch.zeros(self.items, self.latent_variables)
         weights[self.free_weights] = self.weight_param
         return weights.sign().int()
-    

@@ -35,7 +35,7 @@ def test_init_validation():
         SurprisalSpline()
 
     # Test invalid item_theta_relationships shape
-    with pytest.raises(ValueError, match="latent_item_connections must have shape"):
+    with pytest.raises(ValueError, match="item_theta_relationshipsions must have shape"):
         SurprisalSpline(
             item_categories=[2, 3],
             item_theta_relationships=torch.ones(3, 2, dtype=torch.bool)

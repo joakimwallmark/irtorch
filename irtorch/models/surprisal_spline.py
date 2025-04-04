@@ -66,9 +66,8 @@ class SurprisalSpline(BaseIRTModel):
         if item_categories is None:
             if data is None:
                 raise ValueError("Either item_categories or data must be provided to initialize the model.")
-            else:
-                # replace nan with -inf to get max
-                item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
+            # replace nan with -inf to get max
+            item_categories = (torch.where(~data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
 
         super().__init__(latent_variables=latent_variables, item_categories=item_categories)
         if item_theta_relationships is None:
@@ -76,9 +75,9 @@ class SurprisalSpline(BaseIRTModel):
         else:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"latent_item_connections must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "latent_item_connections must be boolean type."
+            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
             assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
 
         if knots is None:
@@ -109,7 +108,7 @@ class SurprisalSpline(BaseIRTModel):
         Parameters
         ----------
         theta : torch.Tensor
-            2D tensor with latent variables. Rows are respondents and latent variables are columns. 
+            2D tensor with latent variables. Rows are respondents and latent variables are columns.
 
         Returns
         -------
@@ -122,7 +121,7 @@ class SurprisalSpline(BaseIRTModel):
             rescaled_theta = theta.sigmoid()
             basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
             basis = basis.view(self.latent_variables, -1, self.n_bases)  # (lv, batch, basis)
-        
+
         all_coef = torch.zeros(self.latent_variables, self.n_bases, self.items, max(self.item_categories)-1, device=theta.device)
         # (lv, basis, items, max(item_categories)-1)
         all_coef[self.spline_mask] = torch.nn.functional.softplus(self.coefficients)
@@ -172,9 +171,9 @@ class SurprisalSpline(BaseIRTModel):
             A 2D tensor with output. Columns are item response categories and rows are respondents
         missing_mask: torch.Tensor, optional
             A 2D tensor with missing data mask. (default is None)
-        loss_reduction: str, optional 
+        loss_reduction: str, optional
             The reduction argument. (default is 'sum')
-        
+
         Returns
         -------
         torch.Tensor
@@ -192,17 +191,22 @@ class SurprisalSpline(BaseIRTModel):
         ll = reshaped_probabilities[torch.arange(data.size(0)), data].log()
         if loss_reduction == "sum":
             return ll.sum()
-        elif loss_reduction == "none":
+        if loss_reduction == "none":
             if missing_mask is not None:
                 ll_masked = torch.full((respondents, ), torch.nan, device= ll.device)
                 ll_masked[~missing_mask] = ll
                 return ll_masked
-            else:
-                return ll
-        else:
-            raise ValueError("loss_reduction must be 'sum' or 'none'")
+            return ll
+        raise ValueError("loss_reduction must be 'sum' or 'none'")
 
     def precompute_basis(self, theta: torch.Tensor):
+        """Precompute the B-spline basis functions for the given theta values. Primarily used by certain fitting algorithms.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor with latent variables. Rows are respondents and latent variables are columns.
+        """
         rescaled_theta = theta.sigmoid()
         basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
         self.basis = basis.view(self.latent_variables, -1, self.n_bases)

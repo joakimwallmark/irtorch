@@ -3,7 +3,7 @@ from torch import nn
 from irtorch.models.base_irt_model import BaseIRTModel
 from irtorch.torch_modules import BSplineBasisFunction
 
-class Spline(BaseIRTModel):
+class MonotoneBSpline(BaseIRTModel):
     r"""
     B-Spline IRT model for polytomously scored items.
 
@@ -138,16 +138,14 @@ class Spline(BaseIRTModel):
             all_coef = all_coef.cumsum(dim=1) # monotonicity
             # (lv, batch, items, max(self.item_categories))
             splines = torch.einsum('...pb,...bic->...pic', basis, all_coef)
-            output = splines.sum(dim=0)
-            # TODO pad -inf for first category
-            # output = splines...
+            output = splines.cumsum(dim=3) # sum splines over categories (instead of gpc_multiplier)
+            output = output.sum(dim=0)
 
         bias = torch.zeros((1, self.items, self.max_item_responses), device=theta.device)
         bias[:, self.free_bias] = self.bias_param
         output += bias
         output[:, self.missing_categories] = -torch.inf
         return output
-
 
     def probabilities_from_output(self, output: torch.Tensor) -> torch.Tensor:
         """
@@ -163,8 +161,7 @@ class Spline(BaseIRTModel):
         torch.Tensor
             3D torch tensor with dimensions (respondents, items, item categories).
         """
-        reshaped_output = output.reshape(-1, self.max_item_responses)
-        return F.softmax(reshaped_output, dim=1).reshape(output.shape[0], self.items, self.max_item_responses)
+        return nn.functional.softmax(output, dim=2)
 
 
     def item_theta_relationship_directions(self, *args) -> torch.Tensor:
@@ -176,6 +173,17 @@ class Spline(BaseIRTModel):
         torch.Tensor
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
-        if self.negative_latent_variable_item_relationships:
-            return (self._modules["mono_poly"].directions * self._modules["mono_poly"].directions_mask).transpose(0, 1).sign().int()
         return torch.ones(self.items, self.latent_variables).int()
+
+
+    def precompute_basis(self, theta: torch.Tensor):
+        """Precompute the B-spline basis functions for the given theta values. Primarily used by certain fitting algorithms.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            A 2D tensor with latent variables. Rows are respondents and latent variables are columns.
+        """
+        rescaled_theta = theta.sigmoid()
+        basis = BSplineBasisFunction.apply(rescaled_theta.T.flatten(), self.knots, self.degree)
+        self.basis = basis.view(self.latent_variables, -1, self.n_bases)

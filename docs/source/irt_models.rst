@@ -35,6 +35,10 @@ IRT models
     :show-inheritance:
     :members:
 
+.. autoclass:: irtorch.models.MonotoneBSpline
+    :show-inheritance:
+    :members:
+
 .. autoclass:: irtorch.models.MonotoneNN
     :show-inheritance:
     :members:

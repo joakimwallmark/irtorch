@@ -5,7 +5,7 @@ from irtorch.torch_modules import BSplineBasisFunction
 
 class MonotoneBSpline(BaseIRTModel):
     r"""
-    B-Spline IRT model for polytomously scored items.
+    Monotone B-Spline IRT model for polytomously scored items with ordered responses.
 
     Parameters
     ----------
@@ -42,16 +42,16 @@ class MonotoneBSpline(BaseIRTModel):
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
     - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
+    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic B-spline.
     - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
     
     Examples
     --------
-    >>> from irtorch.models import Spline
+    >>> from irtorch.models import MonotoneBSpline
     >>> from irtorch.estimation_algorithms import MML
     >>> from irtorch.load_dataset import swedish_national_mathematics_1
     >>> data = swedish_national_mathematics_1()
-    >>> model = Spline(data)
+    >>> model = MonotoneBSpline(data)
     >>> model.fit(train_data=data, algorithm=MML())
     """
     def __init__(

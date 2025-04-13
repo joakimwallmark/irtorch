@@ -96,7 +96,7 @@ class GeneralizedPartialCredit(BaseIRTModel):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.weight_param, mean=1., std=0.01)
+        nn.init.ones_(self.weight_param)
         nn.init.zeros_(self.bias_param)
     
     def forward(self, theta: torch.Tensor) -> torch.Tensor:

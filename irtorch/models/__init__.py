@@ -9,4 +9,5 @@ from .graded_response import GradedResponse
 from .nested_logit import NestedLogit
 from .nominal_response import NominalResponse
 from .monotone_polynomial import MonotonePolynomial
-from .surprisal_spline import SurprisalSpline
+from .surprisal_spline import Spline
+from .spline import Spline

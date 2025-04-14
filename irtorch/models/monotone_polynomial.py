@@ -29,26 +29,6 @@ class MonotonePolynomial(BaseIRTModel):
     negative_latent_variable_item_relationships : bool, optional
         Whether to allow for negative latent variable item relationships. (Default: True)
 
-    Notes
-    -----
-    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item responses/scores, the model defines the probability for responding with a score of :math:`x` as follows:
-
-    .. math::
-
-        P(X_j=x | \mathbf{\theta}) = \frac{
-            \exp(\delta_{jx}(\mathbf{\theta}))
-        }{
-            \sum_{m=0}^{M_j}
-                \exp(\delta_{jm}(\mathbf{\theta}))
-        },
-
-    where:
-
-    - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic polynomial as per :cite:t:`Falk2016`.
-    - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
-    
     Examples
     --------
     >>> from irtorch.models import MonotonePolynomial

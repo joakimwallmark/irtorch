@@ -31,19 +31,19 @@ class MonotoneBSpline(BaseIRTModel):
 
     .. math::
 
-        P(X_j=x | \mathbf{\theta}) = \frac{
-            \exp(\delta_{jx}(\mathbf{\theta}))
-        }{
-            \sum_{m=0}^{M_j}
-                \exp(\delta_{jm}(\mathbf{\theta}))
-        },
+        P(X_j=x | \mathbf{\theta}) = \begin{cases}
+            \dfrac{1}
+            {1+\sum_{g=1}^{M_i}\exp \left(d_{jg}+\sum_{m=1}^g\delta_{jm}(\mathbf{\theta})\right)}, & \text{if } x = 0\\
+            \dfrac{\exp \left(d_{jx}+\sum_{m=1}^x\delta_{jm}(\mathbf{\theta})\right)}
+            {1+\sum_{g=1}^{M_i}\exp \left(d_{jg}+\sum_{m=1}^g\delta_{jm}(\mathbf{\theta})\right)}, & \text{otherwise}
+        \end{cases}
 
     where:
 
     - :math:`\mathbf{\theta}` is a vector of latent variables.
-    - :math:`\delta_{jm}(\mathbf{\theta}) = \sum_{c=0}^{m}\text{monotone}_{jc}(\mathbf{\theta}) + b_{jm}`.
-    - :math:`\text{monotone}_{jm}(\mathbf{\theta})` is a monotonic B-spline.
-    - Note that when separate='items', :math:`\text{monotone}_{jm}(\mathbf{\theta})` is the same for all categories for the same item.
+    - :math:`\delta_{jm}(\mathbf{\theta})` is a monotonic B-spline.
+    - :math:`b_{jm}` is a bias term.
+    - Note that when separate='items', :math:`\delta_{jm}(\mathbf{\theta})` is the same for all response categories for the same item.
     
     Examples
     --------
@@ -115,6 +115,19 @@ class MonotoneBSpline(BaseIRTModel):
 
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the model.
+
+        Parameters
+        ----------
+        theta : torch.Tensor
+            2D tensor with latent variables. Rows are respondents and latent variables are columns. 
+
+        Returns
+        -------
+        output : torch.Tensor
+            3D tensor (respondents, items, item categories).
+        """
         if self.basis is not None: # use precomputed basis if available
             basis = self.basis
         else:

@@ -7,7 +7,7 @@ class NestedLogit(BaseIRTModel):
     Nested logit IRT model for multiple choice items :cite:p:`Suh2010`. The original paper uses a 3PL model :class:`irtorch.models.ThreeParameterLogistic` nested with a nominal response model :class:`irtorch.models.NominalResponse`.
     This implementation allows one to choose any IRT model for dichotomously scored items in place of the 3PL, and either a nominal response model or B-splines for the incorrect responses.
 
-    Requires the correct response model to be specified in advance. It can also be a previously fitted model. The incorrect response probabilities are then estimated using a nominal response model or B-splines.
+    Requires the correct response model to be specified in advance. It can also be a previously fitted model.
 
     Parameters
     ----------
@@ -30,6 +30,24 @@ class NestedLogit(BaseIRTModel):
     knots : list[float], optional
         The positions of the internal knots (bounds excluded) for the B-spline basis functions when using the B-spline model for the incorrect responses. If not provided, defaults to
         [-1.7, -0.7, 0, 0.7, 1.7].
+
+    Notes
+    -----
+    For an item :math:`j` with :math:`m=0, 1, 2, \ldots, M_j` possible item scores, the model defines the probability for responding with a score of :math:`x` as follows:
+
+    .. math::
+
+        P(X_j=x | \mathbf{\theta}) = \begin{cases}
+            P(X_j=c_j|\mathbf{\theta}), & \text{if } x = c_j\\
+            (1-P(X_j=c_j|\mathbf{\theta}))P(X_j=x|x\neq c_j, \mathbf{\theta}), & \text{otherwise}
+        \end{cases}
+    
+    where:
+
+    - :math:`\mathbf{\theta}` is a vector of latent variables.
+    - :math:`c_j` is the correct response option for item :math:`j`.
+    - :math:`P(X_j=c_j|\mathbf{\theta})` is computed using the model supplied as correct_response_model.
+    - The conditional probabilities :math:`P(X_j=x|x\neq c_j, \mathbf{\theta})` are estimated using either a nominal response model or B-splines.
 
     Examples
     --------

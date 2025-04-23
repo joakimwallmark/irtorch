@@ -12,7 +12,7 @@ logger = logging.getLogger("irtorch")
 
 class Rotate(Scale):
     """
-    Rotates the latent variables to improve interpretability. Utilizes the factor_analyzer package for rotations <https://pypi.org/project/factor-analyzer/>
+    Rotates the latent variables to improve interpretability. Utilizes the `factor_analyzer <https://pypi.org/project/factor-analyzer/>`_ package for rotations.
     
     If the model has already been rescaled using :meth:`irtorch.rescale` the rotation is applied to the rescaled latent variables.
     If you do not want this, use :meth:`irtorch.models.BaseIRTModel.detach_rescale` before applying the rotation.
@@ -26,9 +26,9 @@ class Rotate(Scale):
     theta : torch.Tensor, optional
         The original scale theta scores to compute the latent variable "loadings" for each item.
     loadings: torch.Tensor, optional
-        A torch tensor with the loadings for each item. If specified, data and theta are ignored and the loadings are used for rotation. (default is
+        A torch tensor with the loadings for each item. If specified, data and theta are ignored and the loadings are used for rotation. (default is None)
     rotation_method : str, optional
-        The rotation method to use. For available options, see . (default is "promax")
+        The rotation method to use. For available options, see `factor_analyzer <https://pypi.org/project/factor-analyzer/>`_. (default is "promax")
     rotation_matrix : torch.Tensor, optional
         A torch tensor with the rotation matrix. If specified, data, theta and rotation_method are ignored
         and the rotation matrix is used directly. (default is None)

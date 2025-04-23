@@ -7,7 +7,7 @@ Install on your own machine
 ---------------------------
 **Prerequisites**
 
-Ensure you have Python 3.10 or later installed on your system. If not, download and install it from `Python's official website <https://www.python.org/downloads/>`__. We suggest you check the option to add python.exe to PATH during installation to be able to run Python from the command line.
+Ensure you have Python 3.10 or later installed on your system. If you don't, you can download and install it directly from `Python's official website <https://www.python.org/downloads/>`__ or by installing `the Anaconda distribution <https://www.anaconda.com/docs/getting-started/anaconda/install>`__. We suggest you check the option to add python.exe to PATH during installation to be able to run Python commands from the command line.
 
 **Installing IRTorch**
 
@@ -32,21 +32,19 @@ To install the latest version directly from GitHub, use:
 
 **Recommended Tools**
 
-You can run Python code and **IRTorch** directly from the terminal with python installed. There are also several ways to run **IRTorch** within Jupyter Notebooks on your own computer. One of the simplest ways is to use `JupyterLab <https://jupyter.org/>`__, which is a web-based interactive development environment where you can work with Jupyter notebooks, code, and data.
-
-1. Install the **jupyterlab** package:
+You can run Python code and **IRTorch** directly from the terminal with python installed. There are also several ways to run **IRTorch** within Jupyter Notebooks on your own computer. One of the easier ways is to use `JupyterLab <https://jupyter.org/>`__, which is a web-based interactive development environment where you can work with Jupyter notebooks, code, and data. It is included by default in the Anaconda distribution but can also be installed it separately:
 
 .. code-block:: bash
 
     pip install jupyterlab
 
-2. Start a JupyterLab session:
+When installed, a JupyterLab session can be started by running:
 
 .. code-block:: bash
 
     jupyter lab
 
-3. Create a new notebook and import the **IRTorch** package to start using it:
+Create a new notebook and import the **IRTorch** package to start using it:
 
 .. code-block:: python
 

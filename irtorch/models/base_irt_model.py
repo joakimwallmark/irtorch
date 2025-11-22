@@ -31,7 +31,7 @@ class BaseIRTModel(ABC, nn.Module):
         self,
         latent_variables: int,
         item_categories: list[int],
-        mc_correct: list[int] = None,
+        mc_correct: list[int] | None = None,
     ):
         super().__init__()
         if mc_correct is not None:
@@ -303,7 +303,7 @@ class BaseIRTModel(ABC, nn.Module):
 
         Parameters
         ----------
-        theta : torch.Tensor, optional
+        theta : torch.Tensor
             A 2D tensor with theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
         rescale_by_item_score : bool, optional
             Whether to rescale the expected items scores to have a max of one by dividing by the max item score. (default is True)
@@ -334,28 +334,22 @@ class BaseIRTModel(ABC, nn.Module):
         The last line gives us a linear equation that is solved using `torch.linalg.solve` to get :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})`.
         This is more efficient as computing :math:`\mathbf{J}^{-1}_f` is not needed.
         """
-        if theta.requires_grad:
-            theta.requires_grad_(False)
+        theta = theta.clone().requires_grad_(True)
 
-        gradients = torch.zeros(theta.shape[0], len(self.item_categories), theta.shape[1])
-        theta_scores = theta.clone()
-        theta_scores.requires_grad_(True)
-        expected_item_sum_scores = self.expected_scores(theta_scores, return_item_scores=True)
+        def compute_expected_scores(theta_single):
+            return self.expected_scores(theta_single.unsqueeze(0), return_item_scores=True).squeeze(0)
+
+        logger.info("Computing expected item score gradients...")
+        # vectorized version of jacobian
+        gradients = torch.vmap(torch.func.jacrev(compute_expected_scores))(theta)
+
         if not self.mc_correct and rescale_by_item_score:
-            expected_item_sum_scores = expected_item_sum_scores / (torch.tensor(self.item_categories) - 1)
-
-        # item score slopes for each item
-        for item in range(expected_item_sum_scores.shape[1]):
-            if theta_scores.grad is not None:
-                theta_scores.grad.zero_()
-            dynamic_print(f"Computing gradients for item {item+1}...")
-            expected_item_sum_scores[:, item].sum().backward(retain_graph=True)
-            gradients[:, item, :] = theta_scores.grad[:, :]
+            gradients = gradients / (torch.tensor(self.item_categories, device=theta.device) - 1).view(1, -1, 1)
 
         if rescale and self.scale:
             gradients = self._rescale_gradients(gradients, theta)
 
-        return gradients
+        return gradients.detach()
 
     def _rescale_gradients(self, gradients: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -478,12 +472,11 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
         item_sum_scores = self.expected_scores(theta)
-        item_theta_mask = torch.zeros(self.items, self.latent_variables)
-        for item, _ in enumerate(self.item_categories):
-            weights = linear_regression(theta, item_sum_scores[:,item].reshape(-1, 1))[1:].reshape(-1)
-            item_theta_mask[item, :] = weights.sign().int()
-
-        return item_theta_mask.int()
+        weights = linear_regression(theta, item_sum_scores)
+        # weights shape is (latent_variables + 1, items)
+        # remove bias and transpose to (items, latent_variables)
+        item_theta_mask = weights[1:].T.sign().int()
+        return item_theta_mask
 
     @torch.no_grad()
     def sample_test_data(self, theta: torch.Tensor) -> torch.Tensor:
@@ -646,6 +639,21 @@ class BaseIRTModel(ABC, nn.Module):
         return return_theta
 
     def _initial_theta_from_training_data(self, data, device):
+        """
+        Get initial theta estimates from the training data.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            The input data.
+        device : str
+            The device to use for computation.
+
+        Returns
+        -------
+        torch.Tensor
+            The initial theta estimates.
+        """
         try:
             self.to(device)
             data = data.to(device)
@@ -758,7 +766,7 @@ class BaseIRTModel(ABC, nn.Module):
     def _ml_map_theta_scores(
         self,
         data: torch.Tensor,
-        initial_theta_scores:torch.Tensor = None,
+        initial_theta_scores: torch.Tensor | None = None,
         theta_estimation: str = "ML",
         learning_rate: float = 0.3,
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -770,8 +778,8 @@ class BaseIRTModel(ABC, nn.Module):
         ----------
         data: torch.Tensor
             A 2D tensor with test data. Columns are items and rows are respondents
-        initial_theta_scores: torch.Tensor
-            A 2D tensor with the theta scores of the training data. Columns are latent variables and rows are respondents.
+        initial_theta_scores: torch.Tensor, optional
+            A 2D tensor with the theta scores of the training data. Columns are latent variables and rows are respondents. (default is None)
         theta_estimation: str, optional
             Method used to obtain the theta scores. Can be 'ML', 'MAP' for maximum likelihood or maximum a posteriori respectively. (default is 'ML')
         learning_rate: float, optional
@@ -857,7 +865,7 @@ class BaseIRTModel(ABC, nn.Module):
         return optimized_theta_scores
 
     @torch.no_grad()
-    def _eap_theta_scores(self, data: torch.Tensor, grid_points: int = None) -> torch.Tensor:
+    def _eap_theta_scores(self, data: torch.Tensor, grid_points: int | None = None) -> torch.Tensor:
         """
         Get the latent theta scores from test data using an already fitted model.
 
@@ -912,30 +920,47 @@ class BaseIRTModel(ABC, nn.Module):
         # Compute log of the prior.
         log_prior = prior_density.log_prob(theta_grid)
 
-        # Compute the log likelihood.
-        logits = self(theta_grid)
-        replicated_data = data.repeat_interleave(theta_grid.shape[0], dim=0)
-        replicated_logits = torch.cat([logits] * data.shape[0], dim=0)
-        replicated_theta_grid = torch.cat([theta_grid] * data.shape[0], dim=0)
-        log_prior = torch.cat([log_prior] * data.shape[0], dim=0)
-        missing_mask = get_missing_mask(replicated_data)
-        grid_log_likelihoods = self.log_likelihood(replicated_data, replicated_logits, missing_mask, loss_reduction = "none")
-        grid_log_likelihoods = grid_log_likelihoods.view(-1, data.shape[1]).nansum(dim=1) # sum likelihood over items
+        # Compute the log likelihood in batches to avoid memory issues
+        batch_size = 100
+        expected_theta_list = []
+        
+        # Compute logits for the grid once
+        logits_grid = self(theta_grid) # (grid_points, items, cats)
 
-        # Approximate integration integral(p(x|theta)*p(theta)dtheta)
-        # p(x|theta)p(theta) / sum(p(x|theta)p(theta)) needs to sum to 1 for each respondent response pattern.
-        log_posterior = (log_prior + grid_log_likelihoods).view(-1, theta_grid.shape[0]) # each row is one respondent
-        # convert to float 64 to prevent 0 probabilities
-        exp_log_posterior = log_posterior.to(dtype=torch.float64).exp()
-        posterior = (exp_log_posterior.T / exp_log_posterior.sum(dim=1)).T.view(-1, 1) # transform to one column
+        for i in range(0, data.shape[0], batch_size):
+            batch_data = data[i:i+batch_size]
+            
+            # Replicate for grid
+            replicated_data = batch_data.repeat_interleave(theta_grid.shape[0], dim=0)
+            
+            replicated_logits = logits_grid.repeat(batch_data.shape[0], 1, 1)
+            
+            batch_log_prior = log_prior.repeat(batch_data.shape[0])
+            missing_mask = get_missing_mask(replicated_data)
+            
+            grid_log_likelihoods = self.log_likelihood(replicated_data, replicated_logits, missing_mask, loss_reduction = "none")
+            grid_log_likelihoods = grid_log_likelihoods.view(-1, data.shape[1]).nansum(dim=1) # sum likelihood over items
 
-        # Get expected theta
-        posterior_times_theta = replicated_theta_grid * posterior
-        expected_theta = posterior_times_theta.reshape(-1, theta_grid.shape[0], posterior_times_theta.shape[1])
-        return expected_theta.sum(dim=1).to(dtype=torch.float32)
+            # Approximate integration integral(p(x|theta)*p(theta)dtheta)
+            # p(x|theta)p(theta) / sum(p(x|theta)p(theta)) needs to sum to 1 for each respondent response pattern.
+            log_posterior = (batch_log_prior + grid_log_likelihoods).view(-1, theta_grid.shape[0]) # each row is one respondent
+            
+            # convert to float 64 to prevent 0 probabilities
+            exp_log_posterior = log_posterior.to(dtype=torch.float64).exp()
+            posterior = (exp_log_posterior.T / exp_log_posterior.sum(dim=1)).T.view(-1, 1) # transform to one column
+
+            # Get expected theta
+            # replicated_theta_grid for this batch
+            batch_replicated_theta_grid = theta_grid.repeat(batch_data.shape[0], 1)
+            
+            posterior_times_theta = batch_replicated_theta_grid * posterior
+            expected_theta = posterior_times_theta.reshape(-1, theta_grid.shape[0], posterior_times_theta.shape[1])
+            expected_theta_list.append(expected_theta.sum(dim=1).to(dtype=torch.float32))
+
+        return torch.cat(expected_theta_list, dim=0)
 
     @torch.no_grad()
-    def _theta_grid(self, theta_scores: torch.Tensor, grid_size: int = None):
+    def _theta_grid(self, theta_scores: torch.Tensor, grid_size: int | None = None):
         """
         Returns a new theta score tensor covering a large range of latent variable values in a grid.
 
@@ -943,8 +968,8 @@ class BaseIRTModel(ABC, nn.Module):
         ----------
         theta_scores: torch.Tensor
             The input test scores. Typically obtained from the training data.
-        grid_size: int
-            The number of grid points for each latent variable.
+        grid_size: int, optional
+            The number of grid points for each latent variable. (default is None)
 
         Returns
         -------

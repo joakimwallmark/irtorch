@@ -14,7 +14,7 @@ class GeneralizedPartialCredit(BaseIRTModel):
     latent_variables : int
         Number of latent variables.
     item_categories : list[int]
-        Number of categories for each item. One integer for each item. Missing responses exluded.
+        Number of categories for each item. One integer for each item. Missing responses excluded.
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
 

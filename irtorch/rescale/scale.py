@@ -6,9 +6,8 @@ class Scale(ABC):
     Abstract base class for Item Response Theory model scale transformations.
     All scale transformations should inherit from this class.
 
-    Not that you can make custom transformations by inheriting from this class.
-    A class instance can then be supplied to :meth:`irtorch.models.BaseIRTModel.rescale` to apply the transformation to the latent variables of the model.
-    The gradients method is not needed for 
+    Note that you can make custom transformations by inheriting from this class.
+    A class instance can then be supplied to :meth:`irtorch.models.BaseIRTModel.add_scale_transformation` to apply the transformation to the latent variables of the model.
     """
     def __init__(self, invertible: bool = False):
         self.invertible = invertible

@@ -93,9 +93,9 @@ class Bit(Scale):
     def __init__(
         self,
         model: BaseIRTModel,
-        population_theta: torch.Tensor = None,
-        start_theta: torch.Tensor = None,
-        items: list[int] = None,
+        population_theta: torch.Tensor | None = None,
+        start_theta: torch.Tensor | None = None,
+        items: list[int] | None = None,
         grid_points: int = 4000,
         mc_start_theta_approx: bool = False,
         **kwargs
@@ -257,45 +257,14 @@ class Bit(Scale):
             return self._invert_scale_multiplier.flatten() * gradients[..., None, None]
         else:
             raise NotImplementedError("Multidimensional bit scale gradients is not implemented.")
-        # if hasattr(self.model.algorithm, "training_theta_scores") and self.model.algorithm.training_theta_scores is not None:
-        #     q1_q3 = torch.quantile(self.model.algorithm.training_theta_scores, torch.tensor([0.25, 0.75]), dim=0)
-        # else:
-        #     q1_q3 = torch.tensor([-0.6745, 0.6745]).unsqueeze(1).expand(-1, self.model.latent_variables)
-
-        # iqr = q1_q3[1] - q1_q3[0]
-        # lower_bound = q1_q3[0] - 1.5 * iqr
-        # upper_bound = q1_q3[1] + 1.5 * iqr
-        # h = (upper_bound - lower_bound) / 1000
-        # theta_low = theta-h
-        # theta_high = theta+h
-        # if independent_theta is None:
-        #     gradients = torch.zeros(theta.shape[0],theta.shape[1],theta.shape[1])
-        #     for latent_variable in range(theta.shape[1]):
-        #         theta_low_var = torch.cat((theta[:, :latent_variable], theta_low[:, latent_variable].view(-1, 1), theta[:, latent_variable+1:]), dim=1)
-        #         theta_high_var = torch.cat((theta[:, :latent_variable], theta_high[:, latent_variable].view(-1, 1), theta[:, latent_variable+1:]), dim=1)
-        #         bit_scores_low = self.transform(
-        #             theta_low_var, one_dimensional=one_dimensional, grid_points=grid_points, items=items
-        #         )
-        #         bit_scores_high = self.transform(
-        #             theta_high_var, one_dimensional=one_dimensional, grid_points=grid_points, items=items
-        #         )
-        #         gradients[:, latent_variable, :] = (bit_scores_high - bit_scores_low) / (2 * h[latent_variable])
-        # else:
-        #     theta_low_var = torch.cat((theta[:, :independent_theta-1], theta_low[:, independent_theta-1].view(-1, 1), theta[:, independent_theta:]), dim=1)
-        #     theta_high_var = torch.cat((theta[:, :independent_theta-1], theta_high[:, independent_theta-1].view(-1, 1), theta[:, independent_theta:]), dim=1)
-        #     bit_scores_low = self(theta_low_var, one_dimensional=one_dimensional, grid_points=grid_points, items=items)
-        #     bit_scores_high = self(theta_high_var, one_dimensional=one_dimensional, grid_points=grid_points, items=items)
-        #     gradients = (bit_scores_high - bit_scores_low) / (2 * h[independent_theta-1])
-
-        # return gradients
 
     def bit_score_starting_theta_mc(
         self,
         theta_estimation: str = "ML",
         ml_map_device: str = "cuda" if torch.cuda.is_available() else "cpu",
         lbfgs_learning_rate: float = 0.25,
-        items: list[int] = None,
-        guessing_probabilities: list[float] = None,
+        items: list[int] | None = None,
+        guessing_probabilities: list[float] | None = None,
         guessing_iterations: int = 10000,
     ):
         r"""
@@ -304,8 +273,6 @@ class Bit(Scale):
         
         Parameters
         ----------
-        model : BaseIRTModel
-            The IRT model to use for computing the starting theta scores.
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'ML')
         ml_map_device: str, optional
@@ -345,7 +312,7 @@ class Bit(Scale):
             selected_item_categories,
             guessing_iterations,
             guessing_probabilities,
-            selected_correct
+            selected_correct.tolist()
         )
 
         logger.info("Approximating theta from random guessing data to get minimum bit score.")

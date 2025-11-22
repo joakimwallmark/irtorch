@@ -24,7 +24,7 @@ class MonotoneNN(BaseIRTModel):
     latent_variables : int, optional
         Number of latent variables. (default is 1)
     item_categories : list[int], optional
-        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
+        Number of categories for each item. One integer for each item. Missing responses excluded. (default is None)
     hidden_dim : list[int]
         Number of neurons in each hidden layer. For separate='items' or separate='categories', each element is the number of neurons for each separate item or category. For separate='none', each element is the number of neurons for each layer. Needs to be a multiple of 3 is when use_bounded_activation=True and a multiple of 2 when use_bounded_activation=False.
     mc_correct : list[int], optional

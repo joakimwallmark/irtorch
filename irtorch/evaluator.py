@@ -44,7 +44,7 @@ class Evaluator:
             theta: torch.Tensor = None,
             **kwargs
         ):
-        """"
+        """
         Helper function for evaluating the data and theta inputs for various performance measure methods.
 
         Parameters

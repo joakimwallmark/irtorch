@@ -41,20 +41,18 @@ class RankCDF(Scale):
     >>> # Plot an item on the transformed scale
     >>> model.plot.item_probabilities(1).show()
     """
-    def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] = None):
+    def __init__(self, theta: torch.Tensor, distributions: list[torch.distributions.Distribution] | None = None):
         super().__init__(invertible=False)
         self.n_samples, latent_variables = theta.shape
         if distributions is None:
-            self.distributions = []
-            for _ in range(theta.shape[1]):
-                self.distributions.append(torch.distributions.Normal(0, 1))
+            self.distributions = [
+                torch.distributions.Normal(0, 1) for _ in range(latent_variables)
+            ]
         else:
             if theta.shape[1] != len(distributions) and len(distributions) != 1:
                 raise ValueError("The number of distributions must be one or equal to the number of latent variables.")
             if len(distributions) == 1:
-                self.distributions = []
-                for _ in range(theta.shape[1]):
-                    self.distributions.append(distributions[0])
+                self.distributions = [distributions[0] for _ in range(latent_variables)]
             else:
                 self.distributions = distributions
 
@@ -64,7 +62,7 @@ class RankCDF(Scale):
         for feature in range(latent_variables):
             sorted_data = torch.sort(theta[:, feature]).values
             # Generate rank indices for the sorted data
-            rank = torch.arange(1, self.n_samples + 1, dtype=torch.float32)
+            rank = torch.arange(1, self.n_samples + 1, dtype=torch.float32, device=theta.device)
             # Handle ties: Compute unique values and assign average rank for ties
             unique_vals, inverse_indices = torch.unique(sorted_data, return_inverse=True, sorted=True)
             # Sum ranks for the same unique values (i.e., tie groups) and count the number of occurrences per group
@@ -77,7 +75,7 @@ class RankCDF(Scale):
             self.avg_ranks_list.append(avg_ranks)
             self.unique_vals_list.append(unique_vals)
 
-    def transform(self, theta):
+    def transform(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Transforms the input theta scores into the new scale.
 
@@ -85,25 +83,40 @@ class RankCDF(Scale):
         ----------
         theta : torch.Tensor
             A 2D tensor containing transformed theta scores. Each column represents one latent variable.
+        
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor containing the transformed theta scores.
         """
-        n_samples, latent_variables = theta.shape
+        _, latent_variables = theta.shape
         transformed_data = torch.zeros_like(theta, dtype=torch.float32)
 
         for latent_variable in range(latent_variables):
-            unique_vals = self.unique_vals_list[latent_variable]
-            avg_ranks = self.avg_ranks_list[latent_variable]
-
-            # For each theta, find the corresponding rank from the original data
-            new_ranks = torch.zeros(n_samples)
-            for i in range(n_samples):
-                # Find the closest matching unique value
-                closest_idx = torch.abs(unique_vals - theta[i, latent_variable]).argmin()
-                new_ranks[i] = avg_ranks[closest_idx]
+            unique_vals = self.unique_vals_list[latent_variable].to(theta.device)
+            avg_ranks = self.avg_ranks_list[latent_variable].to(theta.device)
+            
+            # Find insertion points
+            idx = torch.searchsorted(unique_vals, theta[:, latent_variable])
+            
+            # We need to compare index `idx` and `idx-1`.
+            # Clip idx to be valid indices for `unique_vals`
+            idx_right = idx.clamp(max=len(unique_vals) - 1)
+            idx_left = (idx - 1).clamp(min=0)
+            
+            dist_right = torch.abs(unique_vals[idx_right] - theta[:, latent_variable])
+            dist_left = torch.abs(unique_vals[idx_left] - theta[:, latent_variable])
+            
+            # Choose indices where left is closer
+            use_left = dist_left < dist_right
+            final_idx = torch.where(use_left, idx_left, idx_right)
+            
+            new_ranks = avg_ranks[final_idx]
 
             # Normalize the ranks to (0, 1) and apply the inverse CDF
             rank_normalized = new_ranks / (self.n_samples + 1)
             transformed_data[:, latent_variable] = \
-                self.distributions[latent_variable].icdf(rank_normalized).clone().detach()
+                self.distributions[latent_variable].icdf(rank_normalized.cpu()).to(theta.device)
 
         return transformed_data
 

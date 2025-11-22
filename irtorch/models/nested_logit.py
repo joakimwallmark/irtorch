@@ -12,8 +12,8 @@ class NestedLogit(BaseIRTModel):
     Parameters
     ----------
     mc_correct : list[int]
-        Only for multiple choice data. The correct response option for each item. (Default: None)
-    correct_response_model : BaseIRTModel, optional
+        Only for multiple choice data. The correct response option for each item.
+    correct_response_model : BaseIRTModel
         A fitted IRT model instance to use for the correct response.
     incorrect_response_model : str, optional
         The model to use for the incorrect responses. Can be 'nominal' or 'bspline'. (Default: 'nominal')
@@ -22,7 +22,7 @@ class NestedLogit(BaseIRTModel):
     latent_variables : int, optional
         Number of latent variables. (default is 1)
     item_categories : list[int], optional
-        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
+        Number of categories for each item. One integer for each item. Missing responses excluded. (default is None)
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     degree : int, optional
@@ -64,12 +64,12 @@ class NestedLogit(BaseIRTModel):
         mc_correct: list[int],
         correct_response_model: BaseIRTModel,
         incorrect_response_model: str = "nominal",
-        data: torch.Tensor = None,
+        data: torch.Tensor | None = None,
         latent_variables: int = 1,
-        item_categories: list[int] = None,
-        item_theta_relationships: torch.Tensor = None,
+        item_categories: list[int] | None = None,
+        item_theta_relationships: torch.Tensor | None = None,
         degree: int = 3,
-        knots: list[float] = None,
+        knots: list[float] | None = None,
     ):
         if item_categories is None:
             if data is None:
@@ -93,7 +93,7 @@ class NestedLogit(BaseIRTModel):
                 except RuntimeError as exc:
                     raise TypeError("item_theta_relationships must be convertible to boolean type.") from exc
             if not torch.all(item_theta_relationships.sum(dim=1) > 0):
-                raise ValueError("all items must have a relationship with a least one latent variable.")
+                raise ValueError("all items must have a relationship with at least one latent variable.")
 
         self.correct_response_model: BaseIRTModel = correct_response_model
         self.incorrect_response_model = incorrect_response_model
@@ -114,12 +114,12 @@ class NestedLogit(BaseIRTModel):
                 item_theta_relationships=item_theta_relationships,
             )
         elif incorrect_response_model == "bspline":
-            knots = torch.tensor([-1.7, -0.7, 0, 0.7, 1.7]) if knots is None else torch.tensor(knots)
+            knots_tensor = torch.tensor([-1.7, -0.7, 0, 0.7, 1.7]) if knots is None else torch.tensor(knots)
             self.basis = None
-            knots = knots.sigmoid()
-            knots = torch.cat((torch.zeros(degree+1), knots, torch.ones(degree+1)))
-            self.register_buffer('knots', knots)
-            self.n_bases = len(knots) - degree - 1
+            knots_tensor = knots_tensor.sigmoid()
+            knots_tensor = torch.cat((torch.zeros(degree+1), knots_tensor, torch.ones(degree+1)))
+            self.register_buffer('knots', knots_tensor)
+            self.n_bases = len(knots_tensor) - degree - 1
             self.degree = degree
             # (lv, n_bases, items, max(incorrect_item_categories)) with True where splines are supposed to be
             spline_mask = item_theta_relationships.T.reshape(self.latent_variables, 1, -1, 1)
@@ -176,8 +176,8 @@ class NestedLogit(BaseIRTModel):
         target_shape = (batch_size, self.items, self.max_item_responses)
 
         all_probabilities = torch.zeros(theta.shape[0], self.items, self.max_item_responses, device=device)
-        corrrect_output = self.correct_response_model(theta)
-        correct_probabilities = self.correct_response_model.probabilities_from_output(corrrect_output)
+        correct_output = self.correct_response_model(theta)
+        correct_probabilities = self.correct_response_model.probabilities_from_output(correct_output)
         p_correct_total = correct_probabilities[:, :, 1]  # (batch, items)
         p_incorrect_total = correct_probabilities[:, :, 0] # (batch, items)
 

@@ -26,17 +26,17 @@ class VAE(AE):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         one_hot_encoded: bool = True,
-        imputation_method: str = None,
+        imputation_method: str | None = None,
         learning_rate: float = 0.002,
         learning_rate_updates_before_stopping: int = 2,
         evaluation_interval_size: int = 60,
         max_epochs: int = 10000,
-        batch_size: int = None,
+        batch_size: int | None = None,
         batch_normalization_encoder: bool = False,
         nonlinear_encoder = torch.nn.ELU(),
-        hidden_layers_encoder: list[int] = None,
+        hidden_layers_encoder: list[int] | None = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        anneal: int = True,
+        anneal: bool = True,
         annealing_iterations: int = 5,
         iw_samples: int = 5,
     ):
@@ -50,7 +50,7 @@ class VAE(AE):
         train_data : torch.Tensor
             The training data. Item responses should be coded 0, 1, ... and missing responses coded as nan or -1.
         one_hot_encoded : bool, optional
-            Whether the model uses one-hot encoded data. (default is False)
+            Whether the model uses one-hot encoded data. (default is True)
         imputation_method : str, optional
             The method to use for imputing missing data for the encoder. For options see :func:`irtorch.utils.impute_missing`.
             Only methods not relying on a fitted model can be used. 
@@ -61,13 +61,13 @@ class VAE(AE):
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         evaluation_interval_size: int, optional
-            The number of iterations between each model evaluation during training. (default is 80)
+            The number of iterations between each model evaluation during training. (default is 60)
         max_epochs : int, optional
             The maximum number of epochs to train for. (default is 10000)
         batch_size : int, optional
             The batch size for training. (default is None and uses the full dataset)
         batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
+            Whether to use batch normalization for the encoder. (default is False)
         nonlinear_encoder : torch.nn.Module, optional
             The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
         hidden_layers_encoder : list[int], optional
@@ -101,6 +101,7 @@ class VAE(AE):
         self.annealing_iterations = annealing_iterations
         self.anneal = anneal
         self.one_hot_encoded = one_hot_encoded
+        self.imputation_method = imputation_method
 
         if batch_size is None:
             batch_size = train_data.shape[0]
@@ -212,7 +213,7 @@ class VAE(AE):
         logvar: torch.Tensor,
     ):
         """
-        The IWAE loss function for the model as introduced by Burda et. al. (2015).
+        The IWAE loss function for the model as introduced by :cite:t:`Burda2015`.
         When self.iw_samples == 1 this generalizes to the standard VAE ELBO loss.
 
         Parameters
@@ -325,7 +326,7 @@ class VAE(AE):
 
     @torch.no_grad()
     def sample_latent_variables(
-        self, model: BaseIRTModel, sample_size: int, input_data: torch.Tensor = None
+        self, model: BaseIRTModel, sample_size: int, input_data: torch.Tensor | None = None
     ):
         """
         Sample latent variables from the encoder.
@@ -369,7 +370,22 @@ class VAE(AE):
     @torch.no_grad()
     def latent_credible_interval(
         self, input_data: torch.Tensor, alpha=0.05
-    ) -> torch.tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Get the credible interval for the latent variables.
+
+        Parameters
+        ----------
+        input_data : torch.Tensor
+            The input data.
+        alpha : float, optional
+            The significance level. (default is 0.05)
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            The lower bound, mean, and upper bound of the credible interval.
+        """
         input_data = input_data.contiguous()
         mean, logvar = self.encoder(input_data)
         # Create a Gaussian distribution with the calculated mean and std
@@ -390,7 +406,7 @@ class VAE(AE):
         return lower, mean, upper
 
     @torch.no_grad()
-    def latent_mean_se(self, input_data: torch.Tensor) -> torch.tensor:
+    def latent_mean_se(self, input_data: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get the posterior mean and standard error of the latent variables.
 

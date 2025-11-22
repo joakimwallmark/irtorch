@@ -126,7 +126,7 @@ class Plotter:
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
             Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
-        countor_plot_bins : int, optional
+        contour_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
@@ -304,7 +304,7 @@ class Plotter:
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
         fixed_thetas: torch.Tensor = None,
-        rescale: str = "theta",
+        rescale: bool = True,
     ) -> go.Figure:
         """
         Plots the log-likelihood function against the latent variable(s) for the supplied response pattern.
@@ -789,7 +789,7 @@ class Plotter:
         second_theta_range: tuple[float, float] = None,
         steps: int = None,
         fixed_thetas: torch.Tensor = None,
-        rescale: str = True,
+        rescale: bool = True,
     ) -> go.Figure:
         """
         Plots the expected sum score from the model against the latent variable(s).
@@ -1240,7 +1240,7 @@ class Plotter:
             The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
         contour_colorscale : str, optional
             Sets the colorscale for the multiple latent variable contour plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
-        countor_plot_bins : int, optional
+        contour_plot_bins : int, optional
             The number of histogram bins to use for creating the contour plot. (default is None and uses Sturges’ Rule)
         Returns
         -------
@@ -1358,10 +1358,12 @@ class Plotter:
             The label for the X-axis. (default is None and uses "Original scale")
         y_label : str, optional
             The label for the Y-axis. (default is None and uses "Transformed scale")
+        color : str, optional
+            The color to use for plots with one latent variable. (default is None and uses the default color sequence for the plotly_white template)
+        colorscale : str, optional
+            Sets the colorscale for the multiple latent variable surface plots. See https://plotly.com/python/builtin-colorscales/ (default is "Greens")
         input_theta_range : tuple[float, float], optional
             The theta range for plotting. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
-        second_input_theta_range : tuple[float, float], optional
-            The range for plotting for the second latent variable. For invertible scale transformations, this is the range of the transformed theta scores. Otherwise it is the range of the original theta scores. (default is None and uses limits based on training data)
         steps : int, optional
             The number of steps along each theta axis to construct the latent variable grid for which information is evaluated at. (default is None and uses 100 for one latent variable and 18 for two latent variables)
         fixed_thetas: torch.Tensor, optional

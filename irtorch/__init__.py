@@ -1,3 +1,6 @@
+"""
+IRTorch: Item Response Theory in PyTorch.
+"""
 import logging
 from .evaluator import Evaluator
 from .plotter import Plotter

@@ -2,7 +2,7 @@ import logging
 import copy
 import torch
 from torch.distributions import MultivariateNormal
-from irtorch.models import BaseIRTModel, MonotoneBSpline, NestedLogit, MonotoneBSpline
+from irtorch.models import BaseIRTModel, MonotoneBSpline, NestedLogit
 from irtorch.utils import gauss_hermite
 from irtorch._internal_utils import dynamic_print
 from irtorch.irt_dataset import PytorchIRTDataset
@@ -14,8 +14,8 @@ class MML(BaseIRTAlgorithm):
     r"""
     Marginal Maximum Likelihood (MML) for fitting IRT models :cite:p:`Bock1981`. 
     Uses a multivariate normal distribution for the latent variables and Gradient Descent to optimize the model parameters.
-    This method is generally effecive for models with a small number of latent variables. More than 3 is not supported.
-    Note that this typically method runs much faster on a GPU.
+    This method is generally effective for models with a small number of latent variables. More than 3 is not supported.
+    Note that this method typically runs much faster on a GPU.
 
     The marginal log-likelihood is calculated by integrating over an assumed normal distribution for the latent variables with density :math:`f(\mathbf{\theta})`.
 
@@ -39,7 +39,7 @@ class MML(BaseIRTAlgorithm):
     ):
         super().__init__()
         self.covariance_matrix = None
-        self.optimizer = None
+        self.optimizer: torch.optim.Optimizer | None = None
         self.training_history = {
             "train_loss": [],
         }
@@ -50,8 +50,8 @@ class MML(BaseIRTAlgorithm):
         train_data: torch.Tensor,
         max_epochs: int = 1000,
         integration_method: str = "quasi_mc",
-        quadrature_points: int = None,
-        covariance_matrix: torch.Tensor = None,
+        quadrature_points: int | None = None,
+        covariance_matrix: torch.Tensor | None = None,
         learning_rate: float = 0.20,
         learning_rate_update_patience: int = 7,
         learning_rate_updates_before_stopping: int = 2,
@@ -72,11 +72,11 @@ class MML(BaseIRTAlgorithm):
             The method to use for approximating integrals over the latent variables. Can be either "gauss_hermite" for Gauss-Hermite quadrature
             or "quasi_mc" for quasi-Monte Carlo. (default is "quasi_mc").
         quadrature_points : int, optional
-            The number of quadrature points to use for latent variable integration. Note that large datasets may lead to memory issues if quadratures points are too high. (default is 'None' and uses a function of the number of latent variables)
+            The number of quadrature points to use for latent variable integration. Note that large datasets may lead to memory issues if quadratures points are too high. (default is None and uses a function of the number of latent variables)
         covariance_matrix : torch.Tensor, optional
             The covariance matrix for the multivariate normal distribution for the latent variables. (default is None and uses uncorrelated variables)
         learning_rate : float, optional
-            The initial learning rate for the optimizer. (default is 0.25)
+            The initial learning rate for the optimizer. (default is 0.20)
         learning_rate_update_patience : int, optional
             The number of epochs to wait before reducing the learning rate. (default is 7)
         learning_rate_updates_before_stopping : int, optional
@@ -90,9 +90,10 @@ class MML(BaseIRTAlgorithm):
             "train_loss": [],
         }
 
+        if model.latent_variables > 3:
+            raise ValueError("MML is not implemented for models with more than 3 latent variables because of large integration grid.")
+
         if quadrature_points is None:
-            if model.latent_variables > 3:
-                raise ValueError("MML is not implemented for models with more than 3 latent variables because of large integration grid.")
             quadrature_points = {
                 1: 15,
                 2: 7,
@@ -169,26 +170,22 @@ class MML(BaseIRTAlgorithm):
             The maximum number of epochs to train for.
         points : torch.Tensor
             The latent variable points to evaluate the MML integral.
-        log_weights : torch.distributions.MultivariateNormal
+        log_weights : torch.Tensor
             The logarithm of the integral weights associated with the points.
         scheduler : torch.optim.lr_scheduler.ReduceLROnPlateau
             The learning rate scheduler.
         learning_rate_updates_before_stopping : int
             The number of times the learning rate can be reduced before stopping training.
-
-        Returns
-        -------
-        None
         """
         lr_update_count = 0
         best_model_state = None
-        latent_combos_rep = points.repeat_interleave(train_data.size(0), dim=0)
-        train_data_rep = train_data.repeat(points.size(0), 1)
-        log_weights_rep = log_weights.repeat_interleave(train_data.size(0), dim=0)
-        irt_dataset_rep = PytorchIRTDataset(data=train_data_rep)
+        
+        # We do not expand the data here to save memory and computation
+        irt_dataset = PytorchIRTDataset(data=train_data)
+        
         # precompute basis functions for spline models
-        if isinstance(model, MonotoneBSpline) or isinstance(model, MonotoneBSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
-            model.precompute_basis(latent_combos_rep)
+        if isinstance(model, MonotoneBSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
+            model.precompute_basis(points)
 
         best_epoch = 0
         best_loss = float("inf")
@@ -196,10 +193,9 @@ class MML(BaseIRTAlgorithm):
         for epoch in range(max_epochs):
             train_loss = self._train_step(
                 model,
-                irt_dataset_rep,
-                latent_combos_rep,
-                log_weights_rep,
-                points.size(0)
+                irt_dataset,
+                points,
+                log_weights
             )
 
             current_loss = train_loss
@@ -226,7 +222,7 @@ class MML(BaseIRTAlgorithm):
             logger.debug("Current learning rate: %s", self.optimizer.param_groups[0]["lr"])
 
         # remove basis functions for spline models after fitting
-        if isinstance(model, MonotoneBSpline) or isinstance(model, MonotoneBSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
+        if isinstance(model, MonotoneBSpline) or (isinstance(model, NestedLogit) and model.incorrect_response_model == "bspline"):
             model.basis = None
 
         # Load the best model state
@@ -239,10 +235,9 @@ class MML(BaseIRTAlgorithm):
         self,
         model: BaseIRTModel,
         train_data: PytorchIRTDataset,
-        latent_grid: torch.Tensor,
+        points: torch.Tensor,
         log_weights: torch.Tensor,
-        number_of_weights: int,
-    ):
+    ) -> float:
         """
         Training step for an epoch.
 
@@ -252,12 +247,10 @@ class MML(BaseIRTAlgorithm):
             The model to train.
         train_data : PytorchIRTDataset
             The training data.
-        latent_grid : torch.Tensor
+        points : torch.Tensor
             The grid of latent variables.
         log_weights : torch.Tensor
             The log weights for the latent variables.
-        number_of_weights : int
-            The number of quadrature points. The number of different weights before expanding.
 
         Returns
         -------
@@ -265,13 +258,32 @@ class MML(BaseIRTAlgorithm):
             The loss after the training step.
         """
         model.train()
-
         self.optimizer.zero_grad()
-        logits = model(latent_grid)
-        ll = model.log_likelihood(train_data.data, logits, missing_mask=train_data.mask, loss_reduction="none")
+        
+        # Compute logits for the unique points (much smaller forward pass)
+        logits = model(points) # (n_points, items, categories)
+        
+        n_points = points.size(0)
+        n_respondents = train_data.data.size(0)
+
+        # Expand logits to match respondents
+        # We repeat interleave to get [P1, P1... P2, P2...] structure
+        logits_rep = logits.repeat_interleave(n_respondents, dim=0)
+        
+        # Expand data to match points
+        # We repeat to get [D1...DN, D1...DN] structure
+        data_rep = train_data.data.repeat(n_points, 1)
+        mask_rep = train_data.mask.repeat(n_points, 1)
+        
+        ll = model.log_likelihood(data_rep, logits_rep, missing_mask=mask_rep, loss_reduction="none")
         ll = ll.view(-1, model.items).nansum(dim=1) # sum over items
         
-        log_sums = (log_weights + ll).view(number_of_weights, -1)
+        # Reshape to (n_points, n_respondents)
+        ll = ll.view(n_points, n_respondents)
+        
+        # Add weights (broadcasting over respondents)
+        log_sums = ll + log_weights.view(-1, 1)
+        
         constant = log_sums.max(dim=0)[0] # for logexpsum trick (one constant per respondent)
         exp_log_sums = (log_sums-constant).exp()
         loss = -(exp_log_sums.sum(dim=0).log() + constant).sum()

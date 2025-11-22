@@ -47,18 +47,14 @@ class TestMML:
             latent_combos = latent_grid
 
         log_weights = normal_dist.log_prob(latent_combos)
-        latent_combos_rep = latent_combos.repeat_interleave(test_data.size(0), dim=0)
-        train_data_rep = test_data.repeat(latent_combos.size(0), 1)
-        log_weights_rep = log_weights.repeat_interleave(test_data.size(0), dim=0)
-        irt_data_rep = PytorchIRTDataset(train_data_rep)
+        irt_data = PytorchIRTDataset(test_data)
 
         for _ in range(2):
             loss = algorithm._train_step(
                 irt_model,
-                irt_data_rep,
-                latent_combos_rep,
-                log_weights_rep,
-                latent_combos.size(0)
+                irt_data,
+                latent_combos,
+                log_weights
             )
             assert loss <= previous_loss  # Loss should decrease
             previous_loss = loss

@@ -14,7 +14,7 @@ class MonotoneBSpline(BaseIRTModel):
     latent_variables : int
         Number of latent variables.
     item_categories : list[int]
-        Number of categories for each item. One integer for each item. Missing responses exluded.
+        Number of categories for each item. One integer for each item. Missing responses excluded.
     knots : list[float], optional
         Positions of the internal knots (bounds excluded) for the B-spline basis functions. If not provided, defaults to
         [-1.7, -0.7, 0, 0.7, 1.7].

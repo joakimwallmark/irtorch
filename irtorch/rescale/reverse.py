@@ -43,7 +43,7 @@ class Reverse(Scale):
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
-        return theta * self._reverse
+        return theta * self._reverse.to(theta.device)
 
     def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
         """
@@ -59,7 +59,7 @@ class Reverse(Scale):
         torch.Tensor
             A 2D tensor containing theta scores on the the original scale.
         """
-        return transformed_theta * self._reverse
+        return transformed_theta * self._reverse.to(transformed_theta.device)
 
     def jacobian(
         self,
@@ -78,4 +78,4 @@ class Reverse(Scale):
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        return torch.diag_embed(self._reverse.flatten().float()).unsqueeze(0).expand(theta.shape[0], -1, -1)
+        return torch.diag_embed(self._reverse.flatten().float().to(theta.device)).unsqueeze(0).expand(theta.shape[0], -1, -1)

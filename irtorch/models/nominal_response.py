@@ -14,7 +14,7 @@ class NominalResponse(BaseIRTModel):
     latent_variables : int, optional
         Number of latent variables. (default is 1)
     item_categories : list[int], optional
-        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
+        Number of categories for each item. One integer for each item. Missing responses excluded. (default is None)
     item_theta_relationships : torch.Tensor, optional
         A boolean tensor of shape (items, latent_variables). If specified, the model will have connections between latent dimensions and items where the tensor is True. If left out, all latent variables and items are related (Default: None)
     mc_correct : list[int], optional

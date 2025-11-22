@@ -38,11 +38,11 @@ class Rotate(Scale):
     def __init__(
         self,
         model: BaseIRTModel,
-        data: torch.Tensor = None,
-        theta: torch.Tensor = None,
-        loadings: torch.Tensor = None,
+        data: torch.Tensor | None = None,
+        theta: torch.Tensor | None = None,
+        loadings: torch.Tensor | None = None,
         rotation_method: str = "promax",
-        rotation_matrix: torch.Tensor = None,
+        rotation_matrix: torch.Tensor | None = None,
         **kwargs
     ):
         super().__init__(invertible=True)
@@ -54,7 +54,7 @@ class Rotate(Scale):
                     theta = model.latent_scores(data, rescale=True ,**kwargs)
                 loadings = model.expected_item_score_gradients(theta).mean(dim=0)
             rotator = Rotator(method = rotation_method)
-            self.rot_loadings = torch.from_numpy(rotator.fit_transform(loadings.numpy())).float()
+            self.rot_loadings = torch.from_numpy(rotator.fit_transform(loadings.cpu().numpy())).float()
             self.rotation_matrix = torch.tensor(rotator.rotation_, dtype=torch.float)
         else:
             if rotation_matrix.shape[0] != model.latent_variables or rotation_matrix.shape[1] != model.latent_variables:
@@ -72,7 +72,7 @@ class Rotate(Scale):
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
-        return torch.matmul(theta, self.rotation_matrix)
+        return torch.matmul(theta, self.rotation_matrix.to(theta.device))
 
     def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
         """
@@ -88,7 +88,7 @@ class Rotate(Scale):
         torch.Tensor
             A 2D tensor containing theta scores on the the original scale.
         """
-        unrotated_theta = torch.matmul(transformed_theta, self.inverse_rotation_matrix)
+        unrotated_theta = torch.matmul(transformed_theta, self.inverse_rotation_matrix.to(transformed_theta.device))
         return unrotated_theta
 
 
@@ -109,5 +109,5 @@ class Rotate(Scale):
         torch.Tensor
             A torch tensor with the gradients for each theta score. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
-        jacobians = self.rotation_matrix.T.unsqueeze(0).repeat(theta.shape[0], 1, 1)
+        jacobians = self.rotation_matrix.T.to(theta.device).unsqueeze(0).repeat(theta.shape[0], 1, 1)
         return jacobians

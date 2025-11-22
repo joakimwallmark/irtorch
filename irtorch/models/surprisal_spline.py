@@ -15,7 +15,7 @@ class SurprisalSpline(BaseIRTModel):
     latent_variables : int
         Number of latent variables.
     item_categories : list[int]
-        Number of categories for each item. One integer for each item. Missing responses exluded.
+        Number of categories for each item. One integer for each item. Missing responses excluded.
     item_theta_relationships : torch.Tensor, optional
         Boolean tensor of shape (items, latent_variables) specifying which latent variables
         affect which items. True indicates a relationship exists.

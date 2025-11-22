@@ -40,15 +40,15 @@ class AE(BaseIRTAlgorithm):
         model: BaseIRTModel,
         train_data: torch.Tensor,
         one_hot_encoded: bool = True,
-        imputation_method: str = None,
+        imputation_method: str | None = None,
         learning_rate: float = 0.02,
         learning_rate_updates_before_stopping: int = 3,
         evaluation_interval_size: int = 80,
         max_epochs: int = 10000,
-        batch_size: int = None,
+        batch_size: int | None = None,
         batch_normalization_encoder: bool = False,
-        nonlinear_encoder = torch.nn.ELU(),
-        hidden_layers_encoder: list[int] = None,
+        nonlinear_encoder: torch.nn.Module = torch.nn.ELU(),
+        hidden_layers_encoder: list[int] | None = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ):
         """
@@ -74,11 +74,11 @@ class AE(BaseIRTAlgorithm):
         evaluation_interval_size: int, optional
             The number of iterations between each model evaluation during training. (default is 80)
         max_epochs : int, optional
-            The maximum number of epochs to train for. (default is 1000)
+            The maximum number of epochs to train for. (default is 10000)
         batch_size : int, optional
             The batch size for training. (default is None and uses the full dataset)
         batch_normalization_encoder : bool, optional
-            Whether to use batch normalization for the encoder. (default is True)
+            Whether to use batch normalization for the encoder. (default is False)
         nonlinear_encoder : torch.nn.Module, optional
             The non-linear function to use after each hidden layer in the encoder. (default is torch.nn.ELU())
         hidden_layers_encoder : list[int], optional
@@ -179,8 +179,6 @@ class AE(BaseIRTAlgorithm):
             The model to train.
         max_epochs : int
             The maximum number of epochs to train for.
-        scheduler : torch.optim.lr_scheduler.ReduceLROnPlateau
-            The learning rate scheduler.
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 2)
         """
@@ -198,7 +196,7 @@ class AE(BaseIRTAlgorithm):
             self.optimizer.load_state_dict(self.best_model_state["optimizer"])
             logger.info("Best model found after %d iterations (%d interval updates) with interval averaged loss %.4f.", self.best_avg_loss[1], self.best_avg_loss[1]/self.evaluation_interval_size, self.best_avg_loss[0])
 
-    def _train_step(self, model: BaseIRTModel, epoch: int, learning_rate_updates_before_stopping: int = 5) -> torch.Tensor:
+    def _train_step(self, model: BaseIRTModel, epoch: int, learning_rate_updates_before_stopping: int = 5) -> float:
         """
         Perform a training step for the model.
 
@@ -338,4 +336,17 @@ class AE(BaseIRTAlgorithm):
             A 2D tensor of latent scores. Rows are respondents and latent variables are columns.
         """
         data = data.contiguous()
+
+        # If the model expects one-hot encoded data but the input is not, we process it.
+        # We assume that if the input dimension matches the number of items, it is raw data.
+        if self.one_hot_encoded and data.shape[1] == len(self.item_categories):
+            dataset = PytorchIRTDataset(
+                data=data,
+                one_hot_encoded=True,
+                item_categories=self.item_categories,
+                imputation_method=self.imputation_method,
+                mc_correct=self.mc_correct
+            )
+            data = dataset.input_data
+
         return self.encoder(data)

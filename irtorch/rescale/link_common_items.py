@@ -109,7 +109,7 @@ class LinkCommonItems(Scale):
         self._transformation_multiplier = torch.ones(1) * -1 if inverted else torch.ones(1)
 
         if method == "spline":
-            Scale.__init__(self, invertible=False)
+            Scale.__init__(self, invertible=True)
             spline_params = {
                 'lower_input_bound': -5.5,
                 'upper_input_bound': 5.5,
@@ -130,7 +130,7 @@ class LinkCommonItems(Scale):
     def fit(
         self,
         theta_from: torch.Tensor,
-        batch_size: int = None,
+        batch_size: int | None = None,
         learning_rate: float = 0.01,
         learning_rate_updates_before_stopping: int = 1,
         evaluation_interval_size: int = 50,
@@ -230,6 +230,9 @@ class LinkCommonItems(Scale):
         theta : torch.Tensor
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
+        self._transformation.to(theta.device)
+        self._transformation_multiplier = self._transformation_multiplier.to(theta.device)
+        
         if self._method == "neuralnet":
             transformed = self._split_activation(self._transformation(theta)).sum(dim=1).view(-1, 1)
         elif self._method == "spline":
@@ -252,6 +255,9 @@ class LinkCommonItems(Scale):
         torch.Tensor
             A 2D tensor containing theta scores on the the original scale.
         """
+        self._transformation.to(transformed_theta.device)
+        self._transformation_multiplier = self._transformation_multiplier.to(transformed_theta.device)
+
         if self._method == "spline":
             theta, _ = self._transformation(transformed_theta, inverse=True)
             return theta * self._transformation_multiplier
@@ -275,6 +281,9 @@ class LinkCommonItems(Scale):
         torch.Tensor
             A tensor with the Jacobian for each input row. Dimensions are (theta rows, latent variables, latent variables) where the last two are the jacobians.
         """
+        self._transformation.to(theta.device)
+        self._transformation_multiplier = self._transformation_multiplier.to(theta.device)
+
         theta_scores = theta.clone()
         theta_scores.detach_().requires_grad_(True)
         if self._method == "neuralnet":

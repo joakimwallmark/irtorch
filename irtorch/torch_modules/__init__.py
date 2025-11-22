@@ -1,3 +1,6 @@
+"""
+PyTorch modules used in IRTorch.
+"""
 from .negation_layer import NegationLayer
 from .softplus_linear import SoftplusLinear
 from .monotone_polynomial import MonotonePolynomialModule

@@ -2,8 +2,8 @@ import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
-from irtorch.models.base_irt_model import BaseIRTModel
-from irtorch.torch_modules.monotone_polynomial import MonotonePolynomialModule
+from irtorch.models import BaseIRTModel
+from irtorch.torch_modules import MonotonePolynomialModule
 
 logger = logging.getLogger("irtorch")
 
@@ -18,7 +18,7 @@ class MonotonePolynomial(BaseIRTModel):
     latent_variables : int, optional
         Number of latent variables. (default is 1)
     item_categories : list[int], optional
-        Number of categories for each item. One integer for each item. Missing responses exluded. (default is None)
+        Number of categories for each item. One integer for each item. Missing responses excluded. (default is None)
     degree : int, optional
         The degree of the monotonic polynomials. (default is 3)
     separate : str, optional
@@ -40,30 +40,37 @@ class MonotonePolynomial(BaseIRTModel):
     """
     def __init__(
         self,
-        data: torch.Tensor = None,
+        data: torch.Tensor | None = None,
         latent_variables: int = 1,
-        item_categories: list[int] = None,
+        item_categories: list[int] | None = None,
         degree: int = 3,
-        item_theta_relationships: torch.Tensor = None,
+        item_theta_relationships: torch.Tensor | None = None,
         separate: str = "categories",
         negative_latent_variable_item_relationships: bool = True,
     ):
-        if item_categories is None and data is None:
-            raise ValueError("Either item_categories or data must be provided to initialize the model.")
-        
         if item_categories is None:
+            if data is None:
+                raise ValueError("Either item_categories or data must be provided to initialize the model.")
             # replace nan with -inf to get max
-            data_no_nan = torch.where(torch.isnan(data), float("-inf"), data)
+            data_no_nan = torch.where(torch.isnan(data), torch.tensor(float("-inf"), device=data.device, dtype=data.dtype), data)
             item_categories = (data_no_nan.max(dim=0).values + 1).int().tolist()
                 
         super().__init__(latent_variables, item_categories)
         if item_theta_relationships is not None:
             if item_theta_relationships.shape != (len(item_categories), latent_variables):
                 raise ValueError(
-                    f"item_theta_relationshipsions must have shape ({len(item_categories)}, {latent_variables})."
+                    f"item_theta_relationships must have shape ({len(item_categories)}, {latent_variables})."
                 )
-            assert(item_theta_relationships.dtype == torch.bool), "item_theta_relationshipsions must be boolean type."
-            assert(torch.all(item_theta_relationships.sum(dim=1) > 0)), "all items must have a relationship with a least one latent variable."
+            if not isinstance(item_theta_relationships, torch.Tensor):
+                item_theta_relationships = torch.tensor(item_theta_relationships, dtype=torch.bool)
+            elif item_theta_relationships.dtype != torch.bool:
+                try:
+                    item_theta_relationships = item_theta_relationships.bool()
+                except RuntimeError as exc:
+                    raise TypeError("item_theta_relationships must be convertible to boolean type.") from exc
+            
+            if not torch.all(item_theta_relationships.sum(dim=1) > 0):
+                raise ValueError("all items must have a relationship with at least one latent variable.")
         else:
             item_theta_relationships = torch.tensor([[True] * latent_variables] * self.items, dtype=torch.bool)
 
@@ -72,8 +79,10 @@ class MonotonePolynomial(BaseIRTModel):
         self.negative_latent_variable_item_relationships = negative_latent_variable_item_relationships
         if separate == "items":
             self.separations = self.items
-        if separate == "categories":
+        elif separate == "categories":
             self.separations = self.output_length
+        else:
+            raise ValueError("separate must be 'items' or 'categories'")
 
         missing_categories = torch.zeros(self.items, self.max_item_responses, dtype=torch.int)
         for item, item_cat in enumerate(self.item_categories):
@@ -84,7 +93,7 @@ class MonotonePolynomial(BaseIRTModel):
         self.bias_param = nn.Parameter(torch.zeros(sum(self.item_categories)))
 
         shared_directions = self.max_item_responses if separate == "categories" else 1
-        self.add_module("mono_poly", MonotonePolynomialModule(
+        self.mono_poly = MonotonePolynomialModule(
             degree=degree,
             in_features=latent_variables,
             out_features=self.separations,
@@ -92,10 +101,11 @@ class MonotonePolynomial(BaseIRTModel):
             relationship_matrix=item_theta_relationships.transpose(0, 1).repeat_interleave(shared_directions, dim=1),
             negative_relationships=negative_latent_variable_item_relationships,
             shared_directions=shared_directions
-        ))
+        )
+        self.add_module("mono_poly", self.mono_poly)
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
-        out = self._modules["mono_poly"](theta)
+        out = self.mono_poly(theta)
         if self.separate == "items":
             out = out.repeat_interleave(self.max_item_responses, dim=1)
 
@@ -134,5 +144,5 @@ class MonotonePolynomial(BaseIRTModel):
             A 2D tensor with the relationships between the items and latent variables. Items are rows and latent variables are columns.
         """
         if self.negative_latent_variable_item_relationships:
-            return (self._modules["mono_poly"].directions * self._modules["mono_poly"].directions_mask).transpose(0, 1).sign().int()
+            return (self.mono_poly.directions * self.mono_poly.directions_mask).transpose(0, 1).sign().int()
         return torch.ones(self.items, self.latent_variables).int()

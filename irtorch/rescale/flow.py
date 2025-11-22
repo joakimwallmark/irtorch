@@ -54,10 +54,10 @@ class Flow(Scale):
 
     def fit(
         self,
-        theta:torch.Tensor,
-        transformation: RationalQuadraticSpline = None,
-        distribution: Distribution = None,
-        batch_size: int = None,
+        theta: torch.Tensor,
+        transformation: RationalQuadraticSpline | None = None,
+        distribution: Distribution | None = None,
+        batch_size: int | None = None,
         learning_rate: float = 0.01,
         learning_rate_updates_before_stopping: int = 2,
         evaluation_interval_size: int = 50,
@@ -77,17 +77,17 @@ class Flow(Scale):
         distribution : Distribution, optional
             The distribution to apply to the latent variables. If None, a standard normal distribution is used.
         batch_size : int, optional
-            The batch size for the data loader. Default is None and uses no batches.
+            The batch size for the data loader. (default is None and uses the full dataset)
         learning_rate : float, optional
-            The learning rate for the optimizer. Default is 0.01.
-        learning_rate_updates_before_stopping, optional
-            The number of learning rate updates before stopping the training. Default is 2.
+            The learning rate for the optimizer. (default is 0.01)
+        learning_rate_updates_before_stopping : int, optional
+            The number of learning rate updates before stopping the training. (default is 2)
         evaluation_interval_size: int, optional
             The number of iterations between each model evaluation during training. (default is 50)
         max_epochs : int, optional
-            The maximum number of epochs to train the flow. Default is 1500.
+            The maximum number of epochs to train the flow. (default is 1500)
         device : str, optional
-            The device to use for the computation. Default is "cuda" if available, otherwise "cpu".
+            The device to use for the computation. (default is "cuda" if available, otherwise "cpu")
         **kwargs
             Additional keyword arguments for :class:`irtorch.torch_modules.RationalQuadraticSpline` constructor.
             By default, the spline is set to have 50 bins and the input bounds are set to -5.5 and 5.5 and output bounds to -3.0 and 3.0.
@@ -118,9 +118,9 @@ class Flow(Scale):
             batch_size = theta.shape[0]
 
         # standardize the data and store the mean and std for later use
-        self.theta_means = theta.mean(dim=0)
-        self.theta_stds = theta.std(dim=0)
-        theta = (theta - self.theta_means) / self.theta_stds
+        self.theta_means = theta.mean(dim=0).to("cpu")
+        self.theta_stds = theta.std(dim=0).to("cpu")
+        theta = (theta - self.theta_means.to(theta.device)) / self.theta_stds.to(theta.device)
 
         self.flow = NeuralSplineFlow(transformation, distribution).to(device)
         optimizer = torch.optim.Adam(self.flow.parameters(), lr=learning_rate, amsgrad=True)
@@ -188,7 +188,7 @@ class Flow(Scale):
             A 2D tensor containing latent variable theta scores. Each column represents one latent variable.
         """
         self._flow_exists()
-        theta = (theta - self.theta_means) / self.theta_stds
+        theta = (theta - self.theta_means.to(theta.device)) / self.theta_stds.to(theta.device)
         return self.flow(theta)
 
     def inverse(self, transformed_theta: torch.Tensor) -> torch.Tensor:
@@ -208,7 +208,7 @@ class Flow(Scale):
         self._flow_exists()
         theta = self.flow.inverse(transformed_theta)
         # destandardize
-        return theta * self.theta_stds + self.theta_means
+        return theta * self.theta_stds.to(theta.device) + self.theta_means.to(theta.device)
 
     def jacobian(
         self,
@@ -230,7 +230,7 @@ class Flow(Scale):
         self._flow_exists()
         theta_scores = theta.clone()
         theta_scores.detach_().requires_grad_(True)
-        standardized_theta_scores = (theta_scores - self.theta_means) / self.theta_stds
+        standardized_theta_scores = (theta_scores - self.theta_means.to(theta.device)) / self.theta_stds.to(theta.device)
         transformed_thetas = self.flow(standardized_theta_scores)
         transformed_thetas.sum().backward()
         jacobians = torch.diag_embed(theta_scores.grad) # Since each transformation is only dependent on one theta score

@@ -142,6 +142,7 @@ def test_latent_scores(base_irt_model: BaseIRTModel, theta_estimation):
     base_irt_model.algorithm = MagicMock(spec=BaseIRTAlgorithm)
     base_irt_model.algorithm.one_hot_encoded = False
     base_irt_model.algorithm.imputation_method = None
+    base_irt_model.algorithm.training_theta_scores = None
     base_irt_model.algorithm.encoder = MagicMock(spec=StandardEncoder)
 
     def theta_scores_mock(input_tensor):

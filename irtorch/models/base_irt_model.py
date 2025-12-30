@@ -631,7 +631,17 @@ class BaseIRTModel(ABC, nn.Module):
                         jacobian = self.theta_transform_jacobian(theta_orig)
                         se = torch.sqrt(torch.einsum("...ij,...jk,...ik->...i", jacobian, var, jacobian))
                 else:
-                    fisher_info = self.information(theta, item=False, degrees=None, rescale=rescale)
+                    fisher_info = self.information(theta, item=True, degrees=None, rescale=rescale)
+                    # remove items with missing responses
+                    remove_missing = True
+                    if hasattr(self.algorithm, "one_hot_encoded"):
+                        if self.algorithm.one_hot_encoded:
+                            remove_missing = False
+                    if remove_missing:
+                        fisher_info = fisher_info.masked_fill(data.isnan()[:, :, None, None], 0.0)
+                        fisher_info = fisher_info.sum(dim=1)
+                    else:
+                        fisher_info = fisher_info.nansum(dim=1)
                     se = 1/torch.einsum("...ii->...i", fisher_info).sqrt()
                 return return_theta, se
             logger.warning("Standard errors are only implemented for theta scores with ML or NN estimation.")
@@ -892,15 +902,7 @@ class BaseIRTModel(ABC, nn.Module):
                 4: 5
             }.get(self.latent_variables, 15)
 
-        if hasattr(self.algorithm, "training_theta_scores"):
-            if self.algorithm.training_theta_scores is None:
-                raise ValueError("Please fit the model before computing latent scores.")
-            train_theta_scores = self.algorithm.training_theta_scores.to("cpu")
-            theta_grid = self._theta_grid(train_theta_scores, grid_size=grid_points)
-            # Center the data and compute the covariance matrix.
-            mean_centered_theta_scores = train_theta_scores - train_theta_scores.mean(dim=0)
-            cov_matrix = mean_centered_theta_scores.T @ mean_centered_theta_scores / (train_theta_scores.shape[0] - 1)
-        else:
+        if self.algorithm.training_theta_scores is None:
             grid_values = torch.linspace(-3, 3, grid_points).view(-1, 1)
             grid_values = grid_values.expand(-1, self.latent_variables).contiguous()
             if self.latent_variables == 1:
@@ -913,6 +915,12 @@ class BaseIRTModel(ABC, nn.Module):
                 cov_matrix = self.algorithm.covariance_matrix
             else:
                 cov_matrix = torch.eye(self.latent_variables)
+        else:
+            train_theta_scores = self.algorithm.training_theta_scores.to("cpu")
+            theta_grid = self._theta_grid(train_theta_scores, grid_size=grid_points)
+            # Center the data and compute the covariance matrix.
+            mean_centered_theta_scores = train_theta_scores - train_theta_scores.mean(dim=0)
+            cov_matrix = mean_centered_theta_scores.T @ mean_centered_theta_scores / (train_theta_scores.shape[0] - 1)
 
         # Create prior (multivariate normal distribution).
         means = torch.zeros(self.latent_variables)

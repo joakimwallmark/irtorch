@@ -575,8 +575,8 @@ class BaseIRTModel(ABC, nn.Module):
         """
         if theta_estimation not in ["NN", "ML", "EAP", "MAP"]:
             raise ValueError("Invalid theta_estimation. Choose either 'NN', 'ML', 'EAP' or 'MAP'.")
-        if standard_errors and theta_estimation not in ["ML", "NN"]:
-            raise ValueError("Standard errors are only available for theta scores with ML or NN estimation.")
+        if standard_errors and theta_estimation not in ["ML", "NN", "EAP"]:
+            raise ValueError("Standard errors are only available for theta scores with ML, NN, or EAP estimation.")
         if not hasattr(self.algorithm, "encoder") and theta_estimation == "NN":
             raise ValueError("NN estimation is only available for autoencoder models.")
 
@@ -585,7 +585,11 @@ class BaseIRTModel(ABC, nn.Module):
             data = data.view(1, -1)
 
         if theta_estimation == "EAP":
-            theta = self._eap_theta_scores(data, eap_theta_integration_points)
+            theta = self._eap_theta_scores(data, eap_theta_integration_points, standard_errors)
+            if standard_errors:
+                if rescale and self.scale:
+                    raise NotImplementedError("Rescaling standard errors for EAP is not implemented yet.")
+                return theta[0], theta[1]
         else:
             if hasattr(self.algorithm, "one_hot_encoded"):
                 if data.isnan().any() or data.eq(-1).any():
@@ -875,7 +879,7 @@ class BaseIRTModel(ABC, nn.Module):
         return optimized_theta_scores
 
     @torch.no_grad()
-    def _eap_theta_scores(self, data: torch.Tensor, grid_points: int | None = None) -> torch.Tensor:
+    def _eap_theta_scores(self, data: torch.Tensor, grid_points: int | None = None, return_se: bool = False) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Get the latent theta scores from test data using an already fitted model.
 
@@ -885,14 +889,17 @@ class BaseIRTModel(ABC, nn.Module):
             A 2D tensor with test data. Columns are items and rows are respondents
         grid_points: int, optional
             The number of grid points for each latent variable. (default is 'None' and uses a function of the number of latent variables)
-
+        return_se: bool, optional
+            If True, returns a tuple (scores, standard_errors). Defaults to False.
         Returns
         -------
-        torch.Tensor
-            A torch.Tensor with the theta scores. The columns are latent variables and rows are respondents.
+        torch.Tensor | tuple[torch.Tensor, torch.Tensor]
+            If return_se is False: A tensor with theta scores. The columns are latent variables and rows are respondents.
+            If return_se is True: A tuple (theta_scores, standard_errors).
         """
         if self.latent_variables > 4:
-            raise ValueError("EAP is not implemented for more than 4 latent variables because of large integration grid.")
+                    raise ValueError("EAP is not implemented for more than 4 latent variables because of large integration grid.")
+                    
         # Get grid for integration.
         if grid_points is None:
             grid_points = {
@@ -931,6 +938,7 @@ class BaseIRTModel(ABC, nn.Module):
         # Compute the log likelihood in batches to avoid memory issues
         batch_size = 100
         expected_theta_list = []
+        se_list = []
         
         # Compute logits for the grid once
         logits_grid = self(theta_grid) # (grid_points, items, cats)
@@ -955,17 +963,45 @@ class BaseIRTModel(ABC, nn.Module):
             
             # convert to float 64 to prevent 0 probabilities
             exp_log_posterior = log_posterior.to(dtype=torch.float64).exp()
+            # Normalize posterior so it sums to 1 across the grid for each person
             posterior = (exp_log_posterior.T / exp_log_posterior.sum(dim=1)).T.view(-1, 1) # transform to one column
 
-            # Get expected theta
+            # Get expected theta (EAP Score)
             # replicated_theta_grid for this batch
             batch_replicated_theta_grid = theta_grid.repeat(batch_data.shape[0], 1)
             
             posterior_times_theta = batch_replicated_theta_grid * posterior
-            expected_theta = posterior_times_theta.reshape(-1, theta_grid.shape[0], posterior_times_theta.shape[1])
-            expected_theta_list.append(expected_theta.sum(dim=1).to(dtype=torch.float32))
+            weighted_grid = posterior_times_theta.reshape(-1, theta_grid.shape[0], posterior_times_theta.shape[1])
+            
+            # Sum over the grid dimension to get the mean
+            batch_theta_scores = weighted_grid.sum(dim=1)
+            expected_theta_list.append(batch_theta_scores.to(dtype=torch.float32))
 
-        return torch.cat(expected_theta_list, dim=0)
+            if return_se:
+                # Calculate Variance: sum( posterior * (theta - theta_hat)^2 )
+                
+                # Reshape for broadcasting: (batch, grid, latent)
+                grid_reshaped = batch_replicated_theta_grid.view(batch_data.shape[0], theta_grid.shape[0], -1)
+                
+                # Reshape posterior: (batch, grid, 1)
+                posterior_reshaped = posterior.view(batch_data.shape[0], theta_grid.shape[0], 1)
+                
+                # Reshape scores: (batch, 1, latent)
+                scores_reshaped = batch_theta_scores.unsqueeze(1).to(dtype=torch.float64) # Keep precision
+                
+                # Variance calculation
+                squared_diff = (grid_reshaped - scores_reshaped).pow(2)
+                variance = (squared_diff * posterior_reshaped).sum(dim=1)
+                
+                se_list.append(variance.sqrt().to(dtype=torch.float32))
+
+        scores = torch.cat(expected_theta_list, dim=0)
+        
+        if return_se:
+            se_scores = torch.cat(se_list, dim=0)
+            return scores, se_scores
+            
+        return scores
 
     @torch.no_grad()
     def _theta_grid(self, theta_scores: torch.Tensor, grid_size: int | None = None):

@@ -2,7 +2,6 @@ import logging
 import copy
 import math
 import torch
-import numpy as np
 from irtorch.models import BaseIRTModel
 from irtorch.estimation_algorithms import BaseIRTAlgorithm
 from irtorch.estimation_algorithms.encoders import StandardEncoder
@@ -222,7 +221,7 @@ class AE(BaseIRTAlgorithm):
             # small batches leads to inaccurate batch variance, so we drop the last few observations
             if batch.shape[0] < 4 and self.batch_normalization:
                 continue
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             batch_loss = self._train_batch(model, input_batch, batch, mask)
             if torch.isnan(batch_loss):
                 logger.warning("Batch loss is nan. Try increasing batch size or lowering the learning rate.")
@@ -243,7 +242,7 @@ class AE(BaseIRTAlgorithm):
 
             # Update the learning rate scheduler every self.evaluation_interval_size iterations if no improvement
             if (self.total_iterations) % self.evaluation_interval_size == 0 and self.total_iterations != 1:
-                mean_loss = np.mean(self.batch_mean_losses)
+                mean_loss = sum(self.batch_mean_losses) / len(self.batch_mean_losses)
                 self.training_history["train_loss"].append(mean_loss)
                 self.scheduler.step(mean_loss)
 
@@ -284,8 +283,8 @@ class AE(BaseIRTAlgorithm):
             
         Returns
         -------
-        tuple
-            The logits and loss after training on the batch.
+        torch.Tensor
+            The loss after training on the batch.
         """
         outputs = model(self.encoder(input_batch))
         # check if all outputs are nan
@@ -312,8 +311,8 @@ class AE(BaseIRTAlgorithm):
 
         Returns
         -------
-        tuple
-            The loss, log likelihood, and accuracy for the batch.
+        torch.Tensor
+            The loss for the batch.
         """
         output = model(self.encoder(input_batch))
         log_likelihood = model.log_likelihood(batch, output, missing_mask=missing_mask)

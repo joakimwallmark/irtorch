@@ -22,7 +22,7 @@ class BaseIRTAlgorithm(ABC):
 
         Parameters
         ----------
-        model : BaseIRTModel, optional
+        model : BaseIRTModel
             The model to train. Needs to inherit :class:`irtorch.models.BaseIRTModel`.
         train_data : torch.Tensor
             The training data.

@@ -94,8 +94,7 @@ class Evaluator:
 
         Returns
         -------
-        torch.Tensor
-            A 2D tensor of latent scores, with latent variables as columns.
+        None
         """
         if approximation == "gmm":
             cv_n_components = [2, 3, 4, 5, 10] if cv_n_components is None else cv_n_components
@@ -494,7 +493,7 @@ class Evaluator:
         Parameters
         ----------
         data : torch.Tensor, optional
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None and uses the model's training data)
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents an item. (default is None and uses the model's training data)
         theta: torch.Tensor, optional
             The latent variable theta scores for the provided data on the original theta scale.
             If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
@@ -555,7 +554,7 @@ class Evaluator:
         Parameters
         ----------
         data : torch.Tensor, optional
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents an item. (default is None)
         theta: torch.Tensor, optional
             The latent variable theta scores for the provided data on the original theta scale.
             If not provided, they will be computed using :meth:`irtorch.models.BaseIRTModel.latent_scores`.
@@ -613,6 +612,7 @@ class Evaluator:
         Parameters
         ----------
         data : torch.Tensor, optional
+            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents an item. (default is None and uses the model's training data)
         theta : torch.Tensor, optional
             The latent variable theta scores for the provided data. If not provided, they will be computed using theta_estimation. (default is None)
         latent_variable: int, optional
@@ -621,7 +621,6 @@ class Evaluator:
             The number of groups. (default is 10)
         theta_estimation : str, optional
             Method used to obtain the theta scores. Can be 'NN', 'ML', 'EAP' or 'MAP' for neural network, maximum likelihood, expected a posteriori or maximum a posteriori respectively. (default is 'NN')
-            A 2D tensor containing test data. Each row corresponds to one respondent and each column represents a latent variable. (default is None)
         rescale : bool, optional
             Whether to group the latent scores on the theta transformation scale if it exists. Note: for uni-dimensional models, all monotone scale transformations are equivalent in this case. (default is True)
         

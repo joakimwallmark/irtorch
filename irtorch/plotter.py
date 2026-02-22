@@ -705,6 +705,11 @@ class Plotter:
             Only for multdimensional models. Fixed values for latent space variable not plotted. (default is None and uses the medians in the training data)
         rescale : bool, optional
             Whether to plot the transformed latent scores if a transformation scale exists. (default is True)
+
+        Returns
+        -------
+        go.Figure
+            The Plotly Figure object for the plot.
         """
         model_dim = self.model.latent_variables
         if len(latent_variables) > 2:

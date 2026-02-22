@@ -67,8 +67,8 @@ def quantile_transform(tensor):
 
     Parameters
     ----------
-        tensor : torch.Tensor
-            A 2D tensor.
+    tensor : torch.Tensor
+        A 2D tensor.
 
     Returns
     -------

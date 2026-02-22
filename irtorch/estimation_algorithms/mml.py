@@ -258,7 +258,7 @@ class MML(BaseIRTAlgorithm):
             The loss after the training step.
         """
         model.train()
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         
         # Compute logits for the unique points (much smaller forward pass)
         logits = model(points) # (n_points, items, categories)

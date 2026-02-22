@@ -40,7 +40,7 @@ class QuantileMVNormal:
 
         Parameters
         ----------
-        data : torch.tensor
+        data : torch.Tensor
             A 2D tensor with shape [num_samples, num_variables]. Each row is a sample,
             each column is a variable.
 
@@ -51,8 +51,10 @@ class QuantileMVNormal:
 
         Examples
         --------
+        >>> import torch
+        >>> from irtorch.quantile_mv_normal import QuantileMVNormal
         >>> data = torch.randn(1000, 2)
-        >>> dist = fit_multivariate_normal(data)
+        >>> dist = QuantileMVNormal().fit_multivariate_normal(data)
         >>> samples = dist.sample((5,))  # Draw 5 samples
         >>> log_prob = dist.log_prob(data)  # Compute log probability of data
         """

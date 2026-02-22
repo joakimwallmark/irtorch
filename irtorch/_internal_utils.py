@@ -26,7 +26,7 @@ def linear_regression(x, y):
 
 def correlation_matrix(x):
     """
-    Compute the covariance matrix from a 2D torch tensor, handling missing values (NaNs).
+    Compute the correlation matrix from a 2D torch tensor, handling missing values (NaNs).
     
     Parameters
     -----------
@@ -36,7 +36,7 @@ def correlation_matrix(x):
     Returns
     -----------
     torch.Tensor
-        The covariance matrix of the input tensor, ignoring NaNs.
+        The correlation matrix of the input tensor, ignoring NaNs.
     """
     if x.dim() != 2:
         raise ValueError("Input must be a 2D tensor")
@@ -200,9 +200,10 @@ def sum_incorrect_probabilities(
 
     Parameters
     ----------
-    probabilities : list[torch.Tensor]
-        A list of 2D tensors containing item score probabilities for each item.
-        Rows are theta quadrature points from the theta density and columns correspond to item responses. (rows sum to 1)
+    probabilities : torch.Tensor
+        A 3D tensor containing item score probabilities.
+        The first dimension represents the quadrature points, the second dimension represents the items,
+        and the third dimension represents the item categories. (rows sum to 1)
     item_responses : list[int]
         A list of integers where each integer is the number of possible responses for the corresponding item.
     mc_correct : list[int]
@@ -313,8 +314,8 @@ def dynamic_print(string_to_print):
 
     Parameters
     ----------
-    *args : str
-        Strings to print
+    string_to_print : str
+        String to print.
 
     """
     formatted_string = f"\r{string_to_print} " # small space after to make it look better in terminal
@@ -412,6 +413,11 @@ def impute_missing_internal(
         Only for method='random_incorrect'. A list of integers where each integer is the correct response for the corresponding item. If None, the data is assumed to be non multiple choice (or dichotomously scored multiple choice with only 0's and 1's). (default is None)
     item_categories : list[int], optional
         Only for method='random_incorrect'. A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
+
+    Returns
+    -------
+    torch.Tensor
+        The imputed data tensor.
     """
     imputed_data = data.clone()
 

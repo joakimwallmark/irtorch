@@ -1,6 +1,58 @@
-[build-system]
-requires = [
-  "setuptools>=64",
-  "wheel"
+[project]
+name = "irtorch"
+version = "0.5.2"
+description = "IRTorch: An item response theory package for python."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Joakim Wallmark", email = "wallmark.joakim@gmail.com" }]
+requires-python = ">=3.10"
+urls = { homepage = "https://github.com/joakimwallmark/irtorch" }
+dependencies = [
+    "torch>=2.1.1,<4.0.0",
+    "numpy>=1.24.1,<3.0.0",
+    "pandas>=2.2.0,<4.0.0",
+    "plotly>=5.19.0,<7.0.0",
+    "factor_analyzer>=0.4.1",
+    "splinetorch>=0.0.2",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "jupyterlab",
+    "ipykernel",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "nbsphinx",
+    "sphinxcontrib-bibtex",
+]
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+irtorch = [
+    "datasets/national_mathematics/*.pt",
+    "datasets/big_five/*.pt",
+    "datasets/big_five/*.txt",
+    "datasets/swedish_sat/*.pt",
+    "datasets/swedish_sat/*.txt",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: mark a test as an integration test.",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }

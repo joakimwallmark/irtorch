@@ -1,6 +1,6 @@
 [project]
 name = "irtorch"
-version = "0.5.2"
+version = "0.5.3"
 description = "IRTorch: An item response theory package for python."
 readme = "README.md"
 license = { text = "MIT" }

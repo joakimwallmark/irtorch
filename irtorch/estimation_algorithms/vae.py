@@ -1,4 +1,5 @@
 import logging
+import math
 import torch
 from torch.distributions import Normal
 from irtorch.models import BaseIRTModel
@@ -179,7 +180,7 @@ class VAE(AE):
 
         Returns
         -------
-        tuple
+        torch.Tensor
             The loss after training on the batch.
         """
         mean, logvar = self.encoder(input_batch)
@@ -273,9 +274,7 @@ class VAE(AE):
 
             iwae_bound = log_p_x_theta - self.annealing_factor * kl_div
             if self.iw_samples > 1:
-                iwae_bound = torch.logsumexp(iwae_bound, dim=0) - torch.log(
-                    torch.tensor(self.iw_samples).float()
-                )  # Importance weighting log (1/K Σ_{k=1}^{K} w_k)
+                iwae_bound = torch.logsumexp(iwae_bound, dim=0) - math.log(self.iw_samples)  # Importance weighting log (1/K Σ_{k=1}^{K} w_k)
 
         # Estimate expectation
         return -iwae_bound.mean()
@@ -288,13 +287,17 @@ class VAE(AE):
         ----------
         model : BaseIRTModel
             The model to fit.
+        input_batch : torch.Tensor
+            The input batch for the encoder.
         batch : torch.Tensor
             The batch of data.
+        missing_mask : torch.Tensor
+            The mask for missing data.
 
         Returns
         -------
-        tuple
-            The loss, log likelihood, and accuracy for the batch.
+        torch.Tensor
+            The loss for the batch.
         """
         encoder_mean, _ = self.encoder(input_batch)
         output = model(encoder_mean)

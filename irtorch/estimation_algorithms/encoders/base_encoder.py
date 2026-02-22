@@ -6,7 +6,7 @@ logger = logging.getLogger("irtorch")
 
 class BaseEncoder(ABC, nn.Module):
     """
-    Abstract base class for Item Response Theory models.
+    Abstract base class for IRT encoders.
     """
 
     def __init__(

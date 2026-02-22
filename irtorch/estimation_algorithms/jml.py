@@ -51,7 +51,7 @@ class JML(BaseIRTAlgorithm):
         learning_rate : float, optional
             The initial learning rate for the optimizer. (default is 0.1)
         learning_rate_update_patience : int, optional
-            The number of epochs to wait before reducing the learning rate. (default is 40)
+            The number of epochs to wait before reducing the learning rate. (default is 80)
         learning_rate_updates_before_stopping : int, optional
             The number of times the learning rate can be reduced before stopping training. (default is 3)
         max_epochs : int, optional
@@ -140,7 +140,7 @@ class JML(BaseIRTAlgorithm):
             The learning rate scheduler.
         max_epochs : int
             The maximum number of epochs to train for.
-        learning_rate_updates_before_stopping : int, optional
+        learning_rate_updates_before_stopping : int
             The number of times the learning rate can be reduced before stopping training.
         """
         lr_update_count = 0
@@ -153,7 +153,7 @@ class JML(BaseIRTAlgorithm):
 
         for epoch in range(max_epochs):
             for _, (batch, mask, _, idx) in enumerate(data_loader):
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad(set_to_none=True)
                 model_out = model(self.training_theta_scores[idx])
                 loss = -model.log_likelihood(batch, model_out, missing_mask=mask, loss_reduction="sum")
                 loss.backward()

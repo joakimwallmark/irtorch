@@ -849,7 +849,7 @@ class Evaluator:
         rescale: bool = True,
     ) -> torch.Tensor:
         r"""
-        Computes the marginal reliability for the test over the population latent space density.
+        Computes the marginal reliability for the test over the population latent space density (see e.g. :cite:t:`Cheng2012`).
         For 'qmvn' and 'gmm' densities, the trapezoidal rule is used for integral approximation.
 
         Parameters

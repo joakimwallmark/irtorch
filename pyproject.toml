@@ -16,7 +16,7 @@ dependencies = [
     "splinetorch>=0.0.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-cov",
@@ -26,6 +26,7 @@ dev = [
     "sphinx-rtd-theme",
     "nbsphinx",
     "sphinxcontrib-bibtex",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
@@ -45,6 +46,7 @@ irtorch = [
 ]
 
 [tool.pytest.ini_options]
+addopts = ["--strict-markers"]
 markers = [
     "integration: mark a test as an integration test.",
 ]

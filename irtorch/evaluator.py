@@ -424,12 +424,12 @@ class Evaluator:
         Infit and outift are computed as follows:
 
         .. math::
-            \\begin{align}
+            \\begin{aligned}
             \\text{Item j infit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2}{\\sum_{i=1}^{n} W_{ij}} \\\\
             \\text{Respondent i infit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2}{\\sum_{j=1}^{J} W_{ij}} \\\\
             \\text{Item j outfit} = \\frac{\\sum_{i=1}^{n} (O_{ij} - E_{ij})^2/W_{ij}}{n} \\\\
             \\text{Respondent i outfit} = \\frac{\\sum_{j=1}^{J} (O_{ij} - E_{ij})^2/W_{ij}}{J}
-            \\end{align}
+            \\end{aligned}
 
         Where:
 
@@ -804,6 +804,7 @@ class Evaluator:
             - 'encoder sampling' samples theta scores from the encoder. Only available for VariationalAutoencoderIRT models
             - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
             - 'gmm' for a gaussian mixture model.
+            - 'standard normal' assumes a standard normal distribution for the latent variables.
         population_data : torch.Tensor, optional
             The population data used for approximating sum score probabilities. Default is None and uses the training data.
         trapezoidal_segments : int, optional
@@ -836,6 +837,93 @@ class Evaluator:
         )
         sum_score_probabilities = conditional_total_score_probs * weights.view(-1, 1)
         return sum_score_probabilities.sum(dim=0)
+
+    @torch.no_grad()
+    def marginal_reliability(
+        self,
+        latent_density_method: str = "data",
+        population_data: torch.Tensor = None,
+        trapezoidal_segments: int = 1000,
+        sample_size: int = 100000,
+        degrees: list[int] = None,
+        rescale: bool = True,
+    ) -> torch.Tensor:
+        r"""
+        Computes the marginal reliability for the test over the population latent space density.
+        For 'qmvn' and 'gmm' densities, the trapezoidal rule is used for integral approximation.
+
+        Parameters
+        ----------
+        latent_density_method : str, optional
+            Specifies the method used to approximate the latent space density.
+            Possible options are:
+            
+            - 'data' averages over the theta scores from the population data.
+            - 'encoder sampling' samples theta scores from the encoder. Only available for VariationalAutoencoderIRT models.
+            - 'qmvn' for quantile multivariate normal approximation of a multivariate joint density function (QuantileMVNormal class).
+            - 'gmm' for a gaussian mixture model.
+            - 'standard normal' assumes a standard normal distribution for the latent variables with identity covariance matrix.
+        population_data : torch.Tensor, optional
+            The population data used for approximating sum score probabilities. Default is None and uses the training data.
+        trapezoidal_segments : int, optional
+            The number of integration approximation intervals for each theta dimension. (Default is 1000)
+        sample_size : int, optional
+            Sample size for the 'encoder sampling' method. (Default is 100000)
+        degrees : list[int], optional
+            For multidimensional models. A list of angles in degrees between 0 and 90, one for each latent variable.
+            Specifies the direction in which to compute the reliability. (default is None and computes reliability for each dimension separately)
+        rescale : bool, optional
+            Whether to compute the reliability on the rescaled latent scale if it exists. (default is True)
+
+        Returns
+        -------
+        torch.Tensor
+            A 1D tensor containing the marginal reliability for each dimension, or a single value if `degrees` is specified.
+
+        Notes
+        -----
+        Marginal reliability estimates the reliability of the test across the population defined by the latent density function :math:`f(\boldsymbol{\theta})`.
+        It is computed using numerical integration over the latent space:
+
+        .. math::
+
+            \rho = \int_{-\infty}^{\infty} \frac{I(\boldsymbol{\theta})}{I(\boldsymbol{\theta}) + 1/\sigma^2_\theta} f(\boldsymbol{\theta}) \, d\boldsymbol{\theta}
+        
+        where :math:`I(\boldsymbol{\theta})` is the test information and :math:`\sigma^2_\theta` is the variance of the latent variable in the population.
+        """
+        self._validate_latent_density_method(latent_density_method)
+        theta_scores, weights = self._get_theta_scores_and_weights(
+            latent_density_method, population_data, trapezoidal_segments, sample_size
+        )
+
+        var_theta_scores = self.model.transform_theta(theta_scores) if rescale and self.model.scale else theta_scores
+
+        # Compute theta variance over the population density
+        # E[X^2] - E[X]^2
+        theta_mean = (var_theta_scores * weights.view(-1, 1)).sum(dim=0)
+        theta_sq_mean = ((var_theta_scores ** 2) * weights.view(-1, 1)).sum(dim=0)
+        theta_variance = theta_sq_mean - theta_mean ** 2
+
+        # Obtain test information
+        info = self.model.information(theta_scores, item=False, degrees=degrees, rescale=rescale)
+
+        if degrees is None:
+            # Info is (theta rows, latent vars, latent vars). Extract diagonal for each dimension.
+            info_diag = torch.diagonal(info, dim1=1, dim2=2)
+            reliabilities = (info_diag / (info_diag + 1.0 / theta_variance) * weights.view(-1, 1)).sum(dim=0)
+        else:
+            # Info is (theta rows,). theta_variance is calculated per dimension. We must project variance?
+            # A common approach if degrees is specified is to use a variance of 1 in the tested direction if scaled,
+            # or project the variance matrix.
+            # Covariance matrix of theta over the population density
+            theta_centered = var_theta_scores - theta_mean
+            cov_matrix = torch.einsum('bi,bj,b->ij', theta_centered, theta_centered, weights)
+            cos_degrees = torch.tensor(degrees).float().deg2rad_().cos_()
+            dir_variance = torch.einsum('i,ij,j->', cos_degrees, cov_matrix, cos_degrees)
+            
+            reliabilities = (info / (info + 1.0 / dir_variance) * weights).sum(dim=0)
+
+        return reliabilities
 
     def q3(
         self,
@@ -1059,7 +1147,7 @@ class Evaluator:
         return group_probabilities
 
     def _validate_latent_density_method(self, latent_density_method: str) -> None:
-        valid_methods = ["data", "encoder sampling", "qmvn", "gmm"]
+        valid_methods = ["data", "encoder sampling", "qmvn", "gmm", "standard normal"]
         if latent_density_method not in valid_methods:
             raise ValueError(
                 f"Invalid latent density method. Must be one of {valid_methods}."
@@ -1116,7 +1204,7 @@ class Evaluator:
         population_data: torch.Tensor,
         trapezoidal_segments: int,
     ):
-        if population_data is not None or (
+        if latent_density_method != "standard normal" and (population_data is not None or (
             (
                 latent_density_method != "qmvn"
                 or not isinstance(self.latent_density, QuantileMVNormal)
@@ -1125,13 +1213,17 @@ class Evaluator:
                 latent_density_method != "gmm"
                 or not isinstance(self.latent_density, GaussianMixtureModel)
             )
-        ):
+        )):
             self.approximate_latent_density(
                 theta_scores=theta_scores, approximation=latent_density_method
             )
 
-        # get the min/max points for integration
-        min_theta, max_theta = self._min_max_theta_for_integration(theta_scores)
+        if latent_density_method == "standard normal":
+            min_theta = torch.full((self.model.latent_variables,), -6.0, device=theta_scores.device)
+            max_theta = torch.full((self.model.latent_variables,), 6.0, device=theta_scores.device)
+        else:
+            # get the min/max points for integration
+            min_theta, max_theta = self._min_max_theta_for_integration(theta_scores)
 
         # Create a list of linspace tensors for each dimension
         lin_spaces = [
@@ -1146,7 +1238,15 @@ class Evaluator:
             # Add an extra dimension for 1D models to make it a 2D tensor with 1 column
             theta_scores = theta_scores.unsqueeze(1)
 
-        weights = self.latent_density.pdf(theta_scores)
+        if latent_density_method == "standard normal":
+            mvn = MultivariateNormal(
+                torch.zeros(self.model.latent_variables, device=theta_scores.device),
+                torch.eye(self.model.latent_variables, device=theta_scores.device)
+            )
+            weights = torch.exp(mvn.log_prob(theta_scores))
+        else:
+            weights = self.latent_density.pdf(theta_scores)
+
         weights = weights / weights.sum()
 
         return theta_scores, weights

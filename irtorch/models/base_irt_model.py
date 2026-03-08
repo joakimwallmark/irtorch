@@ -325,11 +325,11 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            \begin{align}
+            \begin{aligned}
                 \nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f\mathbf{J}_f \\
                 \left(\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f\right)^{T} &=\left(\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{I}\right)^{T}\\
                 \mathbf{J}_f^{T}\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})^T &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*)^{T}.
-            \end{align}
+            \end{aligned}
 
         The last line gives us a linear equation that is solved using `torch.linalg.solve` to get :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})`.
         This is more efficient as computing :math:`\mathbf{J}^{-1}_f` is not needed.

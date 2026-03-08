@@ -221,7 +221,7 @@ def test_group_fit_residuals(evaluation: Evaluator):
     assert evaluation.model.item_probabilities.call_count == 3
 
 @pytest.mark.parametrize(
-    "latent_density_method", ["data", "encoder sampling", "qmvn", "gmm"]
+    "latent_density_method", ["data", "encoder sampling", "qmvn", "gmm", "standard normal"]
 )
 def test_sum_score_probabilities(evaluation: Evaluator, latent_density_method):
     # mock _cv_gaussian_mixture_model method
@@ -531,3 +531,48 @@ def test__cv_gaussian_mixture_model(evaluation: Evaluator, cv_n_components):
     mock_fit.assert_called()
     if len(cv_n_components) > 1:
         assert mock_call.call_count == len(cv_n_components) * 5  # 5-fold cross-validation
+
+@pytest.mark.parametrize(
+    "latent_density_method", ["data", "encoder sampling", "qmvn", "gmm", "standard normal"]
+)
+def test_marginal_reliability(evaluation: Evaluator, latent_density_method: str):
+    def _cv_gaussian_mixture_model_mock(data, cv_n_components):
+        return GaussianMixtureModel(n_components=cv_n_components[0], n_features=data.shape[1])
+    
+    evaluation._cv_gaussian_mixture_model = MagicMock(side_effect=_cv_gaussian_mixture_model_mock)
+
+    # Mock information method
+    def information_mock(theta, item, degrees, rescale=True):
+        latent_vars = evaluation.model.latent_variables
+        if degrees is None:
+            # information shape: (n_theta, latent_vars, latent_vars)
+            info = torch.eye(latent_vars).unsqueeze(0).repeat(theta.shape[0], 1, 1)
+            # Make the diagonal have some values
+            for i in range(latent_vars):
+                info[:, i, i] = 2.0
+            return info
+        else:
+            return torch.full((theta.shape[0],), 2.0)
+            
+    evaluation.model.information = MagicMock(side_effect=information_mock)
+
+    if latent_density_method == "encoder sampling":
+        with pytest.raises(ValueError):
+            reliabilities = evaluation.marginal_reliability(
+                latent_density_method=latent_density_method
+            )
+    else:
+        # Test without degrees
+        reliabilities = evaluation.marginal_reliability(
+            latent_density_method=latent_density_method, trapezoidal_segments=5
+        )
+        assert reliabilities.shape == (evaluation.model.latent_variables,)
+        assert torch.all(reliabilities >= 0) and torch.all(reliabilities <= 1.0)
+        
+        # Test with degrees
+        degrees = [45] * evaluation.model.latent_variables
+        reliabilities_deg = evaluation.marginal_reliability(
+            latent_density_method=latent_density_method, trapezoidal_segments=5, degrees=degrees
+        )
+        assert reliabilities_deg.shape == ()
+        assert reliabilities_deg >= 0 and reliabilities_deg <= 1.0

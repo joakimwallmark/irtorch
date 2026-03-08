@@ -1,4 +1,5 @@
 .vscode/
+.agent/
 
 notebooks/runs/
 

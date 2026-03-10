@@ -287,3 +287,54 @@ def test__rescale_gradients(base_irt_model: BaseIRTModel):
 
         assert torch.allclose(gradients[1, 1, 1], true_grad.flatten())
         assert gradients.shape == input_grads.shape
+
+def test__standard_normal_theta_grid(base_irt_model: BaseIRTModel):
+    grid = base_irt_model._standard_normal_theta_grid()
+    if base_irt_model.latent_variables == 1:
+        assert grid.shape == (1001, 1)
+    elif base_irt_model.latent_variables == 2:
+        assert grid.shape == (1600, 2)
+    elif base_irt_model.latent_variables == 3:
+        assert grid.shape == (1000, 3)
+
+    # Check that rows are unique combinations
+    unique_rows = torch.unique(grid, dim=0)
+    assert unique_rows.shape[0] == grid.shape[0]
+
+def test_population_difficulty(base_irt_model: BaseIRTModel):
+    base_irt_model.mc_correct = None
+    
+    def expected_scores_mock(theta, return_item_scores=True):
+        return torch.ones(theta.shape[0], base_irt_model.items) * 0.5
+    
+    base_irt_model.expected_scores = MagicMock(side_effect=expected_scores_mock)
+    
+    # Test default grid
+    diff = base_irt_model.population_difficulty()
+    assert diff.shape == (base_irt_model.items,)
+    
+    # Test explicit grid
+    theta = torch.randn(10, base_irt_model.latent_variables)
+    diff = base_irt_model.population_difficulty(theta=theta)
+    assert base_irt_model.expected_scores.call_args[0][0].shape == (10, base_irt_model.latent_variables)
+
+def test_population_discrimination(base_irt_model: BaseIRTModel):
+    def expected_item_score_gradients_mock(theta, rescale_by_item_score=True, rescale=True, **kwargs):
+        return torch.ones(theta.shape[0], base_irt_model.items, base_irt_model.latent_variables) * 0.2
+    
+    base_irt_model.expected_item_score_gradients = MagicMock(side_effect=expected_item_score_gradients_mock)
+    
+    # Test default grid
+    disc = base_irt_model.population_discrimination(rescale=False)
+    assert disc.shape == (base_irt_model.items, base_irt_model.latent_variables)
+    
+    # Test explicit grid
+    theta = torch.randn(15, base_irt_model.latent_variables)
+    disc = base_irt_model.population_discrimination(theta=theta, rescale=False)
+    assert base_irt_model.expected_item_score_gradients.call_args[0][0].shape == (15, base_irt_model.latent_variables)
+
+    # Test item_overall = True
+    disc_overall = base_irt_model.population_discrimination(rescale=False, item_overall=True)
+    assert disc_overall.shape == (base_irt_model.items,)
+    expected_mdisc = torch.tensor([0.2] * base_irt_model.latent_variables).norm().item()
+    assert torch.allclose(disc_overall, torch.ones(base_irt_model.items) * expected_mdisc)

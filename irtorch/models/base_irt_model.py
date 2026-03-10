@@ -704,7 +704,35 @@ class BaseIRTModel(ABC, nn.Module):
             self.to("cpu")
         return theta.to("cpu")
 
-    def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
+    def _standard_normal_theta_grid(self) -> torch.Tensor:
+        """
+        Generate a theta grid from a standard normal distribution.
+
+        Creates theta values at equally spaced quantile probabilities
+        from the standard normal distribution. For multidimensional models,
+        it returns the Cartesian product of the points for each latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor with grid points. Columns represent latent variables.
+        """
+        grid_points = {
+            1: 1001,
+            2: 40,
+            3: 10,
+        }.get(self.latent_variables, 6)
+
+        p = torch.linspace(0.0001, 0.9999, grid_points)
+        quantiles = torch.special.ndtri(p).unsqueeze(1)
+
+        if self.latent_variables == 1:
+            return quantiles
+
+        columns = [quantiles[:, 0] for _ in range(self.latent_variables)]
+        return torch.cartesian_prod(*columns)
+
+    def population_difficulty(self, theta: torch.Tensor = None) -> torch.Tensor:
         r"""
         The average population difficulty for each item. Ranges from 0 to 1.
 
@@ -712,10 +740,12 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]f(\mathbf{\theta})d\mathbf{\theta} \approx
             \frac{1}{N} \sum_{i=1}^{N} \left[1 - \frac{\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
 
         where:
+
+        - :math:`f(\mathbf{\theta})` is the probability density function of the latent variables.
 
         - :math:`\mathbf{\theta}` is a vector of latent variables.
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
@@ -724,14 +754,16 @@ class BaseIRTModel(ABC, nn.Module):
 
         Parameters
         ----------
-        theta : torch.Tensor
-            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        theta : torch.Tensor, optional
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, assumes a standard normal distribution. (default is None)
 
         Returns
         -------
         torch.Tensor
             A 1D tensor with the difficulty for each item.
         """
+        if theta is None:
+            theta = self._standard_normal_theta_grid()
         item_scores = self.expected_scores(theta, return_item_scores=True)
         if self.mc_correct:
             item_scores = 1-item_scores
@@ -740,29 +772,42 @@ class BaseIRTModel(ABC, nn.Module):
             item_scores = 1-item_scores
         return item_scores.mean(dim=0)
 
-    def population_discrimination(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
+    def population_discrimination(self, theta: torch.Tensor = None, item_overall: bool = False, rescale: bool = True, **kwargs) -> torch.Tensor:
         r"""
         The average population discrimination for each item.
         Relatively large values means that an item is good at distinguishing between higher and lower ability respondents for the population supplied by the theta argument.
 
         Calculated as the average gradients of the expected item scores with respect to the latent variables scaled by the maximum item scores.
 
+        For each latent dimension, this is calculated as:
+
         .. math::
 
-            \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]f(\mathbf{\theta})d\mathbf{\theta} \approx
             \frac{1}{N} \sum_{i=1}^{N} \left[\frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
+
+        If ``item_overall`` is True, the overall item multidimensional discrimination is returned by computing the expected Euclidean distance (L2 norm) across the latent dimensions:
+
+        .. math::
+
+            \int_{\mathbf{\theta}}\left\| \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right\|_2 f(\mathbf{\theta}) d\mathbf{\theta} \approx
+            \frac{1}{N} \sum_{i=1}^{N} \left\| \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j} \right\|_2
 
         where:
 
+        - :math:`f(\mathbf{\theta})` is the probability density function of the latent variables.
         - :math:`\mathbf{\theta}` is a vector of latent variables.
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
         - :math:`\text{max}_j` is the maximum score on item :math:`j`.
         - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
+        - :math:`\|\dots\|_2` is the Euclidean distance across latent dimensions.
 
         Parameters
         ----------
-        theta : torch.Tensor
-            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        theta : torch.Tensor, optional
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, assumes a standard normal distribution. (default is None)
+        item_overall : bool, optional
+            If True, calculates the overall multidimensional discrimination (MDISC) using the Euclidean distance across the latent dimensions, returning one scalar per item. If False, returns the discrimination separated by latent dimension. (default is False)
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
         **kwargs
@@ -771,9 +816,13 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         torch.Tensor
-            A 2D tensor with the average expected item score gradients. Dimensions are (items, latent_variables).
+            A tensor with the average expected item score gradients. If `item_overall` is True, this is a 1D tensor summarizing discrimination for each item (length `items`). If False, this is a 2D tensor with discrimination by latent variable (dimensions `(items, latent_variables)`).
         """
+        if theta is None:
+            theta = self._standard_normal_theta_grid()
         item_gradients = self.expected_item_score_gradients(theta, rescale_by_item_score=True, rescale=rescale, **kwargs)
+        if item_overall:
+            item_gradients = item_gradients.norm(dim=-1)
         return item_gradients.mean(dim=0)
 
     @torch.no_grad()

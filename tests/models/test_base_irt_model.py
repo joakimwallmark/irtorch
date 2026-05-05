@@ -333,8 +333,19 @@ def test_population_discrimination(base_irt_model: BaseIRTModel):
     disc = base_irt_model.population_discrimination(theta=theta, rescale=False)
     assert base_irt_model.expected_item_score_gradients.call_args[0][0].shape == (15, base_irt_model.latent_variables)
 
-    # Test item_overall = True
+    # Test item_overall = True with standard_normal_covariance=True (default): plain L2 norm (Sigma=I)
     disc_overall = base_irt_model.population_discrimination(rescale=False, item_overall=True)
     assert disc_overall.shape == (base_irt_model.items,)
     expected_mdisc = torch.tensor([0.2] * base_irt_model.latent_variables).norm().item()
     assert torch.allclose(disc_overall, torch.ones(base_irt_model.items) * expected_mdisc)
+
+    # Test item_overall = True with standard_normal_covariance=False: empirical covariance
+    theta_emp = torch.randn(15, base_irt_model.latent_variables)
+    disc_overall_emp = base_irt_model.population_discrimination(theta=theta_emp, rescale=False, item_overall=True, standard_normal_covariance=False)
+    assert disc_overall_emp.shape == (base_irt_model.items,)
+    sigma = torch.cov(theta_emp.T)
+    if sigma.dim() == 0:
+        sigma = sigma.view(1, 1)
+    g = torch.ones(base_irt_model.latent_variables) * 0.2
+    expected_weighted_norm = (g @ sigma @ g).clamp(min=0).sqrt().item()
+    assert torch.allclose(disc_overall_emp, torch.ones(base_irt_model.items) * expected_weighted_norm)

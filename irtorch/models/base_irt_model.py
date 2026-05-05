@@ -772,7 +772,7 @@ class BaseIRTModel(ABC, nn.Module):
             item_scores = 1-item_scores
         return item_scores.mean(dim=0)
 
-    def population_discrimination(self, theta: torch.Tensor = None, item_overall: bool = False, rescale: bool = True, **kwargs) -> torch.Tensor:
+    def population_discrimination(self, theta: torch.Tensor = None, item_overall: bool = False, standard_normal_covariance: bool = True, rescale: bool = True, **kwargs) -> torch.Tensor:
         r"""
         The average population discrimination for each item.
         Relatively large values means that an item is good at distinguishing between higher and lower ability respondents for the population supplied by the theta argument.
@@ -786,12 +786,12 @@ class BaseIRTModel(ABC, nn.Module):
             \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]f(\mathbf{\theta})d\mathbf{\theta} \approx
             \frac{1}{N} \sum_{i=1}^{N} \left[\frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
 
-        If ``item_overall`` is True, the overall item multidimensional discrimination is returned by computing the expected Euclidean distance (L2 norm) across the latent dimensions:
+        If ``item_overall`` is True, the scalar population discrimination is returned using a covariance-weighted gradient norm:
 
         .. math::
 
-            \int_{\mathbf{\theta}}\left\| \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right\|_2 f(\mathbf{\theta}) d\mathbf{\theta} \approx
-            \frac{1}{N} \sum_{i=1}^{N} \left\| \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j} \right\|_2
+            \int_{\mathbf{\theta}} \frac{\sqrt{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})^{\top}\,\boldsymbol{\Sigma}_\theta\,\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}}{\text{max}_j} f(\mathbf{\theta}) d\mathbf{\theta} \approx
+            \frac{1}{N} \sum_{i=1}^{N} \frac{\sqrt{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)^{\top}\,\boldsymbol{\Sigma}_\theta\,\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}}{\text{max}_j}
 
         where:
 
@@ -800,14 +800,16 @@ class BaseIRTModel(ABC, nn.Module):
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
         - :math:`\text{max}_j` is the maximum score on item :math:`j`.
         - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
-        - :math:`\|\dots\|_2` is the Euclidean distance across latent dimensions.
+        - :math:`\boldsymbol{\Sigma}_\theta` is the covariance matrix of the latent trait vector under the population distribution. When ``standard_normal_covariance`` is True, this is the identity matrix :math:`\mathbf{I}`. Otherwise it is estimated empirically from the supplied theta. Weighting by :math:`\boldsymbol{\Sigma}_\theta` gives more weight to directions where the population varies more and less weight to directions where it varies little.
 
         Parameters
         ----------
         theta : torch.Tensor, optional
             A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, assumes a standard normal distribution. (default is None)
         item_overall : bool, optional
-            If True, calculates the overall multidimensional discrimination (MDISC) using the Euclidean distance across the latent dimensions, returning one scalar per item. If False, returns the discrimination separated by latent dimension. (default is False)
+            If True, calculates the scalar population discrimination using a covariance-weighted gradient norm, returning one scalar per item. If False, returns the discrimination separated by latent dimension. (default is False)
+        standard_normal_covariance : bool, optional
+            Only used when ``item_overall`` is True. If True, uses the identity matrix as :math:`\boldsymbol{\Sigma}_\theta`, corresponding to a standard normal population. If False, estimates :math:`\boldsymbol{\Sigma}_\theta` empirically from the supplied theta. (default is True)
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
         **kwargs
@@ -822,7 +824,17 @@ class BaseIRTModel(ABC, nn.Module):
             theta = self._standard_normal_theta_grid()
         item_gradients = self.expected_item_score_gradients(theta, rescale_by_item_score=True, rescale=rescale, **kwargs)
         if item_overall:
-            item_gradients = item_gradients.norm(dim=-1)
+            # Covariance-weighted norm: sqrt(g^T Sigma_theta g)
+            if standard_normal_covariance:
+                sigma = torch.eye(theta.shape[1], device=theta.device)
+            else:
+                sigma = torch.cov(theta.T)  # (D, D)
+                if sigma.dim() == 0:  # 1D edge case: torch.cov returns scalar for single variable
+                    sigma = sigma.view(1, 1)
+            # item_gradients: (N, J, D); compute quadratic form g^T @ sigma @ g for each (N, J)
+            sigma_g = torch.einsum('njd,de->nje', item_gradients, sigma)  # (N, J, D)
+            g_sigma_g = (item_gradients * sigma_g).sum(dim=-1)  # (N, J)
+            item_gradients = g_sigma_g.clamp(min=0).sqrt()  # (N, J)
         return item_gradients.mean(dim=0)
 
     @torch.no_grad()

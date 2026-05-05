@@ -8,7 +8,7 @@ from . import load_dataset
 from .config import *
 from .utils import *
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s: %(message)s",

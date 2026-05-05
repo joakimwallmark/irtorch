@@ -1,4 +1,6 @@
 .vscode/
+.agent/
+.copilot/
 
 notebooks/runs/
 

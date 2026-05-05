@@ -12,15 +12,15 @@ from irtorch.irt_dataset import PytorchIRTDataset
 def device(request):
     return request.param
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def item_categories():
     return [2, 3, 3, 4, 4]
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def item_categories_small():
     return [2, 3]
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def test_data():
     test_data = torch.load("tests/datasets/test_data.pt", weights_only=False)
     return test_data[0:120, 8:13]

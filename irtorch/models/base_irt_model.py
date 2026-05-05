@@ -325,11 +325,11 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            \begin{align}
+            \begin{aligned}
                 \nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{J}^{-1}_f\mathbf{J}_f \\
                 \left(\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})\mathbf{J}_f\right)^{T} &=\left(\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*) \mathbf{I}\right)^{T}\\
                 \mathbf{J}_f^{T}\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})^T &=\nabla_{\boldsymbol{\theta}^*} \mathbb{E}(X_j|\boldsymbol{\theta}^*)^{T}.
-            \end{align}
+            \end{aligned}
 
         The last line gives us a linear equation that is solved using `torch.linalg.solve` to get :math:`\nabla_{\boldsymbol{\theta}} \mathbb{E}(X_j|\boldsymbol{\theta})`.
         This is more efficient as computing :math:`\mathbf{J}^{-1}_f` is not needed.
@@ -704,7 +704,35 @@ class BaseIRTModel(ABC, nn.Module):
             self.to("cpu")
         return theta.to("cpu")
 
-    def population_difficulty(self, theta: torch.Tensor) -> torch.Tensor:
+    def _standard_normal_theta_grid(self) -> torch.Tensor:
+        """
+        Generate a theta grid from a standard normal distribution.
+
+        Creates theta values at equally spaced quantile probabilities
+        from the standard normal distribution. For multidimensional models,
+        it returns the Cartesian product of the points for each latent variable.
+
+        Returns
+        -------
+        torch.Tensor
+            A 2D tensor with grid points. Columns represent latent variables.
+        """
+        grid_points = {
+            1: 1001,
+            2: 40,
+            3: 10,
+        }.get(self.latent_variables, 6)
+
+        p = torch.linspace(0.0001, 0.9999, grid_points)
+        quantiles = torch.special.ndtri(p).unsqueeze(1)
+
+        if self.latent_variables == 1:
+            return quantiles
+
+        columns = [quantiles[:, 0] for _ in range(self.latent_variables)]
+        return torch.cartesian_prod(*columns)
+
+    def population_difficulty(self, theta: torch.Tensor = None) -> torch.Tensor:
         r"""
         The average population difficulty for each item. Ranges from 0 to 1.
 
@@ -712,10 +740,12 @@ class BaseIRTModel(ABC, nn.Module):
 
         .. math::
 
-            \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \int_{\mathbf{\theta}}\left[ 1 - \frac{\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]f(\mathbf{\theta})d\mathbf{\theta} \approx
             \frac{1}{N} \sum_{i=1}^{N} \left[1 - \frac{\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
 
         where:
+
+        - :math:`f(\mathbf{\theta})` is the probability density function of the latent variables.
 
         - :math:`\mathbf{\theta}` is a vector of latent variables.
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
@@ -724,14 +754,16 @@ class BaseIRTModel(ABC, nn.Module):
 
         Parameters
         ----------
-        theta : torch.Tensor
-            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        theta : torch.Tensor, optional
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, assumes a standard normal distribution. (default is None)
 
         Returns
         -------
         torch.Tensor
             A 1D tensor with the difficulty for each item.
         """
+        if theta is None:
+            theta = self._standard_normal_theta_grid()
         item_scores = self.expected_scores(theta, return_item_scores=True)
         if self.mc_correct:
             item_scores = 1-item_scores
@@ -740,29 +772,44 @@ class BaseIRTModel(ABC, nn.Module):
             item_scores = 1-item_scores
         return item_scores.mean(dim=0)
 
-    def population_discrimination(self, theta: torch.Tensor, rescale: bool = True, **kwargs) -> torch.Tensor:
+    def population_discrimination(self, theta: torch.Tensor = None, item_overall: bool = False, standard_normal_covariance: bool = True, rescale: bool = True, **kwargs) -> torch.Tensor:
         r"""
         The average population discrimination for each item.
         Relatively large values means that an item is good at distinguishing between higher and lower ability respondents for the population supplied by the theta argument.
 
         Calculated as the average gradients of the expected item scores with respect to the latent variables scaled by the maximum item scores.
 
+        For each latent dimension, this is calculated as:
+
         .. math::
 
-            \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]d\mathbf{\theta} \approx
+            \int_{\mathbf{\theta}}\left[ \frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}{\text{max}_j}\right]f(\mathbf{\theta})d\mathbf{\theta} \approx
             \frac{1}{N} \sum_{i=1}^{N} \left[\frac{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}{\text{max}_j}\right]
+
+        If ``item_overall`` is True, the scalar population discrimination is returned using a covariance-weighted gradient norm:
+
+        .. math::
+
+            \int_{\mathbf{\theta}} \frac{\sqrt{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})^{\top}\,\boldsymbol{\Sigma}_\theta\,\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\theta})}}{\text{max}_j} f(\mathbf{\theta}) d\mathbf{\theta} \approx
+            \frac{1}{N} \sum_{i=1}^{N} \frac{\sqrt{\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)^{\top}\,\boldsymbol{\Sigma}_\theta\,\nabla_{\mathbf{\theta}}\mathbb{E}(x_j|\mathbf{\hat{\theta}}_i)}}{\text{max}_j}
 
         where:
 
+        - :math:`f(\mathbf{\theta})` is the probability density function of the latent variables.
         - :math:`\mathbf{\theta}` is a vector of latent variables.
         - :math:`\mathbb{E}(x_j|\mathbf{\theta})` is the expected score on item :math:`j` given :math:`\mathbf{\theta}`.
         - :math:`\text{max}_j` is the maximum score on item :math:`j`.
         - :math:`N` is the sample size and :math:`\mathbf{\hat{\theta}}_i` is the estimated :math:`\mathbf{\theta}` for respondent :math:`i`.
+        - :math:`\boldsymbol{\Sigma}_\theta` is the covariance matrix of the latent trait vector under the population distribution. When ``standard_normal_covariance`` is True, this is the identity matrix :math:`\mathbf{I}`. Otherwise it is estimated empirically from the supplied theta. Weighting by :math:`\boldsymbol{\Sigma}_\theta` gives more weight to directions where the population varies more and less weight to directions where it varies little.
 
         Parameters
         ----------
-        theta : torch.Tensor
-            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable.
+        theta : torch.Tensor, optional
+            A 2D tensor with latent variable theta scores from the population of interest. Each row represents one respondent, and each column represents a latent variable. If not provided, assumes a standard normal distribution. (default is None)
+        item_overall : bool, optional
+            If True, calculates the scalar population discrimination using a covariance-weighted gradient norm, returning one scalar per item. If False, returns the discrimination separated by latent dimension. (default is False)
+        standard_normal_covariance : bool, optional
+            Only used when ``item_overall`` is True. If True, uses the identity matrix as :math:`\boldsymbol{\Sigma}_\theta`, corresponding to a standard normal population. If False, estimates :math:`\boldsymbol{\Sigma}_\theta` empirically from the supplied theta. (default is True)
         rescale : bool, optional
             Whether to compute the gradients on the rescaled scale if it exists. Only possible for scale transformations for which gradients are available. (default is True)
         **kwargs
@@ -771,9 +818,23 @@ class BaseIRTModel(ABC, nn.Module):
         Returns
         -------
         torch.Tensor
-            A 2D tensor with the average expected item score gradients. Dimensions are (items, latent_variables).
+            A tensor with the average expected item score gradients. If `item_overall` is True, this is a 1D tensor summarizing discrimination for each item (length `items`). If False, this is a 2D tensor with discrimination by latent variable (dimensions `(items, latent_variables)`).
         """
+        if theta is None:
+            theta = self._standard_normal_theta_grid()
         item_gradients = self.expected_item_score_gradients(theta, rescale_by_item_score=True, rescale=rescale, **kwargs)
+        if item_overall:
+            # Covariance-weighted norm: sqrt(g^T Sigma_theta g)
+            if standard_normal_covariance:
+                sigma = torch.eye(theta.shape[1], device=theta.device)
+            else:
+                sigma = torch.cov(theta.T)  # (D, D)
+                if sigma.dim() == 0:  # 1D edge case: torch.cov returns scalar for single variable
+                    sigma = sigma.view(1, 1)
+            # item_gradients: (N, J, D); compute quadratic form g^T @ sigma @ g for each (N, J)
+            sigma_g = torch.einsum('njd,de->nje', item_gradients, sigma)  # (N, J, D)
+            g_sigma_g = (item_gradients * sigma_g).sum(dim=-1)  # (N, J)
+            item_gradients = g_sigma_g.clamp(min=0).sqrt()  # (N, J)
         return item_gradients.mean(dim=0)
 
     @torch.no_grad()

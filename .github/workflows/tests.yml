@@ -27,7 +27,7 @@ jobs:
         enable-cache: true
 
     - name: Install dependencies
-      run: uv sync --extra dev
+      run: uv sync --group dev
 
     - name: Test with pytest
       run: uv run pytest --cov=irtorch --cov-report=xml

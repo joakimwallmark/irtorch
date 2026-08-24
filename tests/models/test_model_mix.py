@@ -76,3 +76,10 @@ def test_log_likelihood(model_mix: ModelMix):
     assert torch.isnan(result[3]), "missing response should be nan"
     assert torch.isnan(result[10]), "missing response should be nan"
     assert torch.isclose(result[11], torch.tensor(-0.743420)), "incorrect item likelihood"
+
+def test_reset_parameters(model_mix: ModelMix):
+    model_mix.models[0].weight_param.data.fill_(5.0)
+    model_mix.models[1].weight_param.data.fill_(5.0)
+    model_mix.reset_parameters()
+    assert not torch.all(model_mix.models[0].weight_param == 5.0)
+    assert not torch.all(model_mix.models[1].weight_param == 5.0)

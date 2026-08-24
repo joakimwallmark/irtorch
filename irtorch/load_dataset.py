@@ -83,7 +83,6 @@ def swedish_sat_quantitative() -> tuple[torch.Tensor, list[int]]:
 
     try:
         with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_quant_correct.txt").open("r", encoding="utf-8") as file:
-        # with resources.files("irtorch").joinpath("datasets/swedish_sat/swesat22b_quant_correct.txt").open("r", encoding="utf-8") as file:
             correct_category = file.read().replace("\n", "")
             correct_category = [int(char) - 1 for char in correct_category if char.isdigit()]
     except Exception as e:

@@ -279,33 +279,6 @@ class VAE(AE):
         # Estimate expectation
         return -iwae_bound.mean()
 
-    def _batch_fit_measures(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
-        """
-        Calculate the fit measures for a batch.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            The model to fit.
-        input_batch : torch.Tensor
-            The input batch for the encoder.
-        batch : torch.Tensor
-            The batch of data.
-        missing_mask : torch.Tensor
-            The mask for missing data.
-
-        Returns
-        -------
-        torch.Tensor
-            The loss for the batch.
-        """
-        encoder_mean, _ = self.encoder(input_batch)
-        output = model(encoder_mean)
-        log_likelihood = model.log_likelihood(
-            batch, output, missing_mask
-        )
-        return -log_likelihood / batch.shape[0]
-
     @torch.no_grad()
     def theta_scores(
         self,

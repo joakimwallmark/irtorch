@@ -107,20 +107,18 @@ def random_guessing_data(
         A 2D tensor with test data. Rows are respondents and columns are items.
     """
     num_items = len(item_categories)
-    if (
-        guessing_probabilities is not None and \
-        isinstance(guessing_probabilities, list) and \
-        all(isinstance(item, float) for item in guessing_probabilities) and \
+    if guessing_probabilities is None:
+        guessing_probabilities = [1.0 / cats for cats in item_categories]
+    elif (
+        isinstance(guessing_probabilities, list) and
+        all(isinstance(item, (float, int)) for item in guessing_probabilities) and
         len(guessing_probabilities) == num_items
     ):
         if not all(0 <= num < 1 for num in guessing_probabilities):
             raise ValueError("The guessing probabilities must be between 0 and 1.")
+        guessing_probabilities = [float(item) for item in guessing_probabilities]
     else:
         raise ValueError("guessing_probabilities must be list of floats with the same length as the number of items.")
-
-
-    if guessing_probabilities is None:
-        guessing_probabilities = [1.0 / cats for cats in item_categories]
 
     response_matrix = torch.zeros(size, num_items)
 
@@ -191,10 +189,10 @@ def conditional_score_distribution(
 
 
 def sum_incorrect_probabilities(
-    probabilities: list[torch.Tensor],
+    probabilities: torch.Tensor,
     item_responses: list[int],
     mc_correct: list[int],
-):
+) -> torch.Tensor:
     """
     Sum incorrect score probabilities for multiple choice items. Useful for approximating sum scores.
 
@@ -212,25 +210,15 @@ def sum_incorrect_probabilities(
     Returns
     -------
     torch.Tensor
-        A 2D torch tensor correct/incorrect response probabilities
+        A 3D torch tensor of correct/incorrect response probabilities
     """
-    new_probs = torch.zeros(probabilities.shape[0], probabilities.shape[1], 2)
-    for item in range(0, len(item_responses)):
-        item_score_0_probs = torch.cat(
-            (
-                probabilities[:, item, :mc_correct[item]],
-                probabilities[:, item, mc_correct[item]+1:]
-            ),
-            dim=1,
-        ).sum(dim=1)
-        new_probs[:, item, :] = torch.cat(
-            (
-                item_score_0_probs.unsqueeze(1),
-                probabilities[:, item, mc_correct[item]].unsqueeze(1),
-            ),
-            dim=1,
-        )
-    return new_probs
+    mc_tensor = torch.tensor(mc_correct, device=probabilities.device, dtype=torch.long)
+    correct_probs = probabilities.gather(
+        2, mc_tensor.view(1, -1, 1).expand(probabilities.shape[0], -1, 1)
+    ).squeeze(2)
+    total_probs = probabilities.sum(dim=2)
+    incorrect_probs = total_probs - correct_probs
+    return torch.stack((incorrect_probs, correct_probs), dim=2)
 
 
 def entropy(probabilities: torch.Tensor, log_base: float = 2.0):

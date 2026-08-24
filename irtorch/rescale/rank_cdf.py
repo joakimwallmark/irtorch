@@ -95,17 +95,18 @@ class RankCDF(Scale):
         for latent_variable in range(latent_variables):
             unique_vals = self.unique_vals_list[latent_variable].to(theta.device)
             avg_ranks = self.avg_ranks_list[latent_variable].to(theta.device)
+            col_theta = theta[:, latent_variable].contiguous()
             
             # Find insertion points
-            idx = torch.searchsorted(unique_vals, theta[:, latent_variable])
+            idx = torch.searchsorted(unique_vals, col_theta)
             
             # We need to compare index `idx` and `idx-1`.
             # Clip idx to be valid indices for `unique_vals`
             idx_right = idx.clamp(max=len(unique_vals) - 1)
             idx_left = (idx - 1).clamp(min=0)
             
-            dist_right = torch.abs(unique_vals[idx_right] - theta[:, latent_variable])
-            dist_left = torch.abs(unique_vals[idx_left] - theta[:, latent_variable])
+            dist_right = torch.abs(unique_vals[idx_right] - col_theta)
+            dist_left = torch.abs(unique_vals[idx_left] - col_theta)
             
             # Choose indices where left is closer
             use_left = dist_left < dist_right

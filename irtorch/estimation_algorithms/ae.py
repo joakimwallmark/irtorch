@@ -294,32 +294,6 @@ class AE(BaseIRTAlgorithm):
         return batch_loss
 
     @torch.no_grad()
-    def _batch_fit_measures(self, model: BaseIRTModel, input_batch: torch.Tensor, batch: torch.Tensor, missing_mask: torch.Tensor):
-        """
-        Calculate the fit measures for a batch.
-
-        Parameters
-        ----------
-        model : BaseIRTModel
-            The model to calculate the fit measures for.
-        input_batch : torch.Tensor
-            The input batch for the encoder.
-        batch : torch.Tensor
-            The batch of data.
-        missing_mask : torch.Tensor
-            The mask for missing data.
-
-        Returns
-        -------
-        torch.Tensor
-            The loss for the batch.
-        """
-        output = model(self.encoder(input_batch))
-        log_likelihood = model.log_likelihood(batch, output, missing_mask=missing_mask)
-        loss = -log_likelihood / batch.shape[0]
-        return loss
-
-    @torch.no_grad()
     def theta_scores(self, data: torch.Tensor):
         """
         Get the latent scores from an input dataset using the encoder.

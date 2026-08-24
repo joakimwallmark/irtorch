@@ -171,15 +171,10 @@ class Evaluator:
         data, theta, _ = self._evaluate_data_theta_input(data, theta, **kwargs)
 
         missing_mask = get_missing_mask(data)
-        data[torch.isnan(data)] = -1
         if self.model.mc_correct is not None:
-            # 3D tensor with dimensions (respondents, items, item categories)
             probabilities = self.model.item_probabilities(theta)
-            # Creating a range tensor for slice indices
-            respondents = torch.arange(probabilities.size(0)).view(-1, 1)
-            # Expand slices to match the shape of indices
-            expanded_respondents = respondents.expand_as(data)
-            model_probs = probabilities[expanded_respondents, torch.arange(probabilities.size(1)), data.int()]
+            safe_data = torch.where(missing_mask, torch.zeros_like(data), data).long().unsqueeze(-1)
+            model_probs = probabilities.gather(2, safe_data).squeeze(-1)
             residuals = 1 - model_probs
         else:
             residuals = data - self.model.expected_scores(theta, return_item_scores=True)
@@ -449,17 +444,16 @@ class Evaluator:
         probabilities = self.model.item_probabilities(theta)
         observed_scores = data
         if self.model.mc_correct is not None:
-            score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2])
-            score_indices.scatter_(1, torch.tensor(self.model.mc_correct).unsqueeze(1), 1)
+            mc_tensor = torch.tensor(self.model.mc_correct, device=probabilities.device)
+            score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2], device=probabilities.device)
+            score_indices.scatter_(1, mc_tensor.unsqueeze(1), 1)
             score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
-            correct_probabilities = (probabilities*score_indices.int()).sum(dim=2)
-            variance = correct_probabilities * (1-correct_probabilities)
-            possible_scores = torch.zeros_like(probabilities)
-            possible_scores[:, :, 1] = 1
-            observed_scores = (data == torch.tensor(self.model.mc_correct)).int()
+            correct_probabilities = (probabilities * score_indices.int()).sum(dim=2)
+            variance = correct_probabilities * (1 - correct_probabilities)
+            observed_scores = (data == torch.tensor(self.model.mc_correct, device=data.device)).int()
         else:
-            possible_scores = torch.arange(0, probabilities.shape[2]).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
-            variance = ((possible_scores-expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
+            possible_scores = torch.arange(0, probabilities.shape[2], device=probabilities.device).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
+            variance = ((possible_scores - expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
 
         mse = (observed_scores - expected_scores) ** 2
         mse[missing_mask] = torch.nan
@@ -529,7 +523,7 @@ class Evaluator:
         # On unseen data, we may end up with 0 probabilities which will result in -inf likelihoods
         likelihoods[likelihoods==-torch.inf] = -30.0
         likelihoods = likelihoods.view(theta.shape[0], -1)
-        if reduction in "mean":
+        if reduction == "mean":
             return likelihoods.nanmean(dim=dim)
         if reduction == "sum":
             return likelihoods.nansum(dim=dim)
@@ -575,6 +569,8 @@ class Evaluator:
         indicies = torch.sort(theta[:, latent_variable - 1], dim=0)[1]
         theta = theta[indicies]
         data = data[indicies]
+        if missing_mask is not None:
+            missing_mask = missing_mask[indicies]
         likelihoods = self.model.log_likelihood(
             data,
             self.model(theta),
@@ -731,14 +727,12 @@ class Evaluator:
         model_probabilities = self.model.probabilities_from_output(self.model(theta))
         # Compute the expected entropy for each item
         expected_item_entropies = entropy(model_probabilities.mean(dim=0), log_base=log_base)
-        # Expected respondent proportions for each pairwise combination of item responses
-        # Returns a 5D tensor with dimensions (Respondent, item 1, item 2, item 1 response, item 2 response)
-        expected_proportions = torch.einsum('bik, bjl -> bijkl', model_probabilities, model_probabilities)
-        # Average over respondents (integrate)
-        expected_proportions = expected_proportions.mean(dim=0)
+        # Expected respondent proportions for each pairwise combination of item responses,
+        # averaged directly over respondents: (item 1, item 2, item 1 response, item 2 response)
+        expected_proportions = torch.einsum('bik, bjl -> ijkl', model_probabilities, model_probabilities) / model_probabilities.shape[0]
 
         expected_joint_entropies = entropy(
-            expected_proportions.view(expected_proportions.shape[0], expected_proportions.shape[1], -1),
+            expected_proportions.reshape(expected_proportions.shape[0], expected_proportions.shape[1], -1),
             log_base=log_base
         )
         expected_entropy_sums = expected_item_entropies.unsqueeze(dim=-1) + expected_item_entropies.unsqueeze(dim=0)
@@ -1012,35 +1006,6 @@ class Evaluator:
             return corr_matrix_df.round(3), p_values_df.round(3)
         
         return corr_matrix_df.round(3), None
-
-    # def _expected_item_score_combination_proportions(self, response_probabilities: torch.Tensor) -> torch.Tensor:
-    #     """
-    #     Computes the item score proportions for each pairwise combination of item responses, averaged over the latent space.
-
-    #     Parameters
-    #     ----------
-    #     response_probabilities : torch.Tensor
-    #         A 3D tensor with the probabilities for each item response. The first dimension represents the respondents, the second dimension represents the items and the third dimension represents the item categories.
-
-    #     Returns
-    #     -------
-    #     torch.Tensor
-    #         A 4D tensor with the expected item score proportions. The first two dimensions represent the item pair, and the last two dimensions represent the item categories.
-    #     """
-    #     expected_combos = torch.zeros(
-    #         response_probabilities.shape[0],
-    #         response_probabilities.shape[1],
-    #         response_probabilities.shape[1],
-    #         response_probabilities.shape[2],
-    #         response_probabilities.shape[2],
-    #     )
-    #     for i in range(response_probabilities.shape[1]):
-    #         for j in range(response_probabilities.shape[1]):
-    #             for k in range(response_probabilities.shape[2]):
-    #                 for l in range(response_probabilities.shape[2]):
-    #                     expected_combos[:, i, j, k, l] = response_probabilities[:, i, k] * response_probabilities[:, j, l]
-
-    #     return expected_combos.mean(dim=0)
 
     def _observed_item_score_proportions(self, data: torch.Tensor) -> torch.Tensor:
         """

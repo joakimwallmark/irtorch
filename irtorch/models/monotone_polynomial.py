@@ -102,7 +102,6 @@ class MonotonePolynomial(BaseIRTModel):
             negative_relationships=negative_latent_variable_item_relationships,
             shared_directions=shared_directions
         )
-        self.add_module("mono_poly", self.mono_poly)
 
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         out = self.mono_poly(theta)

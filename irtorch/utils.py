@@ -1,4 +1,5 @@
 import logging
+import time
 import random
 import copy
 from itertools import product
@@ -7,7 +8,7 @@ import torch.multiprocessing as mp
 import pandas as pd
 import numpy as np
 from irtorch.models import BaseIRTModel
-from irtorch.timer import start_timer, end_timer_and_print
+from irtorch._internal_utils import impute_missing_internal
 
 __all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imv"]
 
@@ -105,8 +106,8 @@ def cross_validation(
     data_folds = _prepare_cross_validation_data(data, folds)
     param_dicts = _create_param_grid(params_grid, kwargs)
     
-    logger.info(f"Performing cross-validation with {len(param_dicts)} parameter combinations")
-    start_timer()
+    logger.info("Performing cross-validation with %d parameter combinations", len(param_dicts))
+    start_time = time.perf_counter()
     
     results = (
         _run_multiprocessing(model, data_folds, param_dicts, theta_estimation, device, cores_to_use)
@@ -114,7 +115,8 @@ def cross_validation(
         else _run_sequential(model, data_folds, param_dicts, theta_estimation, device)
     )
 
-    end_timer_and_print("Cross-validation completed")
+    elapsed = time.perf_counter() - start_time
+    logger.info("Cross-validation completed in %.2f seconds", elapsed)
     
     results_df = pd.DataFrame(results)
     results_df.drop(list(kwargs.keys()), axis=1, inplace=True)
@@ -267,8 +269,12 @@ def gauss_hermite(n, mean, covariance):
     x = torch.tensor(x, dtype=torch.float64)
     w = torch.tensor(w, dtype=torch.float64)
     const = torch.pi**(-0.5 * mvn_dim)
-    xn = torch.tensor(list(product(*(x,)*mvn_dim)), dtype=torch.float64)
-    wn = torch.prod(torch.tensor(list(product(*(w,)*mvn_dim)), dtype=torch.float64), dim=1)
+    if mvn_dim == 1:
+        xn = x.unsqueeze(1)
+        wn = w
+    else:
+        xn = torch.cartesian_prod(*([x] * mvn_dim))
+        wn = torch.prod(torch.cartesian_prod(*([w] * mvn_dim)), dim=1)
     chol_decomp = torch.linalg.cholesky(covariance).to(torch.float64)
     # Transformation of the quadrature points
     # See change of variables in the docstring
@@ -322,56 +328,35 @@ def impute_missing(
     item_categories : list[int], optional
         Only for method='random_incorrect'. A list of integers where each integer is the number of possible responses for the corresponding item. If None, the number of possible responses is calculated from the data. (default is None)
     """
-    imputed_data = data.clone()
-
-    if (imputed_data == -1).any():
-        imputed_data[imputed_data == -1] = torch.nan
-
-    if method == "zero":
-        imputed_data = torch.where(torch.isnan(imputed_data), torch.tensor(0.0), imputed_data)
-    elif method == "mean":
-        means = imputed_data.nanmean(dim=0)
-        mask = torch.isnan(imputed_data)
-        imputed_data[mask] = means.repeat(data.shape[0], 1)[mask]
-    elif method == "random incorrect":
-        if model is not None:
-            if model.mc_correct is not None:
-                raise ValueError("The model provided must be a multiple choice item model when using random_incorrect imputation")
-            item_categories = model.item_categories
-            mc_correct = model.mc_correct
-        else:
-            if mc_correct is None:
-                raise ValueError("mc_correct must be provided when using random_incorrect imputation without a model")
-            if item_categories is None:
-                item_categories = (torch.where(~imputed_data.isnan(), data, torch.tensor(float('-inf'))).max(dim=0).values + 1).int().tolist()
-
-        for col in range(imputed_data.shape[1]):
-            # Get the incorrect non-missing responses from the column
-            incorrect_responses = torch.arange(0, item_categories[col], device=imputed_data.device).float()
-            incorrect_responses = incorrect_responses[incorrect_responses != mc_correct[col]]
-            # Find the indices of missing values in the column
-            missing_indices = (imputed_data[:, col].isnan()).squeeze()
-            # randomly sample from the incorrect responses and replace missing
-            imputed_data[missing_indices, col] = incorrect_responses[torch.randint(0, incorrect_responses.size(0), (missing_indices.sum(),))]
-    elif method == "prior expected":
+    if method == "prior expected":
         if model is None:
             raise ValueError("The model must be provided when using prior mean imputation")
         if model.mc_correct is not None:
             raise ValueError("The model provided must be a non-multiple choice item model when using prior mean imputation")
+        imputed_data = data.clone()
+        if (imputed_data == -1).any():
+            imputed_data[imputed_data == -1] = torch.nan
+        model_device = next(model.parameters()).device
         prior_scores = model.expected_scores(
-            torch.zeros(1, model.latent_variables).to(next(model.parameters()).device),
+            torch.zeros(1, model.latent_variables, device=model_device),
             return_item_scores=True
         ).round()
         mask = torch.isnan(imputed_data)
-        imputed_data[mask] = prior_scores.repeat(imputed_data.shape[0], 1).to(
-            next(model.parameters()).device
-        )[mask]
-    else:
-        raise ValueError(
-            f"{method} imputation is not implmented"
-        )
+        imputed_data[mask] = prior_scores.repeat(imputed_data.shape[0], 1).to(model_device)[mask]
+        return imputed_data
 
-    return imputed_data
+    if model is not None and method == "random incorrect":
+        if model.mc_correct is None:
+            raise ValueError("The model provided must be a multiple choice item model when using random_incorrect imputation")
+        item_categories = model.item_categories
+        mc_correct = model.mc_correct
+
+    return impute_missing_internal(
+        data=data,
+        method=method,
+        mc_correct=mc_correct,
+        item_categories=item_categories
+    )
 
 @torch.no_grad()
 def imv(

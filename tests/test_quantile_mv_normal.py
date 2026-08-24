@@ -61,23 +61,3 @@ def test_pdf():
     assert qmvn.pdf(torch.tensor([[3.0, 4.0]])) > qmvn.pdf(
         torch.tensor([[2.9, 3.9]])
     )
-
-
-# def test_cdf():
-#     # Create a symmetric matrix
-#     symmetric_matrix = torch.tensor([[1.0, 0.2], [0.2, 1.0]])
-#     # Make a Cholesky decomposition
-#     cho_dec = torch.linalg.cholesky(symmetric_matrix)
-#     # Create a positive-definite covariance matrix
-#     cov = cho_dec.mm(cho_dec.t())
-#     data_dist = MultivariateNormal(torch.tensor([0.0, 0.0]), cov)
-
-#     data = torch.tensor([[1.0, 3.0], [2.0, 2.0], [4.0, 6.0], [5.0, 5.0]])
-#     qmvn = QuantileMVNormal(data)
-#     qmvn.mvnormal = data_dist
-
-#     pdf = qmvn.cdf(torch.tensor([[3.0, 4.0], [3.1, 4.1], [6, 8]]))
-#     assert pdf.shape == torch.Size([3])
-#     # smaller should be smaller
-#     assert qmvn.cdf(torch.tensor([[3.0, 4.0]])) < qmvn.cdf(torch.tensor([[3.1, 4.1]]))
-#     assert qmvn.cdf(torch.tensor([[3.0, 4.0]])) > qmvn.cdf(torch.tensor([[2.9, 3.9]]))

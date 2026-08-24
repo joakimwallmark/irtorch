@@ -277,6 +277,13 @@ def test_log_likelihood(evaluation: Evaluator):
     assert torch.allclose(group_mean_likelihoods[2], torch.full((1,), -0.9)) # first half of groups
     assert torch.allclose(group_mean_likelihoods[3:], torch.full((2,), -0.3)) # second half of groups
 
+    # Test with missing data
+    data_missing = data.clone().float()
+    data_missing[0, 0] = float("nan")
+    data_missing[1, 1] = -1.0
+    group_mean_missing = evaluation.group_fit_log_likelihood(groups=5, data=data_missing)
+    assert group_mean_missing.shape == (5,)
+
     # respondent level
     # Test with default parameters
     person_likelihoods = evaluation.log_likelihood(data=data, reduction="sum", level="respondent")

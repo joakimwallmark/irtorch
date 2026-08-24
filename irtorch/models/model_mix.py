@@ -45,8 +45,9 @@ class ModelMix(BaseIRTModel):
         self.models = nn.ModuleList(models)
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.weight_param, mean=1., std=0.01)
-        nn.init.zeros_(self.bias_param)
+        for model in self.models:
+            if hasattr(model, "reset_parameters"):
+                model.reset_parameters()
     
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
@@ -107,22 +108,6 @@ class ModelMix(BaseIRTModel):
         # Concatenate the padded tensors along the specified dimension
         return torch.cat(padded_tensors, dim=dim)
 
-    def item_probabilities(self, theta: torch.Tensor) -> torch.Tensor:
-        """
-        Returns the probabilities for each possible response for all items.
-
-        Parameters
-        ----------
-        theta : torch.Tensor
-            A 2D tensor. Rows are respondents and latent variables are columns.
-
-        Returns
-        -------
-        torch.Tensor
-            3D tensor with dimensions (respondents, items, item categories)
-        """
-        output = self(theta)
-        return self.probabilities_from_output(output)
 
     def log_likelihood(
         self,

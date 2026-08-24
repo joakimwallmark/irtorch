@@ -186,6 +186,11 @@ def test_random_guessing_data():
     assert data.max() == 2
     assert data.unique().tolist() == [0, 1, 2]
 
+    # Test default guessing_probabilities (None)
+    data_default = random_guessing_data([2, 2, 2], 50)
+    assert data_default.shape == (50, 3)
+    assert set(data_default.unique().tolist()).issubset({0.0, 1.0})
+
 def test_one_hot_encode_test_data(device):
     # Define a small tensor of test scores and a list of maximum scores
     #

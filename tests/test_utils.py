@@ -50,6 +50,22 @@ def test_impute_missing():
     assert imputed_data[2, 0] != 1
     assert imputed_data[2, 1] != 2
 
+    # Test random incorrect with model
+    mock_model = MagicMock()
+    mock_model.mc_correct = [1, 2, 1, 2]
+    mock_model.item_categories = [3, 3, 2, 3]
+    imputed_model = impute_missing(data=data, method="random incorrect", model=mock_model)
+    assert (imputed_model[missing_mask] > -1).all()
+
+    # Test prior expected with model
+    mock_model_non_mc = MagicMock()
+    mock_model_non_mc.mc_correct = None
+    mock_model_non_mc.latent_variables = 1
+    mock_model_non_mc.parameters.return_value = iter([torch.tensor(0.0)])
+    mock_model_non_mc.expected_scores.return_value = torch.tensor([[1.0, 1.0, 1.0, 1.0]])
+    imputed_prior = impute_missing(data=data, method="prior expected", model=mock_model_non_mc)
+    assert (imputed_prior[missing_mask] == 1.0).all()
+
 
 def test__imv_newton_raphson():
     # Negative entropy values

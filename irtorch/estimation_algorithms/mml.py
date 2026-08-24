@@ -324,10 +324,7 @@ class MML(BaseIRTAlgorithm):
         
         # Add weights (broadcasting over respondents)
         log_sums = ll + log_weights.view(-1, 1)
-        
-        constant = log_sums.max(dim=0)[0] # for logexpsum trick (one constant per respondent)
-        exp_log_sums = (log_sums-constant).exp()
-        loss = -(exp_log_sums.sum(dim=0).log() + constant).sum()
+        loss = -torch.logsumexp(log_sums, dim=0).sum()
 
         loss.backward()
         self.optimizer.step()
@@ -379,8 +376,7 @@ class MML(BaseIRTAlgorithm):
             ll = ll.view(-1, model.items).nansum(dim=1).view(n_points, n_respondents)
 
             log_sums = ll + log_weights.view(-1, 1)
-            constant = log_sums.max(dim=0)[0]
-            loss = -((log_sums - constant).exp().sum(dim=0).log() + constant).sum()
+            loss = -torch.logsumexp(log_sums, dim=0).sum()
         return loss.item()
 
     def _update_covariance(
@@ -458,13 +454,11 @@ class MML(BaseIRTAlgorithm):
         torch.Tensor
             The logarithm of the weights associated with the points.
         """
-        latent_grid = torch.linspace(-3, 3, n_points).view(-1, 1)
-        latent_grid = latent_grid.expand(-1, latent_variables).contiguous()
+        grid_1d = torch.linspace(-3, 3, n_points)
         if latent_variables > 1:
-            columns = [latent_grid[:, i] for i in range(latent_grid.size(1))]
-            latent_combos = torch.cartesian_prod(*columns)
+            latent_combos = torch.cartesian_prod(*([grid_1d] * latent_variables))
         else:
-            latent_combos = latent_grid
+            latent_combos = grid_1d.unsqueeze(1)
 
         normal_dist = MultivariateNormal(
             loc=torch.zeros(latent_variables),

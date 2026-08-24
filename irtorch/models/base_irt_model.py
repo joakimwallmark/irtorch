@@ -281,10 +281,14 @@ class BaseIRTModel(ABC, nn.Module):
         """
         item_probabilities = self.item_probabilities(theta)
         if self.mc_correct:
-            item_scores = torch.zeros(item_probabilities.shape[1], item_probabilities.shape[2])
-            item_scores.scatter_(1, torch.tensor(self.mc_correct).unsqueeze(1), 1)
+            item_scores = torch.zeros(
+                item_probabilities.shape[1], item_probabilities.shape[2], device=item_probabilities.device
+            )
+            item_scores.scatter_(1, torch.tensor(self.mc_correct, device=item_probabilities.device).unsqueeze(1), 1)
         else:
-            item_scores = (torch.arange(item_probabilities.shape[2])).repeat(item_probabilities.shape[1], 1)
+            item_scores = torch.arange(
+                item_probabilities.shape[2], device=item_probabilities.device
+            ).repeat(item_probabilities.shape[1], 1)
         expected_item_scores = (item_probabilities * item_scores).sum(dim=2)
 
         if return_item_scores:
@@ -768,7 +772,7 @@ class BaseIRTModel(ABC, nn.Module):
         if self.mc_correct:
             item_scores = 1-item_scores
         else:
-            item_scores = item_scores / (torch.tensor(self.item_categories) - 1)
+            item_scores = item_scores / (torch.tensor(self.item_categories, device=theta.device) - 1)
             item_scores = 1-item_scores
         return item_scores.mean(dim=0)
 

@@ -1522,7 +1522,7 @@ wheels = [
 
 [[package]]
 name = "irtorch"
-version = "0.5.5"
+version = "0.5.6"
 source = { editable = "." }
 dependencies = [
     { name = "factor-analyzer" },

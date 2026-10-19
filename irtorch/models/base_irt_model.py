@@ -35,8 +35,12 @@ class BaseIRTModel(ABC, nn.Module):
     ):
         super().__init__()
         if mc_correct is not None:
-            if not all(item >= mc for item, mc in zip(item_categories, mc_correct)):
-                raise ValueError("mc_correct cannot be greater than the number of categories for each item.")
+            if len(mc_correct) != len(item_categories):
+                raise ValueError(
+                    f"mc_correct must have one entry per item: got {len(mc_correct)} entries for {len(item_categories)} items."
+                )
+            if not all(0 <= mc < item for item, mc in zip(item_categories, mc_correct)):
+                raise ValueError("mc_correct must be a valid category index (0 to categories - 1) for each item.")
         self.latent_variables = latent_variables
         self.item_categories = item_categories
         self.max_item_responses = max(self.item_categories)
@@ -646,7 +650,7 @@ class BaseIRTModel(ABC, nn.Module):
                         if self.algorithm.one_hot_encoded:
                             remove_missing = False
                     if remove_missing:
-                        fisher_info = fisher_info.masked_fill(data.isnan()[:, :, None, None], 0.0)
+                        fisher_info = fisher_info.masked_fill(get_missing_mask(data)[:, :, None, None], 0.0)
                         fisher_info = fisher_info.sum(dim=1)
                     else:
                         fisher_info = fisher_info.nansum(dim=1)
@@ -728,13 +732,8 @@ class BaseIRTModel(ABC, nn.Module):
         }.get(self.latent_variables, 6)
 
         p = torch.linspace(0.0001, 0.9999, grid_points)
-        quantiles = torch.special.ndtri(p).unsqueeze(1)
-
-        if self.latent_variables == 1:
-            return quantiles
-
-        columns = [quantiles[:, 0] for _ in range(self.latent_variables)]
-        return torch.cartesian_prod(*columns)
+        quantiles = torch.special.ndtri(p)
+        return torch.cartesian_prod(*([quantiles] * self.latent_variables)).reshape(-1, self.latent_variables)
 
     def population_difficulty(self, theta: torch.Tensor = None) -> torch.Tensor:
         r"""
@@ -975,13 +974,8 @@ class BaseIRTModel(ABC, nn.Module):
             }.get(self.latent_variables, 15)
 
         if self.algorithm.training_theta_scores is None:
-            grid_values = torch.linspace(-3, 3, grid_points).view(-1, 1)
-            grid_values = grid_values.expand(-1, self.latent_variables).contiguous()
-            if self.latent_variables == 1:
-                theta_grid = grid_values
-            else:
-                columns = [grid_values[:, i] for i in range(grid_values.size(1))]
-                theta_grid = torch.cartesian_prod(*columns)
+            grid_values = torch.linspace(-3, 3, grid_points)
+            theta_grid = torch.cartesian_prod(*([grid_values] * self.latent_variables)).reshape(-1, self.latent_variables)
 
             if hasattr(self.algorithm, "covariance_matrix"):
                 cov_matrix = self.algorithm.covariance_matrix

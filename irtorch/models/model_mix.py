@@ -44,11 +44,6 @@ class ModelMix(BaseIRTModel):
         # register each model as a submodule
         self.models = nn.ModuleList(models)
 
-    def reset_parameters(self) -> None:
-        for model in self.models:
-            if hasattr(model, "reset_parameters"):
-                model.reset_parameters()
-    
     def forward(self, theta: torch.Tensor) -> torch.Tensor:
         """
         Forward pass of the model.
@@ -107,7 +102,6 @@ class ModelMix(BaseIRTModel):
         
         # Concatenate the padded tensors along the specified dimension
         return torch.cat(padded_tensors, dim=dim)
-
 
     def log_likelihood(
         self,

@@ -33,6 +33,16 @@ class ConcreteIRTModel(BaseIRTModel):
 def base_irt_model(latent_variables):
     return ConcreteIRTModel(latent_variables, [3, 4])
 
+@pytest.mark.parametrize("mc_correct", [[], [0], [0, 1, 2]])
+def test_init_mc_correct_wrong_length_raises(mc_correct):
+    with pytest.raises(ValueError, match="one entry per item"):
+        ConcreteIRTModel(1, [3, 4], mc_correct=mc_correct)
+
+@pytest.mark.parametrize("mc_correct", [[3, 0], [0, -1]])
+def test_init_mc_correct_out_of_range_raises(mc_correct):
+    with pytest.raises(ValueError, match="valid category index"):
+        ConcreteIRTModel(1, [3, 4], mc_correct=mc_correct)
+
 def test_expected_scores(base_irt_model: BaseIRTModel):
     # Create a mock for item_probabilities() method
     def item_probabilities_mock(*args, **kwargs):
@@ -349,3 +359,14 @@ def test_population_discrimination(base_irt_model: BaseIRTModel):
     g = torch.ones(base_irt_model.latent_variables) * 0.2
     expected_weighted_norm = (g @ sigma @ g).clamp(min=0).sqrt().item()
     assert torch.allclose(disc_overall_emp, torch.ones(base_irt_model.items) * expected_weighted_norm)
+
+def test_latent_scores_ml_standard_errors_missing_coding():
+    from irtorch.models import GeneralizedPartialCredit
+    torch.manual_seed(0)
+    model = GeneralizedPartialCredit(latent_variables=1, item_categories=[3, 3, 3, 3])
+    data_nan = torch.tensor([[0.0, 1.0, 2.0, float("nan")], [2.0, 2.0, 1.0, 0.0]])
+    data_neg = data_nan.clone()
+    data_neg[0, 3] = -1
+    _, se_nan = model.latent_scores(data_nan, theta_estimation="ML", standard_errors=True)
+    _, se_neg = model.latent_scores(data_neg, theta_estimation="ML", standard_errors=True)
+    assert torch.allclose(se_nan, se_neg)

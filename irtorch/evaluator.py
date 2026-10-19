@@ -168,12 +168,11 @@ class Evaluator:
         torch.Tensor
             The residuals.
         """
-        data, theta, _ = self._evaluate_data_theta_input(data, theta, **kwargs)
+        data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
-        missing_mask = get_missing_mask(data)
         if self.model.mc_correct is not None:
             probabilities = self.model.item_probabilities(theta)
-            safe_data = torch.where(missing_mask, torch.zeros_like(data), data).long().unsqueeze(-1)
+            safe_data = data.masked_fill(missing_mask, 0).long().unsqueeze(-1)
             model_probs = probabilities.gather(2, safe_data).squeeze(-1)
             residuals = 1 - model_probs
         else:
@@ -440,19 +439,16 @@ class Evaluator:
 
         data, theta, missing_mask = self._evaluate_data_theta_input(data, theta, **kwargs)
 
-        expected_scores = self.model.expected_scores(theta, return_item_scores=True)
-        probabilities = self.model.item_probabilities(theta)
         observed_scores = data
         if self.model.mc_correct is not None:
-            mc_tensor = torch.tensor(self.model.mc_correct, device=probabilities.device)
-            score_indices = torch.zeros(probabilities.shape[1], probabilities.shape[2], device=probabilities.device)
-            score_indices.scatter_(1, mc_tensor.unsqueeze(1), 1)
-            score_indices = score_indices.unsqueeze(0).expand(probabilities.shape[0], -1, -1)
-            correct_probabilities = (probabilities * score_indices.int()).sum(dim=2)
-            variance = correct_probabilities * (1 - correct_probabilities)
+            # For multiple choice models, the expected scores are the probabilities of a correct response
+            expected_scores = self.model.expected_scores(theta, return_item_scores=True)
+            variance = expected_scores * (1 - expected_scores)
             observed_scores = (data == torch.tensor(self.model.mc_correct, device=data.device)).int()
         else:
-            possible_scores = torch.arange(0, probabilities.shape[2], device=probabilities.device).unsqueeze(0).expand(probabilities.shape[0], probabilities.shape[1], -1)
+            probabilities = self.model.item_probabilities(theta)
+            possible_scores = torch.arange(probabilities.shape[2], device=probabilities.device)
+            expected_scores = (probabilities * possible_scores).sum(dim=2)
             variance = ((possible_scores - expected_scores.unsqueeze(2)) ** 2 * probabilities).sum(dim=2)
 
         mse = (observed_scores - expected_scores) ** 2
@@ -569,8 +565,7 @@ class Evaluator:
         indicies = torch.sort(theta[:, latent_variable - 1], dim=0)[1]
         theta = theta[indicies]
         data = data[indicies]
-        if missing_mask is not None:
-            missing_mask = missing_mask[indicies]
+        missing_mask = missing_mask[indicies]
         likelihoods = self.model.log_likelihood(
             data,
             self.model(theta),
@@ -819,7 +814,6 @@ class Evaluator:
         if self.model.mc_correct is not None:
             probabilities = sum_incorrect_probabilities(
                 probabilities=probabilities,
-                item_responses=self.model.item_categories,
                 mc_correct=self.model.mc_correct
             )
             item_categories = [2] * len(self.model.item_categories)
@@ -1197,11 +1191,7 @@ class Evaluator:
         ]
 
         # Use torch.cartesian_prod to generate all combinations
-        theta_scores = torch.cartesian_prod(*lin_spaces)
-
-        if theta_scores.dim() == 1:
-            # Add an extra dimension for 1D models to make it a 2D tensor with 1 column
-            theta_scores = theta_scores.unsqueeze(1)
+        theta_scores = torch.cartesian_prod(*lin_spaces).reshape(-1, len(lin_spaces))
 
         if latent_density_method == "standard normal":
             mvn = MultivariateNormal(

@@ -8,7 +8,7 @@ import torch.multiprocessing as mp
 import pandas as pd
 import numpy as np
 from irtorch.models import BaseIRTModel
-from irtorch._internal_utils import impute_missing_internal
+from irtorch._internal_utils import impute_missing_internal, get_missing_mask
 
 __all__ = ["cross_validation", "gauss_hermite", "get_item_categories", "impute_missing", "fit_multiple_models_cpu", "split_data", "set_seed", "imv"]
 
@@ -269,12 +269,8 @@ def gauss_hermite(n, mean, covariance):
     x = torch.tensor(x, dtype=torch.float64)
     w = torch.tensor(w, dtype=torch.float64)
     const = torch.pi**(-0.5 * mvn_dim)
-    if mvn_dim == 1:
-        xn = x.unsqueeze(1)
-        wn = w
-    else:
-        xn = torch.cartesian_prod(*([x] * mvn_dim))
-        wn = torch.prod(torch.cartesian_prod(*([w] * mvn_dim)), dim=1)
+    xn = torch.cartesian_prod(*([x] * mvn_dim)).reshape(-1, mvn_dim)
+    wn = torch.cartesian_prod(*([w] * mvn_dim)).reshape(-1, mvn_dim).prod(dim=1)
     chol_decomp = torch.linalg.cholesky(covariance).to(torch.float64)
     # Transformation of the quadrature points
     # See change of variables in the docstring
@@ -333,17 +329,11 @@ def impute_missing(
             raise ValueError("The model must be provided when using prior mean imputation")
         if model.mc_correct is not None:
             raise ValueError("The model provided must be a non-multiple choice item model when using prior mean imputation")
-        imputed_data = data.clone()
-        if (imputed_data == -1).any():
-            imputed_data[imputed_data == -1] = torch.nan
-        model_device = next(model.parameters()).device
         prior_scores = model.expected_scores(
-            torch.zeros(1, model.latent_variables, device=model_device),
+            torch.zeros(1, model.latent_variables, device=next(model.parameters()).device),
             return_item_scores=True
         ).round()
-        mask = torch.isnan(imputed_data)
-        imputed_data[mask] = prior_scores.repeat(imputed_data.shape[0], 1).to(model_device)[mask]
-        return imputed_data
+        return torch.where(get_missing_mask(data), prior_scores.to(data.device), data)
 
     if model is not None and method == "random incorrect":
         if model.mc_correct is None:

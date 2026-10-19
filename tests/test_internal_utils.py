@@ -274,6 +274,10 @@ def test_joint_entropy_matrix():
     )
     assert torch.allclose(result, expected, atol=1e-4)
 
+    # -1 is treated as missing, same as NaN
+    x[2, 2] = -1.0
+    assert torch.allclose(joint_entropy_matrix(x), expected, atol=1e-4)
+
     # Test with invalid input
     x = torch.tensor([1.0, 2.0, 3.0])
     with pytest.raises(ValueError):

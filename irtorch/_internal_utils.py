@@ -264,7 +264,7 @@ def joint_entropy_matrix(data: torch.Tensor, log_base: float = 2.0):
     if data.dim() != 2:
         raise ValueError("Input must be a 2D tensor")
     
-    mask = ~torch.isnan(data)
+    mask = ~get_missing_mask(data)
     int_data = data.int()
     max_combos = ((int_data.max() + 1) ** 2).item()
     proportions = torch.zeros(int_data.shape[1], int_data.shape[1], max_combos)

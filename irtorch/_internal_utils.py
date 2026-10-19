@@ -190,7 +190,6 @@ def conditional_score_distribution(
 
 def sum_incorrect_probabilities(
     probabilities: torch.Tensor,
-    item_responses: list[int],
     mc_correct: list[int],
 ) -> torch.Tensor:
     """
@@ -202,8 +201,6 @@ def sum_incorrect_probabilities(
         A 3D tensor containing item score probabilities.
         The first dimension represents the quadrature points, the second dimension represents the items,
         and the third dimension represents the item categories. (rows sum to 1)
-    item_responses : list[int]
-        A list of integers where each integer is the number of possible responses for the corresponding item.
     mc_correct : list[int]
         A list of integers where each integer is correct response for the corresponding item.
 

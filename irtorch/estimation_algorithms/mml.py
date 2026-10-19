@@ -455,10 +455,7 @@ class MML(BaseIRTAlgorithm):
             The logarithm of the weights associated with the points.
         """
         grid_1d = torch.linspace(-3, 3, n_points)
-        if latent_variables > 1:
-            latent_combos = torch.cartesian_prod(*([grid_1d] * latent_variables))
-        else:
-            latent_combos = grid_1d.unsqueeze(1)
+        latent_combos = torch.cartesian_prod(*([grid_1d] * latent_variables)).reshape(-1, latent_variables)
 
         normal_dist = MultivariateNormal(
             loc=torch.zeros(latent_variables),

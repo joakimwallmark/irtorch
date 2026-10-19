@@ -108,9 +108,7 @@ def test_conditional_scores_distribution():
 
     # Test with mc_correct
     mc_correct = [0, 1, 2]
-    probabilities = sum_incorrect_probabilities(
-        probabilities, item_categories, mc_correct
-    )
+    probabilities = sum_incorrect_probabilities(probabilities, mc_correct)
     item_categories = [2] * len(item_categories)
     result = conditional_score_distribution(probabilities, item_categories)
 
@@ -127,14 +125,9 @@ def test_sum_incorrect_probabilities():
         [[0.4, 0.6, 0.0, 0.0], [0.4, 0.2, 0.4, 0.0], [0.1, 0.3, 0.2, 0.4]]
     ])
     
-    item_categories = [2, 3, 4]
     mc_correct = [0, 2, 1]
 
-    result = sum_incorrect_probabilities(
-        probabilities,
-        item_categories,
-        mc_correct
-    )
+    result = sum_incorrect_probabilities(probabilities, mc_correct)
 
     expected_output = torch.tensor([
         [[0.5, 0.5], [0.5, 0.5], [0.8, 0.2]],

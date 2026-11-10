@@ -7,7 +7,7 @@ Install on your own machine
 ---------------------------
 **Prerequisites**
 
-Ensure you have Python 3.10 or later installed on your system. If you don't, you can download and install it directly from `Python's official website <https://www.python.org/downloads/>`__ or by installing `the Anaconda distribution <https://www.anaconda.com/docs/getting-started/anaconda/install>`__. We suggest you check the option to add python.exe to PATH during installation to be able to run Python commands from the command line.
+Ensure you have Python 3.11 or later installed on your system. If you don't, you can download and install it directly from `Python's official website <https://www.python.org/downloads/>`__ or by installing `the Anaconda distribution <https://www.anaconda.com/docs/getting-started/anaconda/install>`__. We suggest you check the option to add python.exe to PATH during installation to be able to run Python commands from the command line.
 
 **Installing IRTorch**
 

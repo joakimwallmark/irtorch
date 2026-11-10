@@ -5,7 +5,7 @@ description = "IRTorch: An item response theory package for python."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Joakim Wallmark", email = "wallmark.joakim@gmail.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 urls = { homepage = "https://github.com/joakimwallmark/irtorch" }
 dependencies = [
     "torch>=2.1.1,<4.0.0",

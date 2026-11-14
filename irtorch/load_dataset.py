@@ -257,7 +257,7 @@ def big_five() -> torch.Tensor:
         data = data[data["IPC"] == 1] # Drop multiple submissions from same IP address.
         data = data.iloc[:, :50] # keep only response columns
         data = data.dropna() # Drop people with NaN values.
-        data = data[data.sum(1) > 0] # Drop people with all missing responses (0 is missing).
+        data = data[data.sum(axis=1) > 0] # Drop people with all missing responses (0 is missing).
         data = data.mask(data == 0, float("nan")) # encode missing as nan
         # Reverse-code reverse-coded items.
         reverse_items = [
